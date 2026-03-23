@@ -18,6 +18,7 @@ const NAV_ITEMS: { key: string; href: string }[] = [
   { key: 'agenda', href: '/agenda' },
   { key: 'directory', href: '/directorio' },
   { key: 'news', href: '/noticias' },
+  { key: 'map', href: '/mapa' },
   { key: 'practical_info', href: '/info' },
 ];
 

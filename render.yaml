@@ -1,0 +1,34 @@
+# =============================================================================
+# Render.com — Blueprint for API deployment (alternative to Vercel)
+# https://render.com/docs/blueprint-spec
+# =============================================================================
+# To use: connect the GitHub repo in Render dashboard and select this blueprint,
+# or deploy manually with the settings below.
+
+services:
+  - type: web
+    name: osalnes-api
+    runtime: node
+    region: frankfurt
+    plan: free
+    rootDir: ./
+    buildCommand: npm install && npm run build -w packages/shared && npm run build -w packages/api
+    startCommand: node packages/api/dist/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "3001"
+      - key: API_HOST
+        value: "0.0.0.0"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+    healthCheckPath: /health

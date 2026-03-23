@@ -1,0 +1,88 @@
+# =============================================================================
+# DTI Salnés — Docker Compose (Production)
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Requires .env with:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL,
+#   NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+# =============================================================================
+
+services:
+  # --- API (Express + TypeScript) ---
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: osalnes-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      API_HOST: "0.0.0.0"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3002}
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-in-production}
+      PID_DTI_CODE: ${PID_DTI_CODE:-osalnes}
+      LOG_LEVEL: info
+    depends_on:
+      - meilisearch
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # --- Web (Next.js SSR) ---
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: osalnes-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:3001/api/v1}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-${SUPABASE_URL}}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://turismo.osalnes.gal}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # --- CMS (Vite SPA + nginx) ---
+  cms:
+    build:
+      context: .
+      dockerfile: packages/cms/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api/v1}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-${SUPABASE_URL}}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY}}
+    container_name: osalnes-cms
+    restart: unless-stopped
+    ports:
+      - "3002:80"
+
+  # --- Meilisearch (full-text search) ---
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: osalnes-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-in-production}
+      MEILI_ENV: production
+    volumes:
+      - meili-data:/meili_data
+
+volumes:
+  meili-data:
