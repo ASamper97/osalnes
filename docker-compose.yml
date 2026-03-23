@@ -1,0 +1,21 @@
+# =============================================================================
+# DTI Salnes — Servicios locales
+# PostgreSQL y Storage se gestionan via Supabase (cloud)
+# =============================================================================
+
+services:
+  # --- Meilisearch (buscador full-text) ---
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: osalnes-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-change-me-in-production}
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili-data:/meili_data
+
+volumes:
+  meili-data:

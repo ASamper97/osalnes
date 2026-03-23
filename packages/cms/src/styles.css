@@ -1,0 +1,69 @@
+/* ==========================================================================
+   DTI Salnes CMS — Admin styles (minimal, will expand in E2)
+   ========================================================================== */
+
+:root {
+  --cms-primary: #1a5276;
+  --cms-sidebar-bg: #2c3e50;
+  --cms-sidebar-text: #ecf0f1;
+  --cms-bg: #f5f6fa;
+  --cms-text: #2c3e50;
+  --cms-border: #dcdde1;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--cms-text);
+  background: var(--cms-bg);
+}
+
+.cms-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.cms-sidebar {
+  background: var(--cms-sidebar-bg);
+  color: var(--cms-sidebar-text);
+  padding: 1.5rem 1rem;
+}
+
+.cms-sidebar h2 {
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.9;
+}
+
+.cms-sidebar nav a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: 4px;
+  color: var(--cms-sidebar-text);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.cms-sidebar nav a:hover,
+.cms-sidebar nav a.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cms-content {
+  padding: 2rem;
+}
+
+.cms-content h1 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}

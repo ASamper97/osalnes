@@ -1,0 +1,52 @@
+/* ==========================================================================
+   DTI Salnes — Global styles (minimal reset, CSS custom properties)
+   Full design system will be added in E2 with the UI kit
+   ========================================================================== */
+
+:root {
+  --color-primary: #1a5276;
+  --color-secondary: #2e86c1;
+  --color-accent: #f39c12;
+  --color-bg: #ffffff;
+  --color-text: #2c3e50;
+  --color-muted: #7f8c8d;
+  --color-border: #ecf0f1;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --max-width: 1200px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--color-secondary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+main {
+  min-height: 60vh;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}

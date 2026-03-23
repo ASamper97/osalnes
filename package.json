@@ -1,0 +1,32 @@
+{
+  "name": "osalnes-dti",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DTI Salnes: CMS turistico + Web turistica - Mancomunidad de O Salnes",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:cms\"",
+    "dev:api": "npm run dev -w packages/api",
+    "dev:web": "npm run dev -w packages/web",
+    "dev:cms": "npm run dev -w packages/cms",
+    "build": "npm run build -w packages/shared && npm run build -w packages/api && npm run build -w packages/web && npm run build -w packages/cms",
+    "build:api": "npm run build -w packages/api",
+    "build:web": "npm run build -w packages/web",
+    "build:cms": "npm run build -w packages/cms",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate": "npm run db:migrate -w packages/api",
+    "db:seed": "npm run db:seed -w packages/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
