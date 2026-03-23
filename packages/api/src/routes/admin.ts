@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { asyncHandler } from '../middleware/async-handler.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireRole } from '../middleware/auth.js';
 import * as resourceService from '../services/resource.service.js';
 import * as mediaService from '../services/media.service.js';
 import * as categoryService from '../services/category.service.js';
 import * as navigationService from '../services/navigation.service.js';
+import * as pageService from '../services/page.service.js';
+import * as relationService from '../services/relation.service.js';
+import * as documentService from '../services/document.service.js';
+import * as exportService from '../services/export.service.js';
+import * as userService from '../services/user.service.js';
+import * as productService from '../services/product.service.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -41,9 +47,10 @@ adminRouter.put(
   }),
 );
 
-/** PATCH /api/v1/admin/resources/:id/status */
+/** PATCH /api/v1/admin/resources/:id/status — admin, editor, validador */
 adminRouter.patch(
   '/resources/:id/status',
+  requireRole('admin', 'editor', 'validador'),
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     const resource = await resourceService.updateResourceStatus(paramId(req), status);
@@ -159,41 +166,205 @@ adminRouter.patch('/navigation/reorder/:menuSlug', asyncHandler(async (req, res)
 }));
 
 // ==========================================================================
-// Paginas (E2)
+// Paginas editoriales
 // ==========================================================================
 
-adminRouter.post('/pages', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** GET /api/v1/admin/pages */
+adminRouter.get('/pages', asyncHandler(async (_req, res) => {
+  const pages = await pageService.listPages();
+  res.json(pages);
 }));
 
-adminRouter.put('/pages/:id', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** GET /api/v1/admin/pages/:id */
+adminRouter.get('/pages/:id', asyncHandler(async (req, res) => {
+  const page = await pageService.getPageById(paramId(req));
+  res.json(page);
+}));
+
+/** POST /api/v1/admin/pages */
+adminRouter.post('/pages', asyncHandler(async (req, res) => {
+  const page = await pageService.createPage(req.body);
+  res.status(201).json(page);
+}));
+
+/** PUT /api/v1/admin/pages/:id */
+adminRouter.put('/pages/:id', asyncHandler(async (req, res) => {
+  const page = await pageService.updatePage(paramId(req), req.body);
+  res.json(page);
+}));
+
+/** PATCH /api/v1/admin/pages/:id/status */
+adminRouter.patch('/pages/:id/status', asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  const page = await pageService.updatePageStatus(paramId(req), status);
+  res.json(page);
+}));
+
+/** DELETE /api/v1/admin/pages/:id */
+adminRouter.delete('/pages/:id', asyncHandler(async (req, res) => {
+  const result = await pageService.deletePage(paramId(req));
+  res.json(result);
 }));
 
 // ==========================================================================
-// Exportaciones (E2)
+// Relaciones entre recursos
 // ==========================================================================
 
-adminRouter.post('/exports/pid', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** GET /api/v1/admin/relations?recurso_id=X */
+adminRouter.get('/relations', asyncHandler(async (req, res) => {
+  const recursoId = req.query.recurso_id as string;
+  if (!recursoId) { res.status(400).json({ error: 'recurso_id is required' }); return; }
+  const relations = await relationService.listRelations(recursoId);
+  res.json(relations);
 }));
 
-adminRouter.post('/exports/datalake', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** POST /api/v1/admin/relations */
+adminRouter.post('/relations', asyncHandler(async (req, res) => {
+  const relation = await relationService.createRelation(req.body);
+  res.status(201).json(relation);
 }));
 
-adminRouter.get('/exports/:jobId', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** PUT /api/v1/admin/relations/:id */
+adminRouter.put('/relations/:id', asyncHandler(async (req, res) => {
+  const relation = await relationService.updateRelation(paramId(req), req.body);
+  res.json(relation);
+}));
+
+/** DELETE /api/v1/admin/relations/:id */
+adminRouter.delete('/relations/:id', asyncHandler(async (req, res) => {
+  const result = await relationService.deleteRelation(paramId(req));
+  res.json(result);
 }));
 
 // ==========================================================================
-// Usuarios (E2)
+// Documentos descargables
 // ==========================================================================
 
-adminRouter.get('/users', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** POST /api/v1/admin/documents — upload document (multipart/form-data) */
+adminRouter.post('/documents', upload.single('file'), asyncHandler(async (req, res) => {
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  const entidadTipo = req.body.entidad_tipo || 'recurso_turistico';
+  const entidadId = req.body.entidad_id;
+  if (!entidadId) { res.status(400).json({ error: 'entidad_id is required' }); return; }
+
+  const nombre = req.body.nombre ? JSON.parse(req.body.nombre) : undefined;
+  const doc = await documentService.uploadDocument(entidadTipo, entidadId, file, nombre);
+  res.status(201).json(doc);
 }));
 
-adminRouter.post('/users', asyncHandler(async (_req, res) => {
-  res.status(501).json({ error: 'Not implemented — phase E2' });
+/** GET /api/v1/admin/documents?entidad_tipo=X&entidad_id=Y */
+adminRouter.get('/documents', asyncHandler(async (req, res) => {
+  const entidadTipo = req.query.entidad_tipo as string || 'recurso_turistico';
+  const entidadId = req.query.entidad_id as string;
+  if (!entidadId) { res.status(400).json({ error: 'entidad_id is required' }); return; }
+
+  const docs = await documentService.listDocuments(entidadTipo, entidadId);
+  res.json(docs);
+}));
+
+/** PUT /api/v1/admin/documents/:id */
+adminRouter.put('/documents/:id', asyncHandler(async (req, res) => {
+  const doc = await documentService.updateDocument(paramId(req), req.body);
+  res.json(doc);
+}));
+
+/** DELETE /api/v1/admin/documents/:id */
+adminRouter.delete('/documents/:id', asyncHandler(async (req, res) => {
+  const result = await documentService.deleteDocument(paramId(req));
+  res.json(result);
+}));
+
+// ==========================================================================
+// Exportaciones (PID / Data Lake)
+// ==========================================================================
+
+/** GET /api/v1/admin/exports */
+adminRouter.get('/exports', asyncHandler(async (req, res) => {
+  const tipo = req.query.tipo as string | undefined;
+  const jobs = await exportService.listExportJobs(tipo);
+  res.json(jobs);
+}));
+
+/** POST /api/v1/admin/exports/pid — admin, tecnico */
+adminRouter.post('/exports/pid', requireRole('admin', 'tecnico'), asyncHandler(async (req, res) => {
+  const userId = (req as any).user?.id;
+  const job = await exportService.createExportJob('pid', req.body, userId);
+  res.status(202).json(job);
+}));
+
+/** POST /api/v1/admin/exports/datalake — admin, tecnico */
+adminRouter.post('/exports/datalake', requireRole('admin', 'tecnico'), asyncHandler(async (req, res) => {
+  const userId = (req as any).user?.id;
+  const job = await exportService.createExportJob('datalake', req.body, userId);
+  res.status(202).json(job);
+}));
+
+/** GET /api/v1/admin/exports/:jobId */
+adminRouter.get('/exports/:jobId', asyncHandler(async (req, res) => {
+  const job = await exportService.getExportJob(paramId(req, 'jobId'));
+  res.json(job);
+}));
+
+// ==========================================================================
+// Usuarios
+// ==========================================================================
+
+/** GET /api/v1/admin/users — admin only */
+adminRouter.get('/users', requireRole('admin'), asyncHandler(async (_req, res) => {
+  const users = await userService.listUsers();
+  res.json(users);
+}));
+
+/** GET /api/v1/admin/users/:id — admin only */
+adminRouter.get('/users/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+  const user = await userService.getUserById(paramId(req));
+  res.json(user);
+}));
+
+/** POST /api/v1/admin/users — admin only */
+adminRouter.post('/users', requireRole('admin'), asyncHandler(async (req, res) => {
+  const user = await userService.createUser(req.body);
+  res.status(201).json(user);
+}));
+
+/** PUT /api/v1/admin/users/:id — admin only */
+adminRouter.put('/users/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+  const user = await userService.updateUser(paramId(req), req.body);
+  res.json(user);
+}));
+
+/** DELETE /api/v1/admin/users/:id — admin only */
+adminRouter.delete('/users/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+  const result = await userService.deleteUser(paramId(req));
+  res.json(result);
+}));
+
+// ==========================================================================
+// Productos turisticos
+// ==========================================================================
+
+/** GET /api/v1/admin/products */
+adminRouter.get('/products', asyncHandler(async (_req, res) => {
+  const products = await productService.listProducts();
+  res.json(products);
+}));
+
+/** POST /api/v1/admin/products */
+adminRouter.post('/products', asyncHandler(async (req, res) => {
+  const product = await productService.createProduct(req.body);
+  res.status(201).json(product);
+}));
+
+/** PUT /api/v1/admin/products/:id */
+adminRouter.put('/products/:id', asyncHandler(async (req, res) => {
+  const product = await productService.updateProduct(paramId(req), req.body);
+  res.json(product);
+}));
+
+/** DELETE /api/v1/admin/products/:id */
+adminRouter.delete('/products/:id', asyncHandler(async (req, res) => {
+  const result = await productService.deleteProduct(paramId(req));
+  res.json(result);
 }));

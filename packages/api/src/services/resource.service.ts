@@ -41,6 +41,8 @@ interface CreateResourceInput {
   // Translations
   name?: Record<string, string>;
   description?: Record<string, string>;
+  seo_title?: Record<string, string>;
+  seo_description?: Record<string, string>;
   // Categories
   category_ids?: string[];
 }
@@ -163,6 +165,8 @@ export async function createResource(input: CreateResourceInput) {
   // Save translations
   if (input.name) await saveTranslations('recurso_turistico', data.id, 'name', input.name);
   if (input.description) await saveTranslations('recurso_turistico', data.id, 'description', input.description);
+  if (input.seo_title) await saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title);
+  if (input.seo_description) await saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description);
 
   // Save category associations
   if (input.category_ids?.length) {
@@ -220,6 +224,8 @@ export async function updateResource(id: string, input: Partial<CreateResourceIn
   // Update translations
   if (input.name) await saveTranslations('recurso_turistico', id, 'name', input.name);
   if (input.description) await saveTranslations('recurso_turistico', id, 'description', input.description);
+  if (input.seo_title) await saveTranslations('recurso_turistico', id, 'seo_title', input.seo_title);
+  if (input.seo_description) await saveTranslations('recurso_turistico', id, 'seo_description', input.seo_description);
 
   // Update categories
   if (input.category_ids !== undefined) {

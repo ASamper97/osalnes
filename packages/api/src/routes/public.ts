@@ -219,6 +219,40 @@ publicRouter.get(
 );
 
 // ==========================================================================
+// Zonas
+// ==========================================================================
+
+/** GET /api/v1/zones */
+publicRouter.get(
+  '/zones',
+  asyncHandler(async (req, res) => {
+    const municipio = req.query.municipio as string | undefined;
+
+    let query = supabase
+      .from('zona')
+      .select('id, slug, municipio_id')
+      .order('slug');
+
+    if (municipio) {
+      query = query.eq('municipio_id', municipio);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const items = await Promise.all(
+      (data || []).map(async (r) => ({
+        id: r.id,
+        slug: r.slug,
+        municipioId: r.municipio_id,
+        name: await getTranslatedField('zona', r.id, 'name'),
+      })),
+    );
+    res.json(items);
+  }),
+);
+
+// ==========================================================================
 // Eventos
 // ==========================================================================
 
@@ -290,36 +324,75 @@ publicRouter.get(
   '/search',
   asyncHandler(async (req, res) => {
     const q = req.query.q as string;
+    const lang = req.query.lang as string | undefined;
+    const type = req.query.type as string | undefined;
+    const municipio = req.query.municipio as string | undefined;
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
     if (!q || q.length < 2) {
-      res.json({ items: [], total: 0 });
+      res.json({ items: [], total: 0, page, limit, pages: 0 });
       return;
     }
 
-    // E1: busqueda por traduccion ILIKE via Supabase
+    // E1: busqueda por traduccion ILIKE via Supabase (name + description)
     // E2: se migrara a Meilisearch para full-text search
-    const { data, error } = await supabase
+    let translationQuery = supabase
       .from('traduccion')
       .select('entidad_id')
       .eq('entidad_tipo', 'recurso_turistico')
-      .eq('campo', 'name')
-      .ilike('valor', `%${q}%`)
-      .limit(50);
+      .in('campo', ['name', 'description'])
+      .ilike('valor', `%${q}%`);
 
+    if (lang) {
+      translationQuery = translationQuery.eq('idioma', lang);
+    }
+
+    const { data, error } = await translationQuery.limit(200);
     if (error) throw error;
 
     const ids = [...new Set((data || []).map((r) => r.entidad_id))];
 
     if (ids.length === 0) {
-      res.json({ items: [], total: 0 });
+      res.json({ items: [], total: 0, page, limit, pages: 0 });
       return;
     }
 
-    const { data: resources } = await supabase
+    // Fetch matching published resources with filters
+    let resourceQuery = supabase
       .from('recurso_turistico')
-      .select(`id, uri, slug, tipologia:tipo_id ( type_code )`)
+      .select(`id, uri, slug, rdf_type, municipio_id, latitude, longitude, tipologia:rdf_type ( type_code, schema_org_type )`, { count: 'exact' })
       .in('id', ids)
       .eq('estado_editorial', 'publicado');
 
-    res.json({ items: resources || [], total: resources?.length || 0 });
+    if (type) {
+      resourceQuery = resourceQuery.eq('rdf_type', type);
+    }
+    if (municipio) {
+      resourceQuery = resourceQuery.eq('municipio_id', municipio);
+    }
+
+    const offset = (page - 1) * limit;
+    const { data: resources, count } = await resourceQuery
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const total = count || 0;
+
+    // Enrich with translated name
+    const items = await Promise.all(
+      (resources || []).map(async (r) => ({
+        id: r.id,
+        uri: r.uri,
+        slug: r.slug,
+        tipologia: r.tipologia,
+        municipioId: r.municipio_id,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        name: await getTranslatedField('recurso_turistico', r.id, 'name'),
+      })),
+    );
+
+    res.json({ items, total, page, limit, pages: Math.ceil(total / limit) });
   }),
 );

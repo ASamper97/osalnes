@@ -5,10 +5,12 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
+import { ResourceFormPage } from './pages/ResourceFormPage';
 import { CategoriesPage } from './pages/CategoriesPage';
+import { ProductsPage } from './pages/ProductsPage';
 import { PagesPage } from './pages/PagesPage';
 import { NavigationPage } from './pages/NavigationPage';
-import { ResourceFormPage } from './pages/ResourceFormPage';
+import { UsersPage } from './pages/UsersPage';
 
 export function App() {
   return (
@@ -26,8 +28,10 @@ export function App() {
               <Route path="/resources/new" element={<ResourceFormPage />} />
               <Route path="/resources/:id" element={<ResourceFormPage />} />
               <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/products" element={<ProductsPage />} />
               <Route path="/pages" element={<PagesPage />} />
               <Route path="/navigation" element={<NavigationPage />} />
+              <Route path="/users" element={<UsersPage />} />
             </Route>
           </Route>
         </Routes>

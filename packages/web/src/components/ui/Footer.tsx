@@ -1,32 +1,41 @@
+import Link from 'next/link';
+import type { Locale } from '@/i18n/config';
+
 interface FooterProps {
+  lang: Locale;
   dict: Record<string, string>;
 }
 
-export function Footer({ dict }: FooterProps) {
+export function Footer({ lang, dict }: FooterProps) {
   const year = new Date().getFullYear();
 
   return (
-    <footer
-      style={{
-        borderTop: '1px solid var(--color-border)',
-        padding: '2rem 1rem',
-        maxWidth: 'var(--max-width)',
-        margin: '0 auto',
-        fontSize: '0.875rem',
-        color: 'var(--color-muted)',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+    <footer className="site-footer">
+      <div className="site-footer__inner">
         <div>
+          <p style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
+            {dict.site_name}
+          </p>
           <p>&copy; {year} {dict.footer_copyright}</p>
-          <p>{dict.footer_funded}</p>
         </div>
-        <nav style={{ display: 'flex', gap: '1rem' }}>
-          <span>{dict.legal_notice}</span>
-          <span>{dict.privacy}</span>
-          <span>{dict.cookies}</span>
-          <span>{dict.accessibility}</span>
+
+        <nav className="site-footer__links" aria-label="Footer">
+          <Link href={`/${lang}/info`}>{dict.practical_info}</Link>
+          <Link href={`/${lang}/directorio`}>{dict.directory}</Link>
+          <Link href={`/${lang}/buscar`}>{dict.search}</Link>
+          <Link href={`/${lang}/agenda`}>{dict.agenda}</Link>
         </nav>
+
+        <nav className="site-footer__links" aria-label="Legal">
+          <Link href={`/${lang}/legal`}>{dict.legal_notice}</Link>
+          <Link href={`/${lang}/privacidad`}>{dict.privacy}</Link>
+          <Link href={`/${lang}/cookies`}>{dict.cookies}</Link>
+          <Link href={`/${lang}/accesibilidad`}>{dict.accessibility}</Link>
+        </nav>
+      </div>
+
+      <div className="site-footer__funding" style={{ maxWidth: 'var(--max-width)', margin: '1.5rem auto 0' }}>
+        <p>{dict.footer_funded}</p>
       </div>
     </footer>
   );

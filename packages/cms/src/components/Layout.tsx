@@ -5,8 +5,10 @@ const navItems = [
   { path: '/', label: 'Dashboard' },
   { path: '/resources', label: 'Recursos' },
   { path: '/categories', label: 'Categorias' },
+  { path: '/products', label: 'Productos' },
   { path: '/pages', label: 'Paginas' },
   { path: '/navigation', label: 'Navegacion' },
+  { path: '/users', label: 'Usuarios' },
 ];
 
 export function Layout() {

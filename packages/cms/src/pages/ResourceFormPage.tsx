@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { MediaUploader } from '@/components/MediaUploader';
+import { DocumentUploader } from '@/components/DocumentUploader';
+import { RelationsManager } from '@/components/RelationsManager';
 
 function slugify(text: string): string {
   return text
@@ -44,6 +46,10 @@ export function ResourceFormPage() {
   const [publicAccess, setPublicAccess] = useState(false);
   const [visibleOnMap, setVisibleOnMap] = useState(true);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [seoTitleEs, setSeoTitleEs] = useState('');
+  const [seoTitleGl, setSeoTitleGl] = useState('');
+  const [seoDescEs, setSeoDescEs] = useState('');
+  const [seoDescGl, setSeoDescGl] = useState('');
 
   // Load reference data
   useEffect(() => {
@@ -76,6 +82,10 @@ export function ResourceFormPage() {
         setPublicAccess(r.publicAccess || false);
         setVisibleOnMap(r.visibleOnMap ?? true);
         setSelectedCategories(r.categoryIds || []);
+        setSeoTitleEs(r.seoTitle?.es || '');
+        setSeoTitleGl(r.seoTitle?.gl || '');
+        setSeoDescEs(r.seoDescription?.es || '');
+        setSeoDescGl(r.seoDescription?.gl || '');
         setLoading(false);
       })
       .catch((err) => {
@@ -112,6 +122,8 @@ export function ResourceFormPage() {
       visible_en_mapa: visibleOnMap,
       name: { es: nameEs, gl: nameGl },
       description: { es: descEs, gl: descGl },
+      seo_title: { es: seoTitleEs, gl: seoTitleGl },
+      seo_description: { es: seoDescEs, gl: seoDescGl },
       category_ids: selectedCategories,
     };
 
@@ -287,8 +299,41 @@ export function ResourceFormPage() {
           </div>
         </fieldset>
 
+        {/* --- SEO --- */}
+        <fieldset>
+          <legend>SEO</legend>
+
+          <div className="form-row">
+            <div className="form-field">
+              <label>Titulo SEO (ES)</label>
+              <input value={seoTitleEs} onChange={(e) => setSeoTitleEs(e.target.value)} placeholder="Titulo para buscadores" />
+            </div>
+            <div className="form-field">
+              <label>Titulo SEO (GL)</label>
+              <input value={seoTitleGl} onChange={(e) => setSeoTitleGl(e.target.value)} placeholder="Titulo para buscadores" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-field">
+              <label>Descripcion SEO (ES)</label>
+              <textarea rows={2} value={seoDescEs} onChange={(e) => setSeoDescEs(e.target.value)} placeholder="Descripcion para buscadores (max 160 chars)" />
+            </div>
+            <div className="form-field">
+              <label>Descripcion SEO (GL)</label>
+              <textarea rows={2} value={seoDescGl} onChange={(e) => setSeoDescGl(e.target.value)} placeholder="Descricion para buscadores (max 160 chars)" />
+            </div>
+          </div>
+        </fieldset>
+
         {/* --- Multimedia (only in edit mode) --- */}
         {!isNew && id && <MediaUploader recursoId={id} />}
+
+        {/* --- Documents (only in edit mode) --- */}
+        {!isNew && id && <DocumentUploader entidadTipo="recurso_turistico" entidadId={id} />}
+
+        {/* --- Relations (only in edit mode) --- */}
+        {!isNew && id && <RelationsManager recursoId={id} />}
 
         {/* --- Opciones --- */}
         <fieldset>
