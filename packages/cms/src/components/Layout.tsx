@@ -1,4 +1,5 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/auth-context';
 
 const navItems = [
   { path: '/', label: 'Dashboard' },
@@ -9,6 +10,14 @@ const navItems = [
 ];
 
 export function Layout() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await signOut();
+    navigate('/login');
+  }
+
   return (
     <div className="cms-layout">
       <aside className="cms-sidebar">
@@ -25,6 +34,13 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="cms-sidebar-footer">
+          <div className="cms-user-email">{user?.email}</div>
+          <button onClick={handleLogout} className="cms-logout-btn">
+            Cerrar sesion
+          </button>
+        </div>
       </aside>
       <div className="cms-content">
         <Outlet />

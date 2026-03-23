@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/async-handler.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 export const adminRouter = Router();
 
-// ---------------------------------------------------------------------------
-// TODO (E2): JWT auth middleware will be added here
-// adminRouter.use(authMiddleware);
-// ---------------------------------------------------------------------------
+// All admin routes require Supabase Auth JWT
+adminRouter.use(authMiddleware);
 
 // ==========================================================================
 // CRUD Recursos
