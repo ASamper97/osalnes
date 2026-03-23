@@ -1,5 +1,6 @@
 import { supabase } from '../db/supabase.js';
-import type { LocalizedValue } from '@osalnes/shared';
+
+type LocalizedValue = Record<string, string>;
 
 /**
  * Fetch all translations for a given entity as a { [campo]: { [lang]: value } } map.

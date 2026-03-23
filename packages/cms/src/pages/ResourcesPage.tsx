@@ -16,6 +16,14 @@ const STATUS_COLORS: Record<string, string> = {
   archivado: '#95a5a6',
 };
 
+// Transiciones permitidas (BRI-6.1)
+const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?: string }[]> = {
+  borrador:  [{ target: 'revision', label: 'Enviar a revision' }, { target: 'archivado', label: 'Archivar', style: 'btn-danger' }],
+  revision:  [{ target: 'publicado', label: 'Publicar', style: 'btn-primary' }, { target: 'borrador', label: 'Devolver a borrador' }],
+  publicado: [{ target: 'archivado', label: 'Archivar' }, { target: 'borrador', label: 'Despublicar' }],
+  archivado: [{ target: 'borrador', label: 'Reactivar' }],
+};
+
 export function ResourcesPage() {
   const navigate = useNavigate();
   const [resources, setResources] = useState<any | null>(null);
@@ -141,16 +149,15 @@ export function ResourcesPage() {
                       <button className="btn btn-sm" onClick={() => navigate(`/resources/${r.id}`)}>
                         Editar
                       </button>
-                      {r.status === 'borrador' && (
-                        <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange(r.id, 'publicado')}>
-                          Publicar
+                      {(STATE_TRANSITIONS[r.status] || []).map((t) => (
+                        <button
+                          key={t.target}
+                          className={`btn btn-sm ${t.style || 'btn-outline'}`}
+                          onClick={() => handleStatusChange(r.id, t.target)}
+                        >
+                          {t.label}
                         </button>
-                      )}
-                      {r.status === 'publicado' && (
-                        <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange(r.id, 'archivado')}>
-                          Archivar
-                        </button>
-                      )}
+                      ))}
                       <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id, r.name?.es || r.slug)}>
                         Eliminar
                       </button>

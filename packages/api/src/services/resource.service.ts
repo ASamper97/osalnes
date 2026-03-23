@@ -238,10 +238,34 @@ export async function updateResource(id: string, input: Partial<CreateResourceIn
 // Update status
 // ---------------------------------------------------------------------------
 
+// Transiciones de estado permitidas (BRI-6.1)
+const STATE_TRANSITIONS: Record<string, string[]> = {
+  borrador: ['revision', 'archivado'],
+  revision: ['publicado', 'borrador'],
+  publicado: ['archivado', 'borrador'],
+  archivado: ['borrador'],
+};
+
 export async function updateResourceStatus(id: string, newStatus: string) {
   const validStates = ['borrador', 'revision', 'publicado', 'archivado'];
   if (!validStates.includes(newStatus)) {
-    throw new AppError(400, `Invalid status: ${newStatus}`);
+    throw new AppError(400, `Estado invalido: ${newStatus}`);
+  }
+
+  // Get current status
+  const { data: current, error: fetchError } = await supabase
+    .from('recurso_turistico')
+    .select('estado_editorial')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !current) throw new AppError(404, 'Recurso no encontrado');
+
+  const currentStatus = current.estado_editorial;
+  const allowed = STATE_TRANSITIONS[currentStatus] || [];
+
+  if (!allowed.includes(newStatus)) {
+    throw new AppError(400, `Transicion no permitida: ${currentStatus} → ${newStatus}. Permitidas: ${allowed.join(', ')}`);
   }
 
   const update: Record<string, unknown> = {
@@ -261,9 +285,14 @@ export async function updateResourceStatus(id: string, newStatus: string) {
     .single();
 
   if (error) throw new AppError(400, error.message);
-  if (!data) throw new AppError(404, 'Resource not found');
+  if (!data) throw new AppError(404, 'Recurso no encontrado');
 
   return mapResourceRow(data);
+}
+
+/** Get allowed transitions for a given status */
+export function getAllowedTransitions(status: string): string[] {
+  return STATE_TRANSITIONS[status] || [];
 }
 
 // ---------------------------------------------------------------------------

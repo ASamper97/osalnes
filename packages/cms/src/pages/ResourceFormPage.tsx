@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { MediaUploader } from '@/components/MediaUploader';
 
 function slugify(text: string): string {
   return text
@@ -285,6 +286,9 @@ export function ResourceFormPage() {
             ))}
           </div>
         </fieldset>
+
+        {/* --- Multimedia (only in edit mode) --- */}
+        {!isNew && id && <MediaUploader recursoId={id} />}
 
         {/* --- Opciones --- */}
         <fieldset>

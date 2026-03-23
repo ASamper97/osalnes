@@ -67,4 +67,31 @@ export const api = {
 
   deleteResource: (id: string) =>
     apiFetch<any>(`/admin/resources/${id}`, { method: 'DELETE' }),
+
+  // Categories (admin)
+  getAdminCategories: () => apiFetch<any[]>('/admin/categories'),
+
+  createCategory: (data: any) =>
+    apiFetch<any>('/admin/categories', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateCategory: (id: string, data: any) =>
+    apiFetch<any>(`/admin/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteCategory: (id: string) =>
+    apiFetch<any>(`/admin/categories/${id}`, { method: 'DELETE' }),
+
+  // Navigation (admin)
+  getAdminNavigation: (menu?: string) => {
+    const qs = menu ? `?menu=${encodeURIComponent(menu)}` : '';
+    return apiFetch<any[]>(`/admin/navigation${qs}`);
+  },
+
+  createNavItem: (data: any) =>
+    apiFetch<any>('/admin/navigation', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateNavItem: (id: string, data: any) =>
+    apiFetch<any>(`/admin/navigation/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteNavItem: (id: string) =>
+    apiFetch<any>(`/admin/navigation/${id}`, { method: 'DELETE' }),
 };

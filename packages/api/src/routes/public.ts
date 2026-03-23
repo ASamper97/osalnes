@@ -30,7 +30,7 @@ publicRouter.get(
 publicRouter.get(
   '/resources/:id',
   asyncHandler(async (req, res) => {
-    const resource = await resourceService.getResourceById(req.params.id);
+    const resource = await resourceService.getResourceById(req.params.id as string);
     res.json(resource);
   }),
 );
@@ -39,7 +39,7 @@ publicRouter.get(
 publicRouter.get(
   '/resources/by-slug/:slug',
   asyncHandler(async (req, res) => {
-    const resource = await resourceService.getResourceBySlug(req.params.slug);
+    const resource = await resourceService.getResourceBySlug(req.params.slug as string);
     res.json(resource);
   }),
 );
