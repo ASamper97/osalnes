@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { authMiddleware } from '../middleware/auth.js';
+import * as resourceService from '../services/resource.service.js';
 
 export const adminRouter = Router();
 
@@ -15,8 +16,8 @@ adminRouter.use(authMiddleware);
 adminRouter.post(
   '/resources',
   asyncHandler(async (req, res) => {
-    // E2: full create logic with validation
-    res.status(501).json({ error: 'Not implemented — phase E2' });
+    const resource = await resourceService.createResource(req.body);
+    res.status(201).json(resource);
   }),
 );
 
@@ -24,7 +25,8 @@ adminRouter.post(
 adminRouter.put(
   '/resources/:id',
   asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
+    const resource = await resourceService.updateResource(req.params.id, req.body);
+    res.json(resource);
   }),
 );
 
@@ -32,7 +34,9 @@ adminRouter.put(
 adminRouter.patch(
   '/resources/:id/status',
   asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
+    const { status } = req.body;
+    const resource = await resourceService.updateResourceStatus(req.params.id, status);
+    res.json(resource);
   }),
 );
 
@@ -40,106 +44,67 @@ adminRouter.patch(
 adminRouter.delete(
   '/resources/:id',
   asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
+    const result = await resourceService.deleteResource(req.params.id);
+    res.json(result);
   }),
 );
 
 // ==========================================================================
-// Multimedia
+// Multimedia (E2)
 // ==========================================================================
 
-/** POST /api/v1/admin/assets */
-adminRouter.post(
-  '/assets',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.post('/assets', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
-/** DELETE /api/v1/admin/assets/:id */
-adminRouter.delete(
-  '/assets/:id',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.delete('/assets/:id', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
 // ==========================================================================
-// Paginas
+// Paginas (E2)
 // ==========================================================================
 
-/** POST /api/v1/admin/pages */
-adminRouter.post(
-  '/pages',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.post('/pages', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
-/** PUT /api/v1/admin/pages/:id */
-adminRouter.put(
-  '/pages/:id',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.put('/pages/:id', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
 // ==========================================================================
-// Exportaciones PID / Data Lake
+// Exportaciones (E2)
 // ==========================================================================
 
-/** POST /api/v1/admin/exports/pid */
-adminRouter.post(
-  '/exports/pid',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.post('/exports/pid', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
-/** POST /api/v1/admin/exports/datalake */
-adminRouter.post(
-  '/exports/datalake',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.post('/exports/datalake', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
-/** GET /api/v1/admin/exports/:jobId */
-adminRouter.get(
-  '/exports/:jobId',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.get('/exports/:jobId', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
 // ==========================================================================
-// Navegacion
+// Navegacion (E2)
 // ==========================================================================
 
-/** PUT /api/v1/admin/navigation/:menuSlug */
-adminRouter.put(
-  '/navigation/:menuSlug',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.put('/navigation/:menuSlug', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
 // ==========================================================================
-// Usuarios (solo admin)
+// Usuarios (E2)
 // ==========================================================================
 
-/** GET /api/v1/admin/users */
-adminRouter.get(
-  '/users',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.get('/users', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));
 
-/** POST /api/v1/admin/users */
-adminRouter.post(
-  '/users',
-  asyncHandler(async (req, res) => {
-    res.status(501).json({ error: 'Not implemented — phase E2' });
-  }),
-);
+adminRouter.post('/users', asyncHandler(async (_req, res) => {
+  res.status(501).json({ error: 'Not implemented — phase E2' });
+}));

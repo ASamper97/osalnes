@@ -232,8 +232,7 @@ publicRouter.get(
     let query = supabase
       .from('recurso_turistico')
       .select(`id, uri, slug, tipologia:tipo_id ( type_code ), latitude, longitude`)
-      .eq('estado', 'publicado')
-      .eq('tipologia.grupo', 'evento');
+      .eq('estado_editorial', 'publicado');
 
     if (from) query = query.gte('updated_at', from);
     if (to) query = query.lte('updated_at', to);
@@ -264,8 +263,8 @@ publicRouter.get(
     let query = supabase
       .from('recurso_turistico')
       .select(`id, uri, slug, tipologia:tipo_id ( type_code ), latitude, longitude`)
-      .eq('estado', 'publicado')
-      .eq('visible_mapa', true)
+      .eq('estado_editorial', 'publicado')
+      .eq('visible_en_mapa', true)
       .gte('latitude', latSw)
       .lte('latitude', latNe)
       .gte('longitude', lngSw)
@@ -319,7 +318,7 @@ publicRouter.get(
       .from('recurso_turistico')
       .select(`id, uri, slug, tipologia:tipo_id ( type_code )`)
       .in('id', ids)
-      .eq('estado', 'publicado');
+      .eq('estado_editorial', 'publicado');
 
     res.json({ items: resources || [], total: resources?.length || 0 });
   }),

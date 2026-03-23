@@ -8,6 +8,7 @@ import { ResourcesPage } from './pages/ResourcesPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { PagesPage } from './pages/PagesPage';
 import { NavigationPage } from './pages/NavigationPage';
+import { ResourceFormPage } from './pages/ResourceFormPage';
 
 export function App() {
   return (
@@ -22,6 +23,8 @@ export function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/resources" element={<ResourcesPage />} />
+              <Route path="/resources/new" element={<ResourceFormPage />} />
+              <Route path="/resources/:id" element={<ResourceFormPage />} />
               <Route path="/categories" element={<CategoriesPage />} />
               <Route path="/pages" element={<PagesPage />} />
               <Route path="/navigation" element={<NavigationPage />} />
