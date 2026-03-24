@@ -1,0 +1,5 @@
+[project]
+id = "oduglbxjcmmdexwplzvw"
+
+[functions]
+verify_jwt = false  # We verify manually in admin function

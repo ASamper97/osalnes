@@ -1,3 +1,6 @@
+// In production: https://<ref>.supabase.co/functions/v1/api
+// In dev: http://localhost:54321/functions/v1/api (supabase functions serve)
+//   or the Express fallback: http://localhost:3001/api/v1
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 interface FetchOptions {

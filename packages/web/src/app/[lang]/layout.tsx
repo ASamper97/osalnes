@@ -3,7 +3,6 @@ import { locales, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { Header } from '@/components/ui/Header';
 import { Footer } from '@/components/ui/Footer';
-import 'leaflet/dist/leaflet.css';
 import './globals.css';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://turismo.osalnes.gal';

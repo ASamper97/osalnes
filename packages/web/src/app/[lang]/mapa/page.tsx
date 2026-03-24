@@ -1,11 +1,14 @@
 import type { Metadata } from 'next';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import type { Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { getTypologies, getMunicipalities } from '@/lib/api-client';
 
+// Skip static prerendering — Leaflet requires browser APIs (window)
+export const dynamic = 'force-dynamic';
+
 // Leaflet requires browser APIs — disable SSR
-const MapView = dynamic(() => import('@/components/MapView').then((m) => m.MapView), {
+const MapView = nextDynamic(() => import('@/components/MapView').then((m) => m.MapView), {
   ssr: false,
   loading: () => (
     <div style={{ height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-alt)', borderRadius: 'var(--radius)' }}>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import type { Locale } from '@/i18n/config';
 
 interface SearchPageProps {
@@ -11,8 +11,7 @@ interface SearchPageProps {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-export default function BuscarPage({ params }: SearchPageProps) {
-  const lang = params.lang;
+function SearchContent({ lang }: { lang: Locale }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const q = searchParams.get('q') || '';
@@ -104,5 +103,13 @@ export default function BuscarPage({ params }: SearchPageProps) {
         </p>
       ) : null}
     </>
+  );
+}
+
+export default function BuscarPage({ params }: SearchPageProps) {
+  return (
+    <Suspense fallback={<p style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-muted)' }}>Cargando...</p>}>
+      <SearchContent lang={params.lang} />
+    </Suspense>
   );
 }

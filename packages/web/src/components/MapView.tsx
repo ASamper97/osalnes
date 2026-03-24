@@ -1,23 +1,28 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import Link from 'next/link';
 import type { Locale } from '@/i18n/config';
 
-// Fix Leaflet default marker icon in Next.js
-const defaultIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-L.Marker.prototype.options.icon = defaultIcon;
+// Fix Leaflet default marker icon — deferred until client-side
+let _iconSetup = false;
+function ensureLeafletIcons() {
+  if (_iconSetup || typeof window === 'undefined') return;
+  _iconSetup = true;
+  const defaultIcon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
+  L.Marker.prototype.options.icon = defaultIcon;
+}
 
 interface MapResource {
   id: string;
@@ -61,6 +66,8 @@ function BoundsLoader({ onBoundsChange }: { onBoundsChange: (bounds: string) => 
 }
 
 export function MapView({ lang, dict, typologies, municipalities }: MapViewProps) {
+  ensureLeafletIcons();
+
   const [resources, setResources] = useState<MapResource[]>([]);
   const [bounds, setBounds] = useState('');
   const [typeFilter, setTypeFilter] = useState('');

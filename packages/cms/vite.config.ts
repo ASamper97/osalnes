@@ -12,8 +12,13 @@ export default defineConfig({
   server: {
     port: 3002,
     proxy: {
+      // Dev proxy: both Express legacy (/api/v1) and Supabase Edge Functions
       '/api': {
         target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/functions': {
+        target: 'http://localhost:54321',
         changeOrigin: true,
       },
     },

@@ -3,94 +3,143 @@
 ## Arquitectura de producción
 
 ```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Web (SSR)  │    │  CMS (SPA)   │    │  API (REST)  │
-│   Next.js    │    │  Vite+React  │    │  Express     │
-│   Vercel     │    │  Vercel      │    │ Vercel/Render│
-│   :3000      │    │  :3002       │    │  :3001       │
-└──────┬───────┘    └──────┬───────┘    └──────┬───────┘
-       │                   │                   │
-       └───────────────────┴───────────────────┘
-                           │
-                    ┌──────┴───────┐
-                    │   Supabase   │
-                    │ DB+Auth+Store│
-                    │   (cloud)    │
-                    └──────────────┘
+┌──────────────────┐    ┌──────────────────┐
+│   Web (SSR)      │    │   CMS (SPA)      │
+│   Next.js        │    │   Vite + React   │
+│   Cloudflare     │    │   Cloudflare     │
+│   Pages          │    │   Pages          │
+└────────┬─────────┘    └────────┬─────────┘
+         │                       │
+         └───────────┬───────────┘
+                     │
+         ┌───────────┴───────────┐
+         │  Supabase Edge Fns    │
+         │  api (público)        │
+         │  admin (autenticado)  │
+         ├───────────────────────┤
+         │  Supabase             │
+         │  DB + Auth + Storage  │
+         │  (cloud)              │
+         └───────────────────────┘
 ```
 
 ## Requisitos previos
 
-- Cuenta en [Vercel](https://vercel.com) (gratuita)
-- Proyecto Supabase ya configurado
-- Repositorio GitHub conectado a Vercel
+- Cuenta en [Cloudflare](https://dash.cloudflare.com) (gratuita)
+- Proyecto Supabase configurado (`oduglbxjcmmdexwplzvw`)
+- [Supabase CLI](https://supabase.com/docs/guides/cli) instalado
+- Repositorio GitHub: `ASamper97/osalnes`
 
 ---
 
-## 1. Web pública (Next.js → Vercel)
+## 1. API — Supabase Edge Functions
 
-### Crear proyecto en Vercel
-1. New Project → Import `ASamper97/osalnes`
-2. **Root Directory**: `packages/web`
-3. **Framework Preset**: Next.js (auto-detectado)
-4. Vercel leerá el `vercel.json` automáticamente
+Las Edge Functions reemplazan la API Express. Están en `supabase/functions/`.
+
+### Desplegar funciones
+
+```bash
+# Login en Supabase
+supabase login
+
+# Link al proyecto
+supabase link --project-ref oduglbxjcmmdexwplzvw
+
+# Desplegar todas las funciones
+supabase functions deploy api --no-verify-jwt
+supabase functions deploy admin --no-verify-jwt
+```
+
+> `--no-verify-jwt` porque verificamos manualmente en la función `admin`.
+
+### URLs resultantes
+
+| Función | URL |
+|---------|-----|
+| `api` (pública) | `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/api` |
+| `admin` (auth) | `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/admin` |
+
+### Variables de entorno (automáticas)
+
+Supabase inyecta automáticamente:
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Para CORS personalizado (opcional):
+```bash
+supabase secrets set CORS_ORIGINS="https://turismo.osalnes.gal,https://cms.osalnes.gal"
+```
+
+### Dev local
+
+```bash
+# Servir funciones localmente (requiere Docker)
+supabase functions serve
+
+# Las funciones estarán en http://localhost:54321/functions/v1/api
+# y http://localhost:54321/functions/v1/admin
+```
+
+---
+
+## 2. Web pública (Next.js → Cloudflare Pages)
+
+### Crear proyecto en Cloudflare
+
+1. Dashboard → Pages → Create a project → Connect to Git
+2. Seleccionar repositorio `ASamper97/osalnes`
+3. Configuración de build:
+   - **Build command**: `npm install && npm run build -w packages/shared && npm run build -w packages/web`
+   - **Build output directory**: `packages/web/.next`
+   - **Root directory**: `/` (raíz del monorepo)
+   - **Framework preset**: Next.js
 
 ### Variables de entorno
-| Variable | Valor |
-|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://osalnes-api.vercel.app/api/v1` (o la URL de tu API) |
+
+| Variable | Valor producción |
+|----------|-----------------|
+| `NEXT_PUBLIC_API_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/api` |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Tu anon key de Supabase |
-| `NEXT_PUBLIC_SITE_URL` | `https://turismo.osalnes.gal` (tu dominio) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Tu anon key |
+| `NEXT_PUBLIC_SITE_URL` | `https://turismo.osalnes.gal` |
+| `NODE_VERSION` | `20` |
+
+### Dominio personalizado
+
+En Cloudflare Pages → Custom domains → `turismo.osalnes.gal`
 
 ---
 
-## 2. CMS Admin (Vite SPA → Vercel)
+## 3. CMS Admin (Vite SPA → Cloudflare Pages)
 
-### Crear proyecto en Vercel
-1. New Project → Import `ASamper97/osalnes`
-2. **Root Directory**: `packages/cms`
-3. **Framework Preset**: Vite
-4. El `vercel.json` configura SPA routing automáticamente
+### Crear proyecto en Cloudflare
+
+1. Dashboard → Pages → Create a project → Connect to Git
+2. Seleccionar repositorio `ASamper97/osalnes`
+3. Configuración de build:
+   - **Build command**: `npm install && npm run build -w packages/shared && npm run build -w packages/cms`
+   - **Build output directory**: `packages/cms/dist`
+   - **Root directory**: `/`
 
 ### Variables de entorno
-| Variable | Valor |
-|----------|-------|
-| `VITE_API_URL` | `https://osalnes-api.vercel.app/api/v1` |
+
+| Variable | Valor producción |
+|----------|-----------------|
+| `VITE_API_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/api` |
+| `VITE_ADMIN_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/admin` |
 | `VITE_SUPABASE_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Tu anon key de Supabase |
+| `VITE_SUPABASE_ANON_KEY` | Tu anon key |
 
 > **Nota**: Las variables `VITE_*` se inyectan en build time. Si las cambias, necesitas re-deploy.
 
----
+### SPA routing
 
-## 3. API (Express → Vercel o Render)
+El archivo `packages/cms/public/_redirects` configura automáticamente el fallback a `index.html` para SPA routing.
 
-### Opción A: Vercel Serverless
+### Dominio personalizado
 
-1. New Project → Import `ASamper97/osalnes`
-2. **Root Directory**: `packages/api`
-3. Vercel detectará el `vercel.json` y usará el serverless adapter
-
-### Opción B: Render.com (recomendado para API persistente)
-
-1. New Web Service → Connect `ASamper97/osalnes`
-2. Render detectará el `render.yaml` automáticamente
-3. O configura manualmente:
-   - **Build Command**: `npm install && npm run build -w packages/shared && npm run build -w packages/api`
-   - **Start Command**: `node packages/api/dist/server.js`
-
-### Variables de entorno (ambas opciones)
-| Variable | Valor |
-|----------|-------|
-| `NODE_ENV` | `production` |
-| `API_PORT` | `3001` |
-| `API_HOST` | `0.0.0.0` |
-| `SUPABASE_URL` | `https://oduglbxjcmmdexwplzvw.supabase.co` |
-| `SUPABASE_ANON_KEY` | Tu anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Tu service role key |
-| `CORS_ORIGINS` | `https://turismo.osalnes.gal,https://cms.osalnes.gal` |
-| `LOG_LEVEL` | `info` |
+En Cloudflare Pages → Custom domains → `cms.osalnes.gal`
 
 ---
 
@@ -105,31 +154,46 @@
 
 ## CORS en producción
 
-Actualiza `CORS_ORIGINS` en la API con los dominios reales:
-```
-https://turismo.osalnes.gal,https://cms.osalnes.gal
-```
+Las Edge Functions leen `CORS_ORIGINS` para permitir los dominios correctos:
 
-## Dominios personalizados
-
-En Vercel → Settings → Domains:
-- Web: `turismo.osalnes.gal`
-- CMS: `cms.osalnes.gal`
-- API: `api.osalnes.gal`
+```bash
+supabase secrets set CORS_ORIGINS="https://turismo.osalnes.gal,https://cms.osalnes.gal"
+```
 
 ---
 
-## Comandos útiles
+## Desarrollo local
 
 ```bash
-# Build local completo
-npm run build
+# Instalar dependencias
+npm install
 
-# Dev local (los 3 servicios)
+# Dev local completo (Express API + Next.js + CMS)
 npm run dev
 
 # Solo un servicio
-npm run dev:api
-npm run dev:web
-npm run dev:cms
+npm run dev:api    # Express en :3001
+npm run dev:web    # Next.js en :3000
+npm run dev:cms    # Vite en :3002
+
+# Edge Functions locales (alternativa a Express)
+supabase functions serve
 ```
+
+### Flujo de trabajo recomendado
+
+1. **Dev**: Usa `npm run dev` (Express API). Es más rápido para iterar.
+2. **Pre-deploy**: Prueba con `supabase functions serve` para verificar Edge Functions.
+3. **Deploy**: `supabase functions deploy` + push a GitHub (Cloudflare auto-deploy).
+
+---
+
+## Resumen de URLs
+
+| Servicio | Dev | Producción |
+|----------|-----|------------|
+| Web | `http://localhost:3000` | `https://turismo.osalnes.gal` |
+| CMS | `http://localhost:3002` | `https://cms.osalnes.gal` |
+| API pública | `http://localhost:3001/api/v1` | `.../functions/v1/api` |
+| API admin | `http://localhost:3001/api/v1/admin` | `.../functions/v1/admin` |
+| Supabase | `https://oduglbxjcmmdexwplzvw.supabase.co` | (mismo) |
