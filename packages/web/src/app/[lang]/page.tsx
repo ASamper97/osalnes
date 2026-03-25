@@ -40,7 +40,7 @@ export default async function HomePage({
             style={{
               padding: '0.6rem 1.5rem',
               background: 'var(--color-accent)',
-              color: '#fff',
+              color: 'var(--color-text)',
               borderRadius: 'var(--radius)',
               fontWeight: 600,
               fontSize: '0.95rem',
