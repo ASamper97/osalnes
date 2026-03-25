@@ -73,6 +73,14 @@ export function ExportsPage() {
         >
           {triggering === 'datalake' ? 'Exportando...' : 'Exportar a Data Lake'}
         </button>
+        <a
+          href={`${import.meta.env.VITE_API_URL || '/api/v1'}/export/jsonld`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn"
+        >
+          Ver JSON-LD publico
+        </a>
 
         <select
           value={filterTipo}

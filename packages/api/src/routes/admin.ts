@@ -487,15 +487,13 @@ adminRouter.get('/exports', asyncHandler(async (req, res) => {
 
 /** POST /api/v1/admin/exports/pid — admin, tecnico */
 adminRouter.post('/exports/pid', requireRole('admin', 'tecnico'), asyncHandler(async (req, res) => {
-  const userId = (req as any).user?.id;
-  const job = await exportService.createExportJob('pid', req.body, userId);
+  const job = await exportService.createExportJob('pid', req.body, (req as any).dtiUserId);
   res.status(202).json(job);
 }));
 
 /** POST /api/v1/admin/exports/datalake — admin, tecnico */
 adminRouter.post('/exports/datalake', requireRole('admin', 'tecnico'), asyncHandler(async (req, res) => {
-  const userId = (req as any).user?.id;
-  const job = await exportService.createExportJob('datalake', req.body, userId);
+  const job = await exportService.createExportJob('datalake', req.body, (req as any).dtiUserId);
   res.status(202).json(job);
 }));
 

@@ -432,3 +432,178 @@ publicRouter.get(
     res.json({ items, total, page, limit, pages: Math.ceil(total / limit) });
   }),
 );
+
+// ==========================================================================
+// Exportacion JSON-LD (UNE 178503 + schema.org)
+// ==========================================================================
+
+/** Schema.org type mapping */
+const SCHEMA_ORG_MAP: Record<string, string> = {
+  Hotel: 'Hotel', RuralHouse: 'House', BedAndBreakfast: 'BedAndBreakfast',
+  Campground: 'Campground', Apartment: 'Apartment', Hostel: 'Hostel',
+  ApartHotel: 'LodgingBusiness', GuestHouse: 'LodgingBusiness', RuralHotel: 'LodgingBusiness',
+  LodgingBusiness: 'LodgingBusiness',
+  Restaurant: 'Restaurant', BarOrPub: 'BarOrPub', CafeOrCoffeeShop: 'CafeOrCoffeeShop',
+  Winery: 'Winery', Brewery: 'Brewery', IceCreamShop: 'FoodEstablishment',
+  TouristAttraction: 'TouristAttraction', Beach: 'Beach', Museum: 'Museum',
+  Park: 'Park', NaturePark: 'Park', ViewPoint: 'Place',
+  PlaceOfWorship: 'PlaceOfWorship', Trail: 'TouristAttraction',
+  LandmarksOrHistoricalBuildings: 'LandmarksOrHistoricalBuildings',
+  Monument: 'LandmarksOrHistoricalBuildings', Cave: 'TouristAttraction',
+  ArtGallery: 'ArtGallery', Library: 'Library', GolfCourse: 'GolfCourse',
+  YachtingPort: 'BoatTerminal', Zoo: 'Zoo', Aquarium: 'Aquarium',
+  Event: 'Event', Festival: 'Festival', MusicEvent: 'MusicEvent',
+  SportsEvent: 'SportsEvent', FoodEvent: 'FoodEvent', Fair: 'Event',
+  BusStation: 'BusStation', Port: 'BoatTerminal', TrainStation: 'TrainStation',
+  ParkingFacility: 'ParkingFacility', TaxiStand: 'TaxiStand',
+  TouristInformationCenter: 'TouristInformationCenter',
+  Hospital: 'Hospital', Pharmacy: 'Pharmacy', PoliceStation: 'PoliceStation',
+  GasStation: 'GasStation', TouristDestination: 'TouristDestination',
+};
+
+/** GET /api/v1/export/jsonld — Public JSON-LD export of all published resources */
+publicRouter.get(
+  '/export/jsonld',
+  asyncHandler(async (req, res) => {
+    const type = req.query.type as string | undefined;
+    const municipio = req.query.municipio as string | undefined;
+
+    // Fetch all published resources
+    let query = supabase
+      .from('recurso_turistico')
+      .select(`
+        id, uri, rdf_type, slug, latitude, longitude,
+        address_street, address_postal, telephone, email, url,
+        tourist_types, rating_value, serves_cuisine, opening_hours,
+        is_accessible_for_free, public_access, occupancy,
+        extras, municipio_id, published_at, updated_at
+      `)
+      .eq('estado_editorial', 'publicado');
+
+    if (type) query = query.eq('rdf_type', type);
+    if (municipio) query = query.eq('municipio_id', municipio);
+
+    const { data: resources, error } = await query.order('updated_at', { ascending: false });
+    if (error) throw error;
+
+    const rows = resources || [];
+
+    // Batch-fetch all translations (fix N+1)
+    const ids = rows.map((r) => r.id);
+    let tMap: Record<string, Record<string, Record<string, string>>> = {};
+
+    if (ids.length > 0) {
+      const { data: translations } = await supabase
+        .from('traduccion')
+        .select('entidad_id, campo, idioma, valor')
+        .eq('entidad_tipo', 'recurso_turistico')
+        .in('campo', ['name', 'description'])
+        .in('entidad_id', ids);
+
+      for (const t of translations || []) {
+        if (!tMap[t.entidad_id]) tMap[t.entidad_id] = {};
+        if (!tMap[t.entidad_id][t.campo]) tMap[t.entidad_id][t.campo] = {};
+        tMap[t.entidad_id][t.campo][t.idioma] = t.valor;
+      }
+    }
+
+    // Fetch municipality slugs for addressLocality
+    const muniIds = [...new Set(rows.map((r) => r.municipio_id).filter(Boolean))];
+    let muniMap: Record<string, string> = {};
+    if (muniIds.length > 0) {
+      const { data: munis } = await supabase.from('municipio').select('id, slug').in('id', muniIds);
+      for (const m of munis || []) { muniMap[m.id] = m.slug; }
+    }
+
+    // Build JSON-LD graph
+    const graph = rows.map((r) => {
+      const names = tMap[r.id]?.name || {};
+      const descs = tMap[r.id]?.description || {};
+      const schemaType = SCHEMA_ORG_MAP[r.rdf_type] || 'TouristAttraction';
+
+      const item: Record<string, unknown> = {
+        '@type': schemaType,
+        '@id': `https://turismo.osalnes.gal/es/recurso/${r.slug}`,
+        'identifier': r.uri,
+        'url': `https://turismo.osalnes.gal/es/recurso/${r.slug}`,
+      };
+
+      // Name — prefer es, fallback to gl
+      if (names.es) item.name = names.es;
+      else if (names.gl) item.name = names.gl;
+
+      // Description
+      if (descs.es) item.description = descs.es;
+      else if (descs.gl) item.description = descs.gl;
+
+      // Multilingual names as alternateName
+      const altNames = Object.entries(names).filter(([lang]) => lang !== 'es').map(([, v]) => v);
+      if (altNames.length > 0) item.alternateName = altNames;
+
+      // Geo
+      if (r.latitude && r.longitude) {
+        item.geo = {
+          '@type': 'GeoCoordinates',
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+        };
+      }
+
+      // Address
+      if (r.address_street || r.address_postal || r.municipio_id) {
+        item.address = {
+          '@type': 'PostalAddress',
+          ...(r.address_street && { streetAddress: r.address_street }),
+          ...(r.address_postal && { postalCode: r.address_postal }),
+          ...(r.municipio_id && muniMap[r.municipio_id] && { addressLocality: muniMap[r.municipio_id] }),
+          addressRegion: 'Pontevedra',
+          addressCountry: 'ES',
+        };
+      }
+
+      // Contact
+      if (r.telephone?.length) item.telephone = r.telephone.length === 1 ? r.telephone[0] : r.telephone;
+      if (r.email?.length) item.email = r.email.length === 1 ? r.email[0] : r.email;
+      if (r.url) item.url = r.url;
+
+      // Rating (UNE 178503 sec. 7.7)
+      if (r.rating_value) {
+        item.starRating = { '@type': 'Rating', ratingValue: r.rating_value };
+      }
+
+      // Tourist types (UNE 178503 sec. 7.6)
+      if (r.tourist_types?.length) item.touristType = r.tourist_types;
+
+      // Cuisine
+      if (r.serves_cuisine?.length) item.servesCuisine = r.serves_cuisine;
+
+      // Opening hours
+      if (r.opening_hours) item.openingHours = r.opening_hours;
+
+      // Accessibility
+      if (r.is_accessible_for_free !== null) item.isAccessibleForFree = r.is_accessible_for_free;
+      if (r.public_access !== null) item.publicAccess = r.public_access;
+      if (r.occupancy) item.maximumAttendeeCapacity = r.occupancy;
+
+      // Dates
+      if (r.published_at) item.datePublished = r.published_at;
+      if (r.updated_at) item.dateModified = r.updated_at;
+
+      return item;
+    });
+
+    res.setHeader('Content-Type', 'application/ld+json; charset=utf-8');
+    res.json({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      'name': 'Recursos Turisticos — O Salnes DTI',
+      'description': 'Catalogo de recursos turisticos de la Mancomunidad de O Salnes, segun UNE 178503',
+      'numberOfItems': graph.length,
+      'itemListElement': graph.map((item, i) => ({
+        '@type': 'ListItem',
+        'position': i + 1,
+        'item': item,
+      })),
+    });
+  }),
+);
