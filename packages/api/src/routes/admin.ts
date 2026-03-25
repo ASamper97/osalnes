@@ -549,17 +549,20 @@ adminRouter.get('/products', asyncHandler(async (_req, res) => {
 /** POST /api/v1/admin/products — admin, editor */
 adminRouter.post('/products', requireRole('admin', 'editor'), asyncHandler(async (req, res) => {
   const product = await productService.createProduct(req.body);
+  audit.log('producto_turistico', product.id, 'crear', (req as any).dtiUserId, { slug: product.slug });
   res.status(201).json(product);
 }));
 
 /** PUT /api/v1/admin/products/:id — admin, editor */
 adminRouter.put('/products/:id', requireRole('admin', 'editor'), asyncHandler(async (req, res) => {
   const product = await productService.updateProduct(paramId(req), req.body);
+  audit.log('producto_turistico', paramId(req), 'modificar', (req as any).dtiUserId);
   res.json(product);
 }));
 
 /** DELETE /api/v1/admin/products/:id — admin only */
 adminRouter.delete('/products/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const result = await productService.deleteProduct(paramId(req));
+  audit.log('producto_turistico', paramId(req), 'eliminar', (req as any).dtiUserId);
   res.json(result);
 }));

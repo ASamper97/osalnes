@@ -1,16 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '@/lib/api';
-
-interface Product {
-  id: string;
-  slug: string;
-  activo: boolean;
-  name: Record<string, string>;
-  description: Record<string, string>;
-}
+import { api, type ProductItem } from '@/lib/api';
 
 export function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Form
@@ -18,10 +10,14 @@ export function ProductsPage() {
   const [slug, setSlug] = useState('');
   const [nameEs, setNameEs] = useState('');
   const [nameGl, setNameGl] = useState('');
+  const [nameEn, setNameEn] = useState('');
+  const [nameFr, setNameFr] = useState('');
+  const [namePt, setNamePt] = useState('');
   const [descEs, setDescEs] = useState('');
   const [descGl, setDescGl] = useState('');
   const [activo, setActivo] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function loadProducts() {
     api.getProducts().then(setProducts).catch((e) => setError(e.message));
@@ -32,14 +28,18 @@ export function ProductsPage() {
   function resetForm() {
     setEditingId(null);
     setSlug(''); setNameEs(''); setNameGl('');
+    setNameEn(''); setNameFr(''); setNamePt('');
     setDescEs(''); setDescGl(''); setActivo(true);
   }
 
-  function startEdit(p: Product) {
+  function startEdit(p: ProductItem) {
     setEditingId(p.id);
     setSlug(p.slug);
     setNameEs(p.name?.es || '');
     setNameGl(p.name?.gl || '');
+    setNameEn(p.name?.en || '');
+    setNameFr(p.name?.fr || '');
+    setNamePt(p.name?.pt || '');
     setDescEs(p.description?.es || '');
     setDescGl(p.description?.gl || '');
     setActivo(p.activo);
@@ -47,13 +47,21 @@ export function ProductsPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    // Client-side validation
+    const errs: string[] = [];
+    if (!slug.trim()) errs.push('Slug es obligatorio');
+    if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errs.push('Slug solo admite letras minusculas, numeros y guiones');
+    if (!nameEs.trim()) errs.push('Nombre (ES) es obligatorio');
+    if (errs.length > 0) { setError(errs.join('\n')); return; }
+
+    setSaving(true);
 
     const body = {
       slug,
       activo,
-      name: { es: nameEs, gl: nameGl },
+      name: { es: nameEs, gl: nameGl, ...(nameEn && { en: nameEn }), ...(nameFr && { fr: nameFr }), ...(namePt && { pt: namePt }) },
       description: { es: descEs, gl: descGl },
     };
 
@@ -65,21 +73,24 @@ export function ProductsPage() {
       }
       resetForm();
       loadProducts();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar producto "${name}"?`)) return;
+    if (!confirm(`Eliminar producto "${name}"? Esta accion no se puede deshacer.`)) return;
+    setBusyId(id);
     try {
       await api.deleteProduct(id);
       if (editingId === id) resetForm();
       loadProducts();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -89,7 +100,7 @@ export function ProductsPage() {
         <h1>Productos turisticos</h1>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="resource-form" style={{ marginBottom: '2rem' }}>
@@ -112,11 +123,26 @@ export function ProductsPage() {
           <div className="form-row">
             <div className="form-field">
               <label>Nombre (ES) *</label>
-              <input value={nameEs} onChange={(e) => setNameEs(e.target.value)} required placeholder="Ruta do Viño" />
+              <input value={nameEs} onChange={(e) => setNameEs(e.target.value)} required placeholder="Ruta do Vino" />
             </div>
             <div className="form-field">
               <label>Nombre (GL)</label>
               <input value={nameGl} onChange={(e) => setNameGl(e.target.value)} placeholder="Ruta do Viño" />
+            </div>
+          </div>
+
+          <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div className="form-field">
+              <label>Nombre (EN)</label>
+              <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="Wine Route" />
+            </div>
+            <div className="form-field">
+              <label>Nombre (FR)</label>
+              <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} placeholder="Route du Vin" />
+            </div>
+            <div className="form-field">
+              <label>Nombre (PT)</label>
+              <input value={namePt} onChange={(e) => setNamePt(e.target.value)} placeholder="Rota do Vinho" />
             </div>
           </div>
 
@@ -146,18 +172,20 @@ export function ProductsPage() {
           <tr>
             <th>Nombre</th>
             <th>Slug</th>
+            <th>Recursos</th>
             <th>Estado</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {products.length === 0 && (
-            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin productos</td></tr>
+            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin productos</td></tr>
           )}
           {products.map((p) => (
             <tr key={p.id}>
               <td><strong>{p.name?.es || p.slug}</strong></td>
               <td style={{ fontSize: '0.8rem' }}>{p.slug}</td>
+              <td style={{ textAlign: 'center' }}>{(p as any).resourceCount || 0}</td>
               <td>
                 <span className="status-badge" style={{ background: p.activo ? '#27ae60' : '#95a5a6' }}>
                   {p.activo ? 'Activo' : 'Inactivo'}
@@ -165,9 +193,9 @@ export function ProductsPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(p)}>Editar</button>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name?.es || p.slug)}>
-                    Eliminar
+                  <button className="btn btn-sm" onClick={() => startEdit(p)} disabled={busyId === p.id}>Editar</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name?.es || p.slug)} disabled={busyId === p.id}>
+                    {busyId === p.id ? '...' : 'Eliminar'}
                   </button>
                 </div>
               </td>

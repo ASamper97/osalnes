@@ -271,7 +271,9 @@ export interface ProductItem {
   id: string;
   slug: string;
   name: LocalizedValue;
+  description: LocalizedValue;
   activo: boolean;
+  resourceCount?: number;
 }
 
 export interface DeleteResult { deleted: boolean }
