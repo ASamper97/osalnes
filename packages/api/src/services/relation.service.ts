@@ -1,6 +1,6 @@
 import { supabase } from '../db/supabase.js';
 import { AppError } from '../middleware/error-handler.js';
-import { getTranslatedField } from './translation.service.js';
+// Translations fetched via batch query in listRelations (no N+1)
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,22 +27,39 @@ export async function listRelations(recursoId: string) {
 
   if (error) throw error;
 
-  // Enrich with resource names
-  return Promise.all(
-    (data || []).map(async (r) => {
-      const relatedId = r.recurso_origen === recursoId ? r.recurso_destino : r.recurso_origen;
-      return {
-        id: r.id,
-        recursoOrigen: r.recurso_origen,
-        recursoDestino: r.recurso_destino,
-        tipoRelacion: r.tipo_relacion,
-        orden: r.orden,
-        metadata: r.metadata,
-        createdAt: r.created_at,
-        relatedResourceName: await getTranslatedField('recurso_turistico', relatedId, 'name'),
-      };
-    }),
-  );
+  const rows = data || [];
+  if (rows.length === 0) return [];
+
+  // Batch-fetch all related resource names in a single query (fix N+1)
+  const relatedIds = rows.map((r) => r.recurso_origen === recursoId ? r.recurso_destino : r.recurso_origen);
+  const uniqueIds = [...new Set(relatedIds)];
+
+  const { data: translations } = await supabase
+    .from('traduccion')
+    .select('entidad_id, idioma, valor')
+    .eq('entidad_tipo', 'recurso_turistico')
+    .eq('campo', 'name')
+    .in('entidad_id', uniqueIds);
+
+  const nameMap: Record<string, Record<string, string>> = {};
+  for (const t of translations || []) {
+    if (!nameMap[t.entidad_id]) nameMap[t.entidad_id] = {};
+    nameMap[t.entidad_id][t.idioma] = t.valor;
+  }
+
+  return rows.map((r) => {
+    const relatedId = r.recurso_origen === recursoId ? r.recurso_destino : r.recurso_origen;
+    return {
+      id: r.id,
+      recursoOrigen: r.recurso_origen,
+      recursoDestino: r.recurso_destino,
+      tipoRelacion: r.tipo_relacion,
+      orden: r.orden,
+      metadata: r.metadata,
+      createdAt: r.created_at,
+      relatedResourceName: nameMap[relatedId] || {},
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

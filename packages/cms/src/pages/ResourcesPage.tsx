@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
+import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem } from '@/lib/api';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -26,15 +26,17 @@ const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?:
 
 export function ResourcesPage() {
   const navigate = useNavigate();
-  const [resources, setResources] = useState<any | null>(null);
-  const [typologies, setTypologies] = useState<any[]>([]);
-  const [municipalities, setMunicipalities] = useState<any[]>([]);
+  const [resources, setResources] = useState<PaginatedResult<ResourceSummary> | null>(null);
+  const [typologies, setTypologies] = useState<TypologyItem[]>([]);
+  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [searchName, setSearchName] = useState('');
   const [page, setPage] = useState(1);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  function loadResources() {
+  const loadResources = useCallback(() => {
     const params: Record<string, string> = { page: String(page), limit: '20' };
     if (filterType) params.type = filterType;
     if (filterStatus) params.status = filterStatus;
@@ -42,11 +44,11 @@ export function ResourcesPage() {
     api.getResources(params)
       .then(setResources)
       .catch((err) => setError(err.message));
-  }
+  }, [page, filterType, filterStatus]);
 
   useEffect(() => {
     loadResources();
-  }, [page, filterType, filterStatus]);
+  }, [loadResources]);
 
   useEffect(() => {
     api.getTypologies().then(setTypologies).catch(() => {});
@@ -54,23 +56,42 @@ export function ResourcesPage() {
   }, []);
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar "${name}"?`)) return;
+    if (!confirm(`Eliminar "${name}"? Esta accion no se puede deshacer.`)) return;
+    setBusyId(id);
     try {
       await api.deleteResource(id);
       loadResources();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
   async function handleStatusChange(id: string, newStatus: string) {
+    const label = STATUS_LABELS[newStatus] || newStatus;
+    if (!confirm(`Cambiar estado a "${label}"?`)) return;
+    setBusyId(id);
     try {
       await api.updateResourceStatus(id, newStatus);
       loadResources();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
+
+  const filtered = useMemo(() => {
+    if (!resources) return [];
+    const q = searchName.toLowerCase().trim();
+    if (!q) return resources.items;
+    return resources.items.filter((r) =>
+      (r.name?.es || '').toLowerCase().includes(q) ||
+      (r.name?.gl || '').toLowerCase().includes(q) ||
+      r.slug.toLowerCase().includes(q)
+    );
+  }, [resources, searchName]);
 
   return (
     <div>
@@ -85,6 +106,15 @@ export function ResourcesPage() {
 
       {/* Filters */}
       <div className="filters-bar">
+        <input
+          type="search"
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          placeholder="Buscar por nombre..."
+          className="quick-search__input"
+          aria-label="Buscar por nombre"
+          style={{ minWidth: '180px' }}
+        />
         <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setPage(1); }}>
           <option value="">Todas las tipologias</option>
           {typologies.map((t) => (
@@ -108,7 +138,7 @@ export function ResourcesPage() {
       {resources && (
         <>
           <p className="results-count">
-            {resources.total} recursos encontrados (pagina {resources.page} de {resources.pages})
+            {searchName.trim() ? `${filtered.length} de ` : ''}{resources.total} recursos encontrados (pagina {resources.page} de {resources.pages})
           </p>
 
           <table className="data-table">
@@ -122,10 +152,10 @@ export function ResourcesPage() {
               </tr>
             </thead>
             <tbody>
-              {resources.items.length === 0 && (
+              {filtered.length === 0 && (
                 <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin recursos</td></tr>
               )}
-              {resources.items.map((r: any) => (
+              {filtered.map((r) => (
                 <tr key={r.id}>
                   <td>
                     <strong>{r.name?.es || r.name?.gl || r.slug}</strong>
@@ -146,7 +176,7 @@ export function ResourcesPage() {
                   </td>
                   <td>
                     <div className="action-btns">
-                      <button className="btn btn-sm" onClick={() => navigate(`/resources/${r.id}`)}>
+                      <button className="btn btn-sm" onClick={() => navigate(`/resources/${r.id}`)} disabled={busyId === r.id}>
                         Editar
                       </button>
                       {(STATE_TRANSITIONS[r.status] || []).map((t) => (
@@ -154,12 +184,13 @@ export function ResourcesPage() {
                           key={t.target}
                           className={`btn btn-sm ${t.style || 'btn-outline'}`}
                           onClick={() => handleStatusChange(r.id, t.target)}
+                          disabled={busyId === r.id}
                         >
-                          {t.label}
+                          {busyId === r.id ? '...' : t.label}
                         </button>
                       ))}
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id, r.name?.es || r.slug)}>
-                        Eliminar
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id, r.name?.es || r.slug)} disabled={busyId === r.id}>
+                        {busyId === r.id ? '...' : 'Eliminar'}
                       </button>
                     </div>
                   </td>

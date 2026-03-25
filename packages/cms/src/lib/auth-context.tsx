@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { api, clearAuthCache, type UserProfile } from './api';
@@ -23,53 +23,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (currentSession: Session | null) => {
-    if (!currentSession) {
-      setProfile(null);
-      return;
-    }
-    try {
-      const p = await api.getProfile();
-      setProfile(p);
-    } catch {
-      // User has valid Supabase auth but is not registered in DTI system
-      // or account is deactivated — force sign out
-      setProfile(null);
-      await supabase.auth.signOut();
-      setUser(null);
-      setSession(null);
-    }
-  }, []);
-
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      await fetchProfile(session);
-      setLoading(false);
-    });
+    let cancelled = false;
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session) {
-        await fetchProfile(session);
-      } else {
-        setProfile(null);
+    // Get initial session and profile
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      if (cancelled) return;
+      setSession(s);
+      setUser(s?.user ?? null);
+
+      if (s) {
+        try {
+          const p = await api.getProfile();
+          if (!cancelled) setProfile(p);
+        } catch {
+          // Not registered in DTI or deactivated — clear session
+          if (!cancelled) setProfile(null);
+        }
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+    // Listen for future auth changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+      if (!s) {
+        setProfile(null);
+        setLoading(false);
+      }
+      // Profile will be fetched after signIn navigates to Dashboard
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
 
-    // Profile will be fetched by the onAuthStateChange listener
+    // Fetch profile right after successful login
+    try {
+      const p = await api.getProfile();
+      setProfile(p);
+    } catch (e) {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      return { error: 'Usuario no registrado en el sistema DTI' };
+    }
+
     return { error: null };
   }
 

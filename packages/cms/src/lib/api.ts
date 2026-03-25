@@ -227,6 +227,14 @@ export interface RelationItem {
   tipo_relacion: string;
 }
 
+export interface AssetItem {
+  id: string;
+  url: string;
+  tipo: string;
+  mime_type: string;
+  orden: number;
+}
+
 export interface DocumentItem {
   id: string;
   url: string;
@@ -380,6 +388,25 @@ export const api = {
 
   deleteRelation: (id: string) =>
     adminFetch<DeleteResult>(`/relations/${id}`, { method: 'DELETE' }),
+
+  // ---------------------------------------------------------------------------
+  // Admin — Assets (multimedia)
+  // ---------------------------------------------------------------------------
+
+  getAssets: (entidadTipo: string, entidadId: string) =>
+    adminFetch<AssetItem[]>(`/assets?entidad_tipo=${entidadTipo}&entidad_id=${entidadId}`),
+
+  uploadAsset: (entidadTipo: string, entidadId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('entidad_tipo', entidadTipo);
+    form.append('entidad_id', entidadId);
+    form.append('tipo', file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'imagen');
+    return adminUpload<AssetItem>('/assets', form);
+  },
+
+  deleteAsset: (id: string) =>
+    adminFetch<DeleteResult>(`/assets/${id}`, { method: 'DELETE' }),
 
   // ---------------------------------------------------------------------------
   // Admin — Documents

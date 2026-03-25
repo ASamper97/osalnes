@@ -48,6 +48,80 @@ interface CreateResourceInput {
 }
 
 // ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_RE = /^https?:\/\/.+/;
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Sanitize Supabase error messages — hide internal DB details from clients */
+function sanitizeDbError(msg: string): string {
+  if (msg.includes('duplicate key') && msg.includes('slug')) return 'Ya existe un recurso con ese slug';
+  if (msg.includes('duplicate key') && msg.includes('uri')) return 'Ya existe un recurso con esa URI';
+  if (msg.includes('duplicate key')) return 'Ya existe un registro duplicado';
+  if (msg.includes('violates foreign key')) return 'Referencia a un registro que no existe';
+  if (msg.includes('violates check constraint')) return 'Valor fuera de rango permitido';
+  return 'Error al guardar en la base de datos';
+}
+
+function validateResourceInput(input: Partial<CreateResourceInput>, isCreate = false) {
+  const errors: string[] = [];
+
+  if (isCreate) {
+    if (!input.rdf_type) errors.push('rdf_type es obligatorio');
+    if (!input.slug) errors.push('slug es obligatorio');
+    if (!input.name?.es) errors.push('name.es es obligatorio');
+  }
+
+  if (input.slug !== undefined) {
+    if (!SLUG_RE.test(input.slug)) errors.push('slug debe contener solo letras minusculas, numeros y guiones');
+    if (input.slug.length > 300) errors.push('slug demasiado largo (max 300 caracteres)');
+  }
+
+  if (input.latitude !== undefined && input.latitude !== null) {
+    if (input.latitude < -90 || input.latitude > 90) errors.push('latitude debe estar entre -90 y 90');
+  }
+  if (input.longitude !== undefined && input.longitude !== null) {
+    if (input.longitude < -180 || input.longitude > 180) errors.push('longitude debe estar entre -180 y 180');
+  }
+
+  if (input.email?.length) {
+    for (const e of input.email) {
+      if (!EMAIL_RE.test(e)) errors.push(`email invalido: ${e}`);
+    }
+  }
+
+  if (input.url && !URL_RE.test(input.url)) {
+    errors.push('url debe comenzar con http:// o https://');
+  }
+
+  if (input.same_as?.length) {
+    for (const u of input.same_as) {
+      if (!URL_RE.test(u)) errors.push(`same_as invalido: ${u}`);
+    }
+  }
+
+  if (input.rating_value !== undefined && input.rating_value !== null) {
+    if (input.rating_value < 1 || input.rating_value > 6) errors.push('rating_value debe estar entre 1 y 6');
+  }
+
+  if (input.occupancy !== undefined && input.occupancy !== null) {
+    if (input.occupancy < 0) errors.push('occupancy no puede ser negativo');
+  }
+
+  if (input.seo_description) {
+    for (const [lang, val] of Object.entries(input.seo_description)) {
+      if (val.length > 300) errors.push(`seo_description.${lang} demasiado larga (max 300 caracteres)`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AppError(400, errors.join('; '));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // List
 // ---------------------------------------------------------------------------
 
@@ -128,6 +202,8 @@ export async function getResourceBySlug(slug: string) {
 // ---------------------------------------------------------------------------
 
 export async function createResource(input: CreateResourceInput) {
+  validateResourceInput(input, true);
+
   const uri = `osalnes:recurso:${input.slug}`;
 
   const { data, error } = await supabase
@@ -160,19 +236,25 @@ export async function createResource(input: CreateResourceInput) {
     .select()
     .single();
 
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
 
-  // Save translations
-  if (input.name) await saveTranslations('recurso_turistico', data.id, 'name', input.name);
-  if (input.description) await saveTranslations('recurso_turistico', data.id, 'description', input.description);
-  if (input.seo_title) await saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title);
-  if (input.seo_description) await saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description);
+  // Save translations and categories — rollback resource if any fails
+  try {
+    if (input.name) await saveTranslations('recurso_turistico', data.id, 'name', input.name);
+    if (input.description) await saveTranslations('recurso_turistico', data.id, 'description', input.description);
+    if (input.seo_title) await saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title);
+    if (input.seo_description) await saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description);
 
-  // Save category associations
-  if (input.category_ids?.length) {
-    await supabase.from('recurso_categoria').insert(
-      input.category_ids.map((cid) => ({ recurso_id: data.id, categoria_id: cid })),
-    );
+    if (input.category_ids?.length) {
+      const { error: catError } = await supabase.from('recurso_categoria').insert(
+        input.category_ids.map((cid) => ({ recurso_id: data.id, categoria_id: cid })),
+      );
+      if (catError) throw catError;
+    }
+  } catch (err) {
+    // Rollback: delete the resource we just created
+    await supabase.from('recurso_turistico').delete().eq('id', data.id);
+    throw new AppError(400, `Error guardando datos asociados: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return mapResourceRow(data);
@@ -183,6 +265,8 @@ export async function createResource(input: CreateResourceInput) {
 // ---------------------------------------------------------------------------
 
 export async function updateResource(id: string, input: Partial<CreateResourceInput>) {
+  validateResourceInput(input);
+
   // Build update object only with provided fields
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
@@ -218,7 +302,7 @@ export async function updateResource(id: string, input: Partial<CreateResourceIn
     .select()
     .single();
 
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
   if (!data) throw new AppError(404, 'Resource not found');
 
   // Update translations
@@ -290,7 +374,7 @@ export async function updateResourceStatus(id: string, newStatus: string) {
     .select()
     .single();
 
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
   if (!data) throw new AppError(404, 'Recurso no encontrado');
 
   return mapResourceRow(data);
@@ -312,7 +396,7 @@ export async function deleteResource(id: string) {
     .delete()
     .eq('id', id);
 
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
   return { deleted: true };
 }
 

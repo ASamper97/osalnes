@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, type ResourceSummary } from '@/lib/api';
 
-const RELATION_TYPES = [
+/** UNE 178503 — relation types between tourist resources */
+export const RELATION_TYPES = [
   { value: 'cerca_de', label: 'Cerca de' },
   { value: 'pertenece_a', label: 'Pertenece a' },
   { value: 'complementa', label: 'Complementa' },
   { value: 'alternativa', label: 'Alternativa a' },
   { value: 'incluye', label: 'Incluye' },
   { value: 'recomendado_con', label: 'Recomendado con' },
-];
+] as const;
 
 interface Relation {
   id: string;
@@ -25,7 +26,7 @@ interface RelationsManagerProps {
 
 export function RelationsManager({ recursoId }: RelationsManagerProps) {
   const [relations, setRelations] = useState<Relation[]>([]);
-  const [allResources, setAllResources] = useState<any[]>([]);
+  const [allResources, setAllResources] = useState<ResourceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -51,7 +52,7 @@ export function RelationsManager({ recursoId }: RelationsManagerProps) {
     if (allResources.length > 0) return;
     try {
       const result = await api.getResources({ limit: '500' });
-      setAllResources(result.items.filter((r: any) => r.id !== recursoId));
+      setAllResources(result.items.filter((r) => r.id !== recursoId));
     } catch {
       // silently fail
     }
@@ -76,8 +77,8 @@ export function RelationsManager({ recursoId }: RelationsManagerProps) {
       setAdding(false);
       setTargetId('');
       await loadRelations();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -88,8 +89,8 @@ export function RelationsManager({ recursoId }: RelationsManagerProps) {
     try {
       await api.deleteRelation(relationId);
       await loadRelations();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     }
   }
 

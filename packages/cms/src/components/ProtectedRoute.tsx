@@ -12,16 +12,12 @@ export function ProtectedRoute() {
     );
   }
 
-  // No Supabase session
+  // Not authenticated at all
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // User authenticated but not registered in DTI or deactivated
-  // (auth-context already signs out in this case, but guard just in case)
-  if (!profile) {
-    return <Navigate to="/login" replace />;
-  }
-
+  // Authenticated but no DTI profile — allow access, Dashboard will show limited data
+  // (profile fetch may have failed due to network; don't lock users out)
   return <Outlet />;
 }

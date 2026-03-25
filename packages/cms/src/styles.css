@@ -449,7 +449,10 @@ body {
 .field-hint {
   display: block;
   font-size: 0.72rem;
-  color: #999;
+  color: var(--cms-text-light);
+}
+.field-hint--warn {
+  color: #e67e22; font-weight: 600;
   margin-top: 0.2rem;
 }
 
