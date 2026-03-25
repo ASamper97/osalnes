@@ -118,6 +118,13 @@ Deno.serve(async (req: Request) => {
       return await search(url, req);
     }
 
+    // ====================================================================
+    // Export JSON-LD
+    // ====================================================================
+    if (method === 'GET' && path === '/export/jsonld') {
+      return await exportJsonLd(url, req);
+    }
+
     return json({ error: 'Not found' }, 404, req);
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string };
@@ -516,4 +523,132 @@ async function mapResourceRow(row: Record<string, any>) {
     // deno-lint-ignore no-explicit-any
     categoryIds: (cats || []).map((c: any) => c.categoria_id),
   };
+}
+
+// ========================================================================
+// JSON-LD Export (UNE 178503 + schema.org)
+// ========================================================================
+
+const SCHEMA_ORG_MAP: Record<string, string> = {
+  Hotel: 'Hotel', RuralHouse: 'House', BedAndBreakfast: 'BedAndBreakfast',
+  Campground: 'Campground', Apartment: 'Apartment', Hostel: 'Hostel',
+  Restaurant: 'Restaurant', BarOrPub: 'BarOrPub', CafeOrCoffeeShop: 'CafeOrCoffeeShop',
+  Winery: 'Winery', TouristAttraction: 'TouristAttraction', Beach: 'Beach',
+  Museum: 'Museum', Park: 'Park', NaturePark: 'Park', ViewPoint: 'Place',
+  PlaceOfWorship: 'PlaceOfWorship', LandmarksOrHistoricalBuildings: 'LandmarksOrHistoricalBuildings',
+  Event: 'Event', Festival: 'Festival', MusicEvent: 'MusicEvent',
+  SportsEvent: 'SportsEvent', TouristDestination: 'TouristDestination',
+  BusStation: 'BusStation', Port: 'BoatTerminal', TrainStation: 'TrainStation',
+  Hospital: 'Hospital', Pharmacy: 'Pharmacy',
+  TouristInformationCenter: 'TouristInformationCenter',
+};
+
+async function exportJsonLd(url: URL, req: Request) {
+  const sb = getAdminClient();
+  const type = url.searchParams.get('type') || undefined;
+  const municipio = url.searchParams.get('municipio') || undefined;
+
+  let query = sb
+    .from('recurso_turistico')
+    .select(`
+      id, uri, rdf_type, slug, latitude, longitude,
+      address_street, address_postal, telephone, email, url,
+      tourist_types, rating_value, serves_cuisine, opening_hours,
+      is_accessible_for_free, public_access, occupancy,
+      municipio_id, published_at, updated_at
+    `)
+    .eq('estado_editorial', 'publicado');
+
+  if (type) query = query.eq('rdf_type', type);
+  if (municipio) query = query.eq('municipio_id', municipio);
+
+  const { data: resources, error } = await query.order('updated_at', { ascending: false });
+  if (error) throw error;
+
+  const rows = resources || [];
+
+  // Batch translations
+  const ids = rows.map((r) => r.id);
+  // deno-lint-ignore no-explicit-any
+  const tMap: Record<string, Record<string, Record<string, string>>> = {};
+
+  if (ids.length > 0) {
+    const { data: translations } = await sb
+      .from('traduccion')
+      .select('entidad_id, campo, idioma, valor')
+      .eq('entidad_tipo', 'recurso_turistico')
+      .in('campo', ['name', 'description'])
+      .in('entidad_id', ids);
+
+    for (const t of translations || []) {
+      if (!tMap[t.entidad_id]) tMap[t.entidad_id] = {};
+      if (!tMap[t.entidad_id][t.campo]) tMap[t.entidad_id][t.campo] = {};
+      tMap[t.entidad_id][t.campo][t.idioma] = t.valor;
+    }
+  }
+
+  // Municipality names
+  const muniIds = [...new Set(rows.map((r) => r.municipio_id).filter(Boolean))];
+  const muniMap: Record<string, string> = {};
+  if (muniIds.length > 0) {
+    const { data: munis } = await sb.from('municipio').select('id, slug').in('id', muniIds);
+    for (const m of munis || []) { muniMap[m.id] = m.slug; }
+  }
+
+  // Build graph
+  // deno-lint-ignore no-explicit-any
+  const graph = rows.map((r: any) => {
+    const names = tMap[r.id]?.name || {};
+    const descs = tMap[r.id]?.description || {};
+    const schemaType = SCHEMA_ORG_MAP[r.rdf_type] || 'TouristAttraction';
+
+    // deno-lint-ignore no-explicit-any
+    const item: Record<string, any> = {
+      '@type': schemaType,
+      '@id': `https://turismo.osalnes.gal/es/recurso/${r.slug}`,
+      identifier: r.uri,
+      url: `https://turismo.osalnes.gal/es/recurso/${r.slug}`,
+    };
+
+    if (names.es) item.name = names.es;
+    else if (names.gl) item.name = names.gl;
+    if (descs.es) item.description = descs.es;
+    else if (descs.gl) item.description = descs.gl;
+
+    const altNames = Object.entries(names).filter(([lang]) => lang !== 'es').map(([, v]) => v);
+    if (altNames.length > 0) item.alternateName = altNames;
+
+    if (r.latitude && r.longitude) {
+      item.geo = { '@type': 'GeoCoordinates', latitude: Number(r.latitude), longitude: Number(r.longitude) };
+    }
+    if (r.address_street || r.address_postal) {
+      item.address = {
+        '@type': 'PostalAddress',
+        ...(r.address_street && { streetAddress: r.address_street }),
+        ...(r.address_postal && { postalCode: r.address_postal }),
+        ...(r.municipio_id && muniMap[r.municipio_id] && { addressLocality: muniMap[r.municipio_id] }),
+        addressRegion: 'Pontevedra', addressCountry: 'ES',
+      };
+    }
+    if (r.telephone?.length) item.telephone = r.telephone.length === 1 ? r.telephone[0] : r.telephone;
+    if (r.email?.length) item.email = r.email.length === 1 ? r.email[0] : r.email;
+    if (r.rating_value) item.starRating = { '@type': 'Rating', ratingValue: r.rating_value };
+    if (r.tourist_types?.length) item.touristType = r.tourist_types;
+    if (r.serves_cuisine?.length) item.servesCuisine = r.serves_cuisine;
+    if (r.opening_hours) item.openingHours = r.opening_hours;
+    if (r.is_accessible_for_free !== null) item.isAccessibleForFree = r.is_accessible_for_free;
+    if (r.published_at) item.datePublished = r.published_at;
+    if (r.updated_at) item.dateModified = r.updated_at;
+
+    return item;
+  });
+
+  return json({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Recursos Turisticos — O Salnes DTI',
+    description: 'Catalogo de recursos turisticos de la Mancomunidad de O Salnes, segun UNE 178503',
+    numberOfItems: graph.length,
+    itemListElement: graph.map((item, i) => ({ '@type': 'ListItem', position: i + 1, item })),
+  }, 200, req);
 }
