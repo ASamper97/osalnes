@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { getResources, getCategories, getMunicipalities, getEvents } from '@/lib/api-client';
-import { websiteJsonLd } from '@/lib/jsonld';
+import { websiteJsonLd, destinationJsonLd } from '@/lib/jsonld';
 
 export default async function HomePage({
   params,
@@ -13,6 +13,7 @@ export default async function HomePage({
   const dict = await getDictionary(lang);
 
   const jsonLd = websiteJsonLd(lang, dict.site_name);
+  const destinationLd = destinationJsonLd(lang, dict.site_name);
 
   // Fetch data in parallel
   const [featured, categories, municipalities, events] = await Promise.all([
@@ -28,6 +29,10 @@ export default async function HomePage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(destinationLd) }}
       />
 
       {/* Hero */}
