@@ -177,7 +177,9 @@ export interface CategoryItem {
   slug: string;
   parentId: string | null;
   orden: number;
+  activo: boolean;
   name: LocalizedValue;
+  resourceCount?: number;
 }
 
 export interface MunicipalityItem {

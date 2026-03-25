@@ -290,18 +290,21 @@ adminRouter.get('/categories', asyncHandler(async (_req, res) => {
 /** POST /api/v1/admin/categories — admin only */
 adminRouter.post('/categories', requireRole('admin'), asyncHandler(async (req, res) => {
   const category = await categoryService.createCategory(req.body);
+  audit.log('categoria', category.id, 'crear', (req as any).dtiUserId, { slug: category.slug });
   res.status(201).json(category);
 }));
 
 /** PUT /api/v1/admin/categories/:id — admin only */
 adminRouter.put('/categories/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const category = await categoryService.updateCategory(paramId(req), req.body);
+  audit.log('categoria', paramId(req), 'modificar', (req as any).dtiUserId);
   res.json(category);
 }));
 
 /** DELETE /api/v1/admin/categories/:id — admin only */
 adminRouter.delete('/categories/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const result = await categoryService.deleteCategory(paramId(req));
+  audit.log('categoria', paramId(req), 'eliminar', (req as any).dtiUserId);
   res.json(result);
 }));
 

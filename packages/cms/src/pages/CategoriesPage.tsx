@@ -1,17 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '@/lib/api';
-
-interface Category {
-  id: string;
-  slug: string;
-  parentId: string | null;
-  orden: number;
-  activo: boolean;
-  name: { es?: string; gl?: string };
-}
+import { useEffect, useState, Fragment, type FormEvent } from 'react';
+import { api, type CategoryItem } from '@/lib/api';
 
 export function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,14 +14,17 @@ export function CategoriesPage() {
   const [parentId, setParentId] = useState('');
   const [orden, setOrden] = useState('0');
   const [activo, setActivo] = useState(true);
+  const [nameEn, setNameEn] = useState('');
+  const [nameFr, setNameFr] = useState('');
+  const [namePt, setNamePt] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function loadCategories() {
     try {
       const data = await api.getAdminCategories();
       setCategories(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -43,6 +37,9 @@ export function CategoriesPage() {
     setSlug('');
     setNameEs('');
     setNameGl('');
+    setNameEn('');
+    setNameFr('');
+    setNamePt('');
     setParentId('');
     setOrden('0');
     setActivo(true);
@@ -56,11 +53,22 @@ export function CategoriesPage() {
     setParentId(cat.parentId || '');
     setOrden(String(cat.orden));
     setActivo(cat.activo);
+    setNameEn(cat.name?.en || '');
+    setNameFr(cat.name?.fr || '');
+    setNamePt(cat.name?.pt || '');
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Client-side validation
+    const errs: string[] = [];
+    if (!slug.trim()) errs.push('Slug es obligatorio');
+    if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errs.push('Slug solo admite letras minusculas, numeros y guiones');
+    if (!nameEs.trim()) errs.push('Nombre (ES) es obligatorio');
+    if (errs.length > 0) { setError(errs.join('\n')); return; }
+
     setSaving(true);
 
     const body = {
@@ -68,7 +76,7 @@ export function CategoriesPage() {
       parent_id: parentId || null,
       orden: parseInt(orden, 10) || 0,
       activo,
-      name: { es: nameEs, gl: nameGl },
+      name: { es: nameEs, gl: nameGl, ...(nameEn && { en: nameEn }), ...(nameFr && { fr: nameFr }), ...(namePt && { pt: namePt }) },
     };
 
     try {
@@ -79,20 +87,25 @@ export function CategoriesPage() {
       }
       resetForm();
       await loadCategories();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
+  const [busyId, setBusyId] = useState<string | null>(null);
+
   async function handleDelete(id: string) {
-    if (!confirm('Eliminar esta categoria?')) return;
+    if (!confirm('Eliminar esta categoria? Esta accion no se puede deshacer.')) return;
+    setBusyId(id);
     try {
       await api.deleteCategory(id);
       await loadCategories();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -112,7 +125,7 @@ export function CategoriesPage() {
         )}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {/* Inline form */}
       {editing && (
@@ -147,6 +160,21 @@ export function CategoriesPage() {
               </div>
             </div>
 
+            <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+              <div className="form-field">
+                <label>Nombre (EN)</label>
+                <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="Beaches" />
+              </div>
+              <div className="form-field">
+                <label>Nombre (FR)</label>
+                <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} placeholder="Plages" />
+              </div>
+              <div className="form-field">
+                <label>Nombre (PT)</label>
+                <input value={namePt} onChange={(e) => setNamePt(e.target.value)} placeholder="Praias" />
+              </div>
+            </div>
+
             <div className="form-row">
               <div className="form-field">
                 <label>Orden</label>
@@ -176,6 +204,7 @@ export function CategoriesPage() {
           <tr>
             <th>Nombre (ES)</th>
             <th>Slug</th>
+            <th>Recursos</th>
             <th>Orden</th>
             <th>Activa</th>
             <th>Acciones</th>
@@ -183,16 +212,17 @@ export function CategoriesPage() {
         </thead>
         <tbody>
           {rootCategories.map((root) => (
-            <>
-              <tr key={root.id}>
+            <Fragment key={root.id}>
+              <tr>
                 <td><strong>{root.name?.es || root.slug}</strong></td>
                 <td>{root.slug}</td>
+                <td style={{ textAlign: 'center' }}>{root.resourceCount || 0}</td>
                 <td>{root.orden}</td>
                 <td>{root.activo ? 'Si' : 'No'}</td>
                 <td>
                   <div className="action-btns">
-                    <button className="btn btn-sm" onClick={() => startEdit(root)}>Editar</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(root.id)}>Eliminar</button>
+                    <button className="btn btn-sm" onClick={() => startEdit(root)} disabled={busyId === root.id}>Editar</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(root.id)} disabled={busyId === root.id}>{busyId === root.id ? '...' : 'Eliminar'}</button>
                   </div>
                 </td>
               </tr>
@@ -200,17 +230,18 @@ export function CategoriesPage() {
                 <tr key={sub.id}>
                   <td style={{ paddingLeft: '2rem' }}>{sub.name?.es || sub.slug}</td>
                   <td>{sub.slug}</td>
+                  <td style={{ textAlign: 'center' }}>{sub.resourceCount || 0}</td>
                   <td>{sub.orden}</td>
                   <td>{sub.activo ? 'Si' : 'No'}</td>
                   <td>
                     <div className="action-btns">
-                      <button className="btn btn-sm" onClick={() => startEdit(sub)}>Editar</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(sub.id)}>Eliminar</button>
+                      <button className="btn btn-sm" onClick={() => startEdit(sub)} disabled={busyId === sub.id}>Editar</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(sub.id)} disabled={busyId === sub.id}>{busyId === sub.id ? '...' : 'Eliminar'}</button>
                     </div>
                   </td>
                 </tr>
               ))}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>
