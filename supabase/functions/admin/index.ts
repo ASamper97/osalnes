@@ -1122,60 +1122,157 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
   await sb.from('export_job').update({ estado: 'en_proceso', started_at: new Date().toISOString() }).eq('id', jobId);
 
   try {
+    // 1. Fetch published resources
     const { data: resources, error } = await sb
       .from('recurso_turistico')
       .select('id, uri, rdf_type, slug, latitude, longitude, address_street, address_postal, telephone, email, url, tourist_types, rating_value, serves_cuisine, opening_hours, extras, municipio_id, created_at, updated_at')
       .eq('estado_editorial', 'publicado')
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     if (error) throw error;
 
-    let ok = 0;
-    let errors = 0;
-    // deno-lint-ignore no-explicit-any
-    const results: any[] = [];
+    const rows = resources || [];
 
-    for (const row of resources || []) {
-      try {
-        const translations = await getTranslations('recurso_turistico', row.id);
+    // 2. Batch-fetch translations (fix N+1)
+    const ids = rows.map((r: any) => r.id);
+    const tMap: Record<string, Record<string, Record<string, string>>> = {};
 
-        if (tipo === 'pid') {
-          results.push({
-            '@context': 'https://schema.org',
-            '@type': row.rdf_type,
-            uri: row.uri,
-            name: translations.name || {},
-            description: translations.description || {},
-            geo: row.latitude && row.longitude
-              ? { '@type': 'GeoCoordinates', latitude: row.latitude, longitude: row.longitude }
-              : null,
-            address: { '@type': 'PostalAddress', streetAddress: row.address_street, postalCode: row.address_postal, addressRegion: 'Pontevedra', addressCountry: 'ES' },
-            telephone: row.telephone,
-            email: row.email,
-            url: row.url,
-          });
-        } else {
-          results.push({
-            id: row.id, uri: row.uri, type: row.rdf_type, slug: row.slug,
-            name: translations.name || {}, description: translations.description || {},
-            latitude: row.latitude, longitude: row.longitude,
-            address_street: row.address_street, address_postal: row.address_postal,
-            telephone: row.telephone, email: row.email, url: row.url,
-            tourist_types: row.tourist_types, rating_value: row.rating_value,
-            serves_cuisine: row.serves_cuisine, opening_hours: row.opening_hours,
-            municipio_id: row.municipio_id, created_at: row.created_at, updated_at: row.updated_at,
-          });
-        }
-        ok++;
-      } catch {
-        errors++;
+    if (ids.length > 0) {
+      const { data: translations } = await sb
+        .from('traduccion')
+        .select('entidad_id, campo, idioma, valor')
+        .eq('entidad_tipo', 'recurso_turistico')
+        .in('campo', ['name', 'description'])
+        .in('entidad_id', ids);
+
+      for (const t of translations || []) {
+        if (!tMap[t.entidad_id]) tMap[t.entidad_id] = {};
+        if (!tMap[t.entidad_id][t.campo]) tMap[t.entidad_id][t.campo] = {};
+        tMap[t.entidad_id][t.campo][t.idioma] = t.valor;
       }
     }
 
+    // 3. Fetch municipality names
+    const muniIds = [...new Set(rows.map((r: any) => r.municipio_id).filter(Boolean))];
+    const muniMap: Record<string, string> = {};
+    if (muniIds.length > 0) {
+      const { data: mt } = await sb.from('traduccion').select('entidad_id, valor')
+        .eq('entidad_tipo', 'municipio').eq('campo', 'name').eq('idioma', 'es').in('entidad_id', muniIds);
+      for (const m of mt || []) muniMap[m.entidad_id] = m.valor;
+    }
+
+    // 4. Build export data
+    let ok = 0;
+    let errors = 0;
+    const errorDetails: string[] = [];
+    const graph: any[] = [];
+
+    for (const row of rows) {
+      try {
+        const names = tMap[row.id]?.name || {};
+        const descs = tMap[row.id]?.description || {};
+
+        if (tipo === 'pid' || tipo === 'jsonld') {
+          const node: Record<string, any> = {
+            '@context': 'https://schema.org',
+            '@type': row.rdf_type || 'TouristAttraction',
+            '@id': row.uri || `https://turismo.osalnes.gal/es/recurso/${row.slug}`,
+            identifier: row.uri,
+            url: `https://turismo.osalnes.gal/es/recurso/${row.slug}`,
+          };
+
+          // Multilingual names (PID format)
+          if (Object.keys(names).length > 0) {
+            node.name = Object.entries(names).map(([lang, val]) => ({ '@language': lang, '@value': val }));
+          }
+          if (Object.keys(descs).length > 0) {
+            node.description = Object.entries(descs).map(([lang, val]) => ({ '@language': lang, '@value': val }));
+          }
+
+          if (row.latitude && row.longitude) {
+            node.geo = { '@type': 'GeoCoordinates', latitude: Number(row.latitude), longitude: Number(row.longitude) };
+          }
+          node.address = {
+            '@type': 'PostalAddress', addressCountry: 'ES', addressRegion: 'Pontevedra',
+            addressLocality: muniMap[row.municipio_id] || '',
+            ...(row.address_street && { streetAddress: row.address_street }),
+            ...(row.address_postal && { postalCode: row.address_postal }),
+          };
+          if (row.telephone?.length > 0) node.telephone = row.telephone[0];
+          if (row.email?.length > 0) node.email = row.email[0];
+          if (row.url) node.sameAs = row.url;
+          if (row.tourist_types?.length > 0) node.touristType = row.tourist_types;
+          if (row.rating_value) node.starRating = { '@type': 'Rating', ratingValue: row.rating_value };
+          if (row.serves_cuisine?.length > 0) node.servesCuisine = row.serves_cuisine;
+          if (row.opening_hours) node.openingHours = row.opening_hours;
+          node['pid:dtiCode'] = 'osalnes';
+          node['pid:lastUpdated'] = row.updated_at;
+
+          graph.push(node);
+        } else {
+          // datalake / csv / json — flat format
+          graph.push({
+            id: row.id, uri: row.uri, type: row.rdf_type, slug: row.slug,
+            name: names, description: descs,
+            latitude: row.latitude, longitude: row.longitude,
+            municipio: muniMap[row.municipio_id] || row.municipio_id,
+            telephone: row.telephone, email: row.email, url: row.url,
+            tourist_types: row.tourist_types, rating_value: row.rating_value,
+            created_at: row.created_at, updated_at: row.updated_at,
+          });
+        }
+        ok++;
+      } catch (rowErr: any) {
+        errors++;
+        errorDetails.push(`${row.id}: ${rowErr.message || rowErr}`);
+      }
+    }
+
+    // 5. Build final payload
+    const isPid = tipo === 'pid' || tipo === 'jsonld';
+    const payload = isPid
+      ? { '@context': 'https://schema.org', '@graph': graph, 'pid:dtiCode': 'osalnes', 'pid:exportDate': new Date().toISOString(), 'pid:totalResources': ok }
+      : { format: tipo, count: ok, data: graph };
+
+    // 6. Save to Supabase Storage as downloadable file
+    let storageUrl: string | null = null;
+    try {
+      const fileName = `exports/${tipo}_${jobId}.jsonld`;
+      const fileContent = new TextEncoder().encode(JSON.stringify(payload, null, 2));
+      const { error: uploadErr } = await sb.storage.from('media').upload(fileName, fileContent, { contentType: 'application/ld+json', upsert: true });
+      if (!uploadErr) {
+        const { data: urlData } = sb.storage.from('media').getPublicUrl(fileName);
+        storageUrl = urlData?.publicUrl || null;
+      }
+    } catch { /* storage optional */ }
+
+    // 7. PID push attempt (if configured)
+    let pidResult: Record<string, any> = { skipped: true, reason: 'PID_API_KEY not configured' };
+    if (tipo === 'pid') {
+      const pidKey = Deno.env.get('PID_API_KEY');
+      const pidEndpoint = Deno.env.get('PID_ENDPOINT') || 'https://pid.segittur.es/graphql';
+      if (pidKey && pidKey !== 'pendiente_de_credenciales_segittur') {
+        let pidOk = 0, pidErr = 0;
+        for (const node of graph) {
+          try {
+            const res = await fetch(pidEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pidKey}`, 'X-DTI-Code': 'osalnes' },
+              body: JSON.stringify({ query: 'mutation UpsertPlace($input: PlaceInput!) { upsertPlace(input: $input) { uri status } }', variables: { input: node } }),
+            });
+            if (res.ok) pidOk++; else pidErr++;
+          } catch { pidErr++; }
+        }
+        pidResult = { endpoint: pidEndpoint, sent: graph.length, ok: pidOk, errors: pidErr };
+      }
+    }
+
+    // 8. Mark completed
     await sb.from('export_job').update({
-      estado: 'completado', completed_at: new Date().toISOString(),
-      total_registros: resources?.length || 0, registros_ok: ok, registros_err: errors,
-      resultado: { data: results },
+      estado: errors > 0 && ok === 0 ? 'error' : 'completado',
+      completed_at: new Date().toISOString(),
+      total_registros: rows.length, registros_ok: ok, registros_err: errors,
+      resultado: { total: rows.length, ok, errors, errorDetails: errorDetails.slice(0, 20), storageUrl, pidPush: pidResult },
     }).eq('id', jobId);
   } catch (err) {
     await sb.from('export_job').update({
