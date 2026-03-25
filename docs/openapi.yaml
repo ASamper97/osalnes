@@ -30,6 +30,10 @@ tags:
     description: Endpoints optimizados para el mapa interactivo
   - name: Busqueda
     description: Busqueda de texto en recursos
+  - name: Exportacion
+    description: Exportacion de datos en JSON-LD (UNE 178503 + schema.org)
+  - name: Asistente IA
+    description: Asistente turistico conversacional basado en IA
   - name: Paginas
     description: Paginas de contenido editorial
   - name: Navegacion
@@ -301,6 +305,124 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/NavItem' }
 
+  /export/jsonld:
+    get:
+      tags: [Exportacion]
+      summary: Exportar catalogo completo en JSON-LD (schema.org)
+      description: |
+        Devuelve todos los recursos publicados como un schema:ItemList en formato JSON-LD.
+        Cada recurso incluye tipo schema.org, coordenadas, contacto, rating, tourist types.
+        Usado para interoperabilidad con PID SEGITTUR y Data Lake.
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+          description: Filtrar por tipologia (e.g. Hotel, Beach)
+        - name: municipio
+          in: query
+          schema: { type: string, format: uuid }
+          description: Filtrar por municipio
+      responses:
+        '200':
+          description: Catalogo JSON-LD completo
+          content:
+            application/ld+json:
+              schema: { $ref: '#/components/schemas/JsonLdItemList' }
+              example:
+                '@context': https://schema.org
+                '@type': ItemList
+                name: Recursos Turisticos — O Salnes DTI
+                numberOfItems: 15
+                itemListElement:
+                  - '@type': ListItem
+                    position: 1
+                    item:
+                      '@type': Hotel
+                      '@id': https://turismo.osalnes.gal/es/recurso/parador-de-cambados
+                      identifier: 'osalnes:recurso:parador-de-cambados'
+                      name: Parador de Cambados
+                      description: Parador Nacional ubicado en el Pazo de Bazan...
+                      geo:
+                        '@type': GeoCoordinates
+                        latitude: 42.5155
+                        longitude: -8.8123
+                      address:
+                        '@type': PostalAddress
+                        streetAddress: Paseo de Cervantes s/n
+                        postalCode: '36630'
+                        addressLocality: cambados
+                        addressRegion: Pontevedra
+                        addressCountry: ES
+                      telephone: '986 542 250'
+                      starRating:
+                        '@type': Rating
+                        ratingValue: 4
+                      touristType: [CULTURAL TOURISM, WINE TOURISM]
+
+  /assistant:
+    post:
+      tags: [Asistente IA]
+      summary: Enviar mensaje al asistente turistico
+      description: |
+        Asistente conversacional que recomienda recursos turisticos de O Salnes
+        basandose en el catalogo real del CMS. Soporta ES, GL, EN.
+        Si ANTHROPIC_API_KEY no esta configurada, funciona en modo mock
+        con matching por keywords sobre datos reales.
+      servers:
+        - url: https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1
+          description: Produccion (Edge Function independiente)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  description: Mensaje del usuario
+                  example: Que puedo hacer en Cambados en un dia?
+                lang:
+                  type: string
+                  enum: [es, gl, en, fr, pt]
+                  default: es
+                history:
+                  type: array
+                  description: Historial de mensajes previos (max 10)
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      content: { type: string }
+                session_id:
+                  type: string
+                  format: uuid
+                  description: ID de sesion para agrupar conversaciones
+      responses:
+        '200':
+          description: Respuesta del asistente con recursos sugeridos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantResponse' }
+              example:
+                reply: "Aqui tienes mis recomendaciones para Cambados:\n\n1. **Pazo de Fefinans** — Pazo senorial del siglo XVI...\n2. **Torre de San Sadurnino** — Torre medieval del siglo X...\n3. **Festa do Albarino** — Fiesta de Interes Turistico Internacional..."
+                recursos_sugeridos:
+                  - id: 356781ca-9d19-4cf5-9278-b82c25d6f676
+                    slug: pazo-de-fefinans
+                    nombre: Pazo de Fefinans
+                    tipo: LandmarksOrHistoricalBuildings
+                    municipio: Cambados
+                    lat: 42.5132
+                    lng: -8.8139
+                tokens_used: 0
+                duration_ms: 488
+                mock: true
+        '400':
+          description: Mensaje vacio o invalido
+        '502':
+          description: Error del proveedor de IA
+
   /events:
     get:
       tags: [Eventos]
@@ -463,3 +585,88 @@ components:
         referencia: { type: string }
         orden: { type: integer }
         label: { $ref: '#/components/schemas/LocalizedValue' }
+
+    JsonLdItemList:
+      type: object
+      description: Lista de recursos en formato JSON-LD (schema.org ItemList)
+      properties:
+        '@context': { type: string, example: https://schema.org }
+        '@type': { type: string, example: ItemList }
+        name: { type: string }
+        description: { type: string }
+        numberOfItems: { type: integer }
+        itemListElement:
+          type: array
+          items:
+            type: object
+            properties:
+              '@type': { type: string, example: ListItem }
+              position: { type: integer }
+              item:
+                type: object
+                description: Recurso en formato schema.org
+                properties:
+                  '@type': { type: string, description: "Tipo schema.org (Hotel, Beach, Restaurant, etc.)" }
+                  '@id': { type: string, format: uri }
+                  identifier: { type: string, description: "URI semantica osalnes:recurso:slug" }
+                  name: { type: string }
+                  description: { type: string }
+                  url: { type: string, format: uri }
+                  geo:
+                    type: object
+                    properties:
+                      '@type': { type: string, example: GeoCoordinates }
+                      latitude: { type: number }
+                      longitude: { type: number }
+                  address:
+                    type: object
+                    properties:
+                      '@type': { type: string, example: PostalAddress }
+                      streetAddress: { type: string }
+                      postalCode: { type: string }
+                      addressLocality: { type: string }
+                      addressRegion: { type: string }
+                      addressCountry: { type: string }
+                  telephone: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
+                  email: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
+                  starRating:
+                    type: object
+                    properties:
+                      '@type': { type: string, example: Rating }
+                      ratingValue: { type: integer }
+                  touristType: { type: array, items: { type: string } }
+                  servesCuisine: { type: array, items: { type: string } }
+                  openingHours: { type: string }
+                  isAccessibleForFree: { type: boolean }
+                  datePublished: { type: string, format: date-time }
+                  dateModified: { type: string, format: date-time }
+
+    AssistantResponse:
+      type: object
+      description: Respuesta del asistente turistico
+      properties:
+        reply:
+          type: string
+          description: Texto de la respuesta del asistente (sin IDs internos)
+        recursos_sugeridos:
+          type: array
+          description: Recursos mencionados en la respuesta
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              slug: { type: string }
+              nombre: { type: string }
+              tipo: { type: string }
+              municipio: { type: string }
+              lat: { type: number, nullable: true }
+              lng: { type: number, nullable: true }
+        tokens_used:
+          type: integer
+          description: Tokens consumidos (0 si modo mock)
+        duration_ms:
+          type: integer
+          description: Tiempo de respuesta en milisegundos
+        mock:
+          type: boolean
+          description: true si la respuesta es del modo mock (sin LLM)
