@@ -759,4 +759,288 @@ npm run build -w packages/cms
 
 ---
 
-*Documentación generada el 2026-03-24.*
+### Sesion 5 — Auditoria completa del CMS + mapa + Entregable 1 (2026-03-25)
+
+**Commits**: `6b5f527` → `677af22` (10 commits)
+**Ficheros**: 42 modificados/creados, +3997 / -608 lineas
+
+**Objetivo**: Auditoria de seguridad, cumplimiento UNE 178502/178503, arquitectura y UX de las 8 secciones del CMS. Ademas: iconos del mapa, Entregable 1, y OpenAPI spec.
+
+---
+
+#### 5.1 Entregable 1 — Documento de Analisis y Arquitectura
+
+**Commit**: `6b5f527`
+
+Creado el documento contractual para el primer hito de pago (30% = ~28.500 EUR):
+
+| Fichero | Descripcion |
+|---------|-------------|
+| `docs/entregables/E1_Analisis_Arquitectura.md` | Documento completo (~450 lineas): analisis de requisitos, arquitectura, modelo de datos UNE 178503, esquema interoperabilidad PID SEGITTUR, planificacion detallada, gestion de riesgos, 4 anexos |
+
+---
+
+#### 5.2 Mapa interactivo — Iconos por tipologia
+
+**Commit**: `6b5f527`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/web/src/components/MapView.tsx` | Iconos SVG coloreados por grupo de tipologia (6 colores), leyenda, cache de iconos, campo `grupo` en interfaz |
+| `packages/web/src/app/[lang]/globals.css` | Estilos `.marker-icon-custom`, `.map-legend`, `.map-legend__item`, `.map-legend__dot` |
+| `packages/api/src/routes/public.ts` | Fix endpoint mapa: FK `tipo_id` → `rdf_type`, bounds parsing, filtro municipio, batch translations, response shape correcta |
+
+**Colores por grupo UNE 178503**:
+- Alojamiento: `#2E86C1` (azul)
+- Restauracion: `#E67E22` (naranja)
+- Atracciones: `#27AE60` (verde)
+- Eventos: `#8E44AD` (morado)
+- Transporte: `#607D8B` (gris)
+- Servicios: `#E74C3C` (rojo)
+
+---
+
+#### 5.3 Auditoria del Dashboard (10 puntos)
+
+**Commit**: `6b5f527`
+
+Auditoria completa de la seccion Dashboard del CMS con resolucion de todos los hallazgos:
+
+##### Seguridad (CRIT-01, CRIT-02, CRIT-03 + SEC-01 a SEC-07)
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/middleware/auth.ts` | **CRIT-02**: Rechazo de usuarios no registrados en tabla `usuario` (elimina fallback silencioso a `editor`) |
+| `packages/api/src/routes/admin.ts` | **CRIT-01**: `requireRole()` en los 30+ endpoints admin. Matriz RBAC completa: admin/editor/validador/tecnico/analitica |
+| `packages/api/src/routes/admin.ts` | **CRIT-03**: Endpoint `GET /admin/stats` con 20 queries paralelas (`Promise.all`), cache 60s, indicadores UNE 178502 |
+| `packages/api/src/routes/admin.ts` | **SEC-03/SEC-04**: Validacion MIME en uploads (imagenes: jpeg/png/webp/gif, video: mp4, audio: mpeg; documentos: pdf/docx/xlsx/csv/txt), `JSON.parse` con try/catch |
+| `packages/api/src/routes/admin.ts` | Endpoint `GET /admin/profile` para auth context |
+
+##### UNE 178502 — Indicadores y trazabilidad
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/audit.service.ts` | **Nuevo**: Servicio de auditoria fire-and-forget para `log_cambios` |
+| `packages/api/src/routes/admin.ts` | `audit.log()` en CRUD de recursos y paginas |
+| `packages/api/src/routes/admin.ts` | Endpoint `/admin/stats` enriquecido: distribucion por municipio, por grupo tipologia, traducciones por idioma (5), % con descripcion, alertas de contenido incompleto |
+
+##### CMS Frontend
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/cms/src/pages/DashboardPage.tsx` | Dashboard completo: 7 tarjetas KPI, calidad del dato (barras), traducciones por idioma, recursos por municipio/tipologia, alertas, busqueda rapida, actividad reciente, ultimo export PID |
+| `packages/cms/src/lib/auth-context.tsx` | Perfil DTI con rol, auto-logout si no registrado, `clearAuthCache()` |
+| `packages/cms/src/components/ProtectedRoute.tsx` | Verifica `profile` ademas de `user` |
+| `packages/cms/src/components/Layout.tsx` | Sidebar filtrado por rol, etiqueta de rol, enlace Exportaciones |
+| `packages/cms/src/components/ErrorBoundary.tsx` | **Nuevo**: Class component con error display y boton "Reintentar" |
+| `packages/cms/src/pages/LoginPage.tsx` | Rate limiting: 5 intentos max, lockout 30s |
+| `packages/cms/src/pages/ExportsPage.tsx` | **Nuevo**: Pagina de exportaciones PID/Data Lake (trigger, historial, filtros) |
+| `packages/cms/src/lib/api.ts` | 0 `any`, 15 interfaces tipadas, cache auth 30s, `getProfile`, `getStats`, `getAssets`, `uploadAsset`, `deleteAsset` |
+| `packages/cms/src/App.tsx` | `ErrorBoundary` por ruta, ruta `/exports` |
+| `packages/cms/src/styles.css` | Variables status, dashboard grid, stat cards, quality bars, alerts, quick search, exports, bar chart, contraste WCAG AA (`--cms-text-light: #566573`) |
+
+##### Interoperabilidad
+
+| Fichero | Cambio |
+|---------|--------|
+| `docs/openapi.yaml` | **Nuevo**: OpenAPI 3.0.3 spec (13 endpoints, 11 schemas, servidores prod+dev) |
+
+##### Rendimiento
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/routes/admin.ts` | Stats: `Promise.all` (20 queries paralelas vs secuenciales) + cache in-memory 60s |
+| `packages/cms/src/lib/api.ts` | Cache auth headers 30s con invalidacion en sign-out |
+
+##### Base de datos
+
+| Fichero | Cambio |
+|---------|--------|
+| `database/migrations/005_fix_export_job_columns.sql` | **Nuevo**: `ALTER TABLE export_job RENAME COLUMN registros_error → registros_err, finalizado_at → completed_at, iniciado_at → started_at` |
+| `packages/api/src/services/export.service.ts` | Columnas alineadas con migracion 005 |
+| `supabase/functions/admin/index.ts` | Columnas alineadas con migracion 005 |
+| `supabase/config.toml` | Fix formato para Supabase CLI 2.84 |
+
+---
+
+#### 5.4 Auditoria de Recursos (10 puntos)
+
+**Commit**: `587d0e5`
+
+##### Criticos
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/resource.service.ts` | **CRIT-01**: `validateResourceInput()` — slug regex, lat [-90,90], lng [-180,180], email regex, URL http/https, rating [1,6], occupancy >=0, SEO desc max 300. `sanitizeDbError()` en todos los throw |
+| `packages/api/src/services/resource.service.ts` | **CRIT-03**: Create atomico con rollback (try/catch elimina recurso si traducciones/categorias fallan) |
+| `packages/cms/src/pages/ResourceFormPage.tsx` | **CRIT-01**: Validacion client-side identica al server, errores multilinea |
+| `packages/cms/src/pages/ResourceFormPage.tsx` | **CRIT-02**: Redirect a `/resources/{id}` tras crear (media/docs disponibles inmediatamente) |
+
+##### Seguridad
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/cms/src/pages/ResourcesPage.tsx` | `PaginatedResult<ResourceSummary>`, `TypologyItem[]`, `MunicipalityItem[]`, `err: unknown`, confirm en status change, `busyId` para delete |
+| `packages/cms/src/pages/ResourceFormPage.tsx` | Slug `disabled={!isNew}` (protege URIs), contador SEO con `field-hint--warn` |
+
+##### UNE 178503
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/cms/src/pages/ResourceFormPage.tsx` | Campos: `tourist_types` (checkboxes 4 categorias), `rating_value` (1-6), `serves_cuisine`, `same_as` (textarea), `occupancy`. Traducciones EN/FR/PT (grid 3 columnas) |
+
+##### Arquitectura
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/relation.service.ts` | **ARCH-04**: Batch query reemplaza N+1 en relaciones |
+| `packages/cms/src/components/MediaUploader.tsx` | **ARCH-05**: Reescrito con `api.getAssets/uploadAsset/deleteAsset` (elimina fetch manual + supabase directo) |
+| `packages/cms/src/components/RelationsManager.tsx` | **ARCH-06**: `RELATION_TYPES as const`, `ResourceSummary[]`, `err: unknown` |
+| `packages/cms/src/pages/ResourcesPage.tsx` | **ARCH-03**: `useCallback` en `loadResources` |
+
+##### UX
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/cms/src/pages/ResourceFormPage.tsx` | "Ver en web" link, dirty check `beforeunload`, `WEB_BASE` configurable |
+| `packages/cms/src/pages/ResourcesPage.tsx` | Busqueda por nombre (`useMemo` client-side filter) |
+| `packages/cms/src/styles.css` | `.field-hint--warn` naranja para SEO >160 chars |
+
+---
+
+#### 5.5 Auditoria de Categorias (10 puntos)
+
+**Commit**: `cf7c4b4`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/category.service.ts` | Validacion slug + nombre, `sanitizeDbError()`, batch query traducciones (fix N+1), `Record<string, string>` para 5 idiomas, contador recursos por categoria |
+| `packages/cms/src/pages/CategoriesPage.tsx` | `CategoryItem` de api.ts, `Fragment` key fix, validacion client, `busyId`, EN/FR/PT, contador en tabla |
+| `packages/api/src/routes/admin.ts` | `audit.log` en POST/PUT/DELETE categorias |
+| `packages/cms/src/lib/api.ts` | `CategoryItem` + `activo` + `resourceCount` |
+
+---
+
+#### 5.6 Auditoria de Productos (10 puntos)
+
+**Commit**: `79228ca`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/product.service.ts` | Reescrito: validacion, sanitize, batch query (fix 2N+1), contador recursos |
+| `packages/cms/src/pages/ProductsPage.tsx` | Reescrito: `ProductItem`, validacion, `busyId`, EN/FR/PT, `resourceCount` en tabla |
+| `packages/api/src/routes/admin.ts` | `audit.log` en POST/PUT/DELETE productos |
+| `packages/cms/src/lib/api.ts` | `ProductItem` + `description` + `resourceCount` |
+
+---
+
+#### 5.7 Auditoria de Paginas (10 puntos)
+
+**Commit**: `a07f5ec`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/page.service.ts` | Validacion slug + titulo, `sanitizeDbError()`, batch query titulos (fix N+1), SEO desc max 300 |
+| `packages/cms/src/pages/PagesPage.tsx` | `PageItem` de api.ts, validacion client, `busyId`, confirm status, EN/FR/PT titulos, SEO contador, preview "Ver" para publicadas |
+
+---
+
+#### 5.8 Auditoria de Navegacion (10 puntos)
+
+**Commit**: `59dee35`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/navigation.service.ts` | Reescrito: validacion (menu_slug + tipo whitelists), sanitize, batch query labels (fix N+1), `reorderMenu` paralelo (`Promise.all`), `Record<string, string>` |
+| `packages/cms/src/pages/NavigationPage.tsx` | `NavItem` de api.ts, validacion client, `busyId`, EN/FR/PT labels |
+| `packages/api/src/routes/admin.ts` | `audit.log` en POST/PUT/DELETE navegacion |
+
+---
+
+#### 5.9 Auditoria de Usuarios (10 puntos)
+
+**Commit**: `677af22`
+
+| Fichero | Cambio |
+|---------|--------|
+| `packages/api/src/services/user.service.ts` | `validateUserInput()` con email regex, `sanitizeDbError()`, mensajes en espanol |
+| `packages/cms/src/pages/UsersPage.tsx` | `UserItem` de api.ts, validacion client email, `busyId`, email locked en edit, confirm mejorado |
+| `packages/api/src/routes/admin.ts` | `audit.log` en POST/PUT/DELETE usuarios (log email + rol en create) |
+
+---
+
+#### 5.10 Claude Code Skills
+
+**Commit**: `e805ad9`
+
+3 skills creadas para el proyecto:
+
+| Skill | Ruta | Uso |
+|-------|------|-----|
+| `/audit-section` | `.claude/skills/audit-section/SKILL.md` | Auditoria completa de 10 puntos de una seccion del CMS |
+| `/fix-audit` | `.claude/skills/fix-audit/SKILL.md` | Ejecutar fixes de una auditoria siguiendo patrones estandar |
+| `/deploy-edge` | `.claude/skills/deploy-edge/SKILL.md` | Desplegar Edge Functions a Supabase |
+
+---
+
+#### 5.11 Infraestructura
+
+| Fichero | Cambio |
+|---------|--------|
+| `.gitignore` | Excluir `supabase/.temp/`, `*.tsbuildinfo`, `next-env.d.ts` |
+| `supabase/config.toml` | Fix formato para Supabase CLI 2.84 (`[functions.api]` y `[functions.admin]`) |
+
+---
+
+#### 5.12 Resumen de patrones aplicados consistentemente
+
+Cada seccion auditada recibio exactamente las mismas correcciones:
+
+**Backend (service)**:
+1. `validateInput()` — slug regex, campos obligatorios, limites
+2. `sanitizeDbError()` — traduce errores UNIQUE/FK/CHECK
+3. Batch query traducciones — `IN(ids)` reemplaza N+1
+4. Tipo `Record<string, string>` para soporte 5 idiomas
+
+**Backend (routes)**:
+5. `audit.log()` en POST/PUT/DELETE
+6. RBAC verificado en cada endpoint
+
+**Frontend (page)**:
+7. Tipos de `api.ts` en vez de interfaces locales
+8. `err: unknown` + `(err as Error).message`
+9. Validacion client-side antes del submit
+10. `busyId` state para prevenir doble-click
+11. `confirm()` descriptivo antes de acciones destructivas
+12. Campos EN/FR/PT (5 idiomas)
+13. Error display con `whiteSpace: pre-line`
+
+---
+
+#### 5.13 Edge Functions desplegadas
+
+Ambas funciones desplegadas a produccion via Supabase CLI:
+
+```bash
+npx supabase functions deploy api --no-verify-jwt --import-map supabase/functions/deno.json
+npx supabase functions deploy admin --no-verify-jwt --import-map supabase/functions/deno.json
+```
+
+- **api**: `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/api`
+- **admin**: `https://oduglbxjcmmdexwplzvw.supabase.co/functions/v1/admin`
+
+---
+
+#### 5.14 SQL ejecutado en produccion
+
+1. **Migracion 005** (`database/migrations/005_fix_export_job_columns.sql`):
+   ```sql
+   ALTER TABLE export_job RENAME COLUMN registros_error TO registros_err;
+   ALTER TABLE export_job RENAME COLUMN finalizado_at TO completed_at;
+   ALTER TABLE export_job RENAME COLUMN iniciado_at TO started_at;
+   ```
+   Ejecutada via Supabase SQL Editor el 2026-03-25.
+
+---
+
+*Documentacion actualizada el 2026-03-25.*
