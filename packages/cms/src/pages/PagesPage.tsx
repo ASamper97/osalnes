@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '@/lib/api';
+import { api, type PageItem } from '@/lib/api';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -24,13 +24,7 @@ const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?:
 
 const TEMPLATES = ['default', 'landing', 'info', 'experiencia'];
 
-interface PageItem {
-  id: string;
-  slug: string;
-  template: string;
-  status: string;
-  title: Record<string, string>;
-}
+const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 
 export function PagesPage() {
   const [pages, setPages] = useState<PageItem[]>([]);
@@ -42,6 +36,9 @@ export function PagesPage() {
   const [template, setTemplate] = useState('default');
   const [titleEs, setTitleEs] = useState('');
   const [titleGl, setTitleGl] = useState('');
+  const [titleEn, setTitleEn] = useState('');
+  const [titleFr, setTitleFr] = useState('');
+  const [titlePt, setTitlePt] = useState('');
   const [bodyEs, setBodyEs] = useState('');
   const [bodyGl, setBodyGl] = useState('');
   const [seoTitleEs, setSeoTitleEs] = useState('');
@@ -49,6 +46,7 @@ export function PagesPage() {
   const [seoDescEs, setSeoDescEs] = useState('');
   const [seoDescGl, setSeoDescGl] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function loadPages() {
     api.getAdminPages().then(setPages).catch((e) => setError(e.message));
@@ -58,9 +56,9 @@ export function PagesPage() {
 
   function resetForm() {
     setEditingId(null);
-    setSlug('');
-    setTemplate('default');
+    setSlug(''); setTemplate('default');
     setTitleEs(''); setTitleGl('');
+    setTitleEn(''); setTitleFr(''); setTitlePt('');
     setBodyEs(''); setBodyGl('');
     setSeoTitleEs(''); setSeoTitleGl('');
     setSeoDescEs(''); setSeoDescGl('');
@@ -73,23 +71,34 @@ export function PagesPage() {
       setSlug(p.slug);
       setTemplate(p.template || 'default');
       setTitleEs(p.title?.es || ''); setTitleGl(p.title?.gl || '');
+      setTitleEn(p.title?.en || ''); setTitleFr(p.title?.fr || ''); setTitlePt(p.title?.pt || '');
       setBodyEs(p.body?.es || ''); setBodyGl(p.body?.gl || '');
       setSeoTitleEs(p.seoTitle?.es || ''); setSeoTitleGl(p.seoTitle?.gl || '');
       setSeoDescEs(p.seoDescription?.es || ''); setSeoDescGl(p.seoDescription?.gl || '');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     }
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    // Client-side validation
+    const errs: string[] = [];
+    if (!slug.trim()) errs.push('Slug es obligatorio');
+    if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errs.push('Slug solo admite letras minusculas, numeros y guiones');
+    if (!titleEs.trim()) errs.push('Titulo (ES) es obligatorio');
+    if (seoDescEs.length > 300) errs.push('SEO Descripcion (ES) demasiado larga (max 300)');
+    if (seoDescGl.length > 300) errs.push('SEO Descripcion (GL) demasiado larga (max 300)');
+    if (errs.length > 0) { setError(errs.join('\n')); return; }
+
+    setSaving(true);
 
     const body = {
       slug,
       template,
-      title: { es: titleEs, gl: titleGl },
+      title: { es: titleEs, gl: titleGl, ...(titleEn && { en: titleEn }), ...(titleFr && { fr: titleFr }), ...(titlePt && { pt: titlePt }) },
       body: { es: bodyEs, gl: bodyGl },
       seo_title: { es: seoTitleEs, gl: seoTitleGl },
       seo_description: { es: seoDescEs, gl: seoDescGl },
@@ -103,30 +112,38 @@ export function PagesPage() {
       }
       resetForm();
       loadPages();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string, title: string) {
-    if (!confirm(`Eliminar pagina "${title}"?`)) return;
+    if (!confirm(`Eliminar pagina "${title}"? Esta accion no se puede deshacer.`)) return;
+    setBusyId(id);
     try {
       await api.deletePage(id);
       if (editingId === id) resetForm();
       loadPages();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
   async function handleStatusChange(id: string, newStatus: string) {
+    const label = STATUS_LABELS[newStatus] || newStatus;
+    if (!confirm(`Cambiar estado a "${label}"?`)) return;
+    setBusyId(id);
     try {
       await api.updatePageStatus(id, newStatus);
       loadPages();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -136,7 +153,7 @@ export function PagesPage() {
         <h1>Paginas editoriales</h1>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="resource-form" style={{ marginBottom: '2rem' }}>
@@ -167,6 +184,21 @@ export function PagesPage() {
             </div>
           </div>
 
+          <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div className="form-field">
+              <label>Titulo (EN)</label>
+              <input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Titulo (FR)</label>
+              <input value={titleFr} onChange={(e) => setTitleFr(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Titulo (PT)</label>
+              <input value={titlePt} onChange={(e) => setTitlePt(e.target.value)} />
+            </div>
+          </div>
+
           <div className="form-row">
             <div className="form-field">
               <label>Contenido (ES)</label>
@@ -192,11 +224,13 @@ export function PagesPage() {
           <div className="form-row">
             <div className="form-field">
               <label>SEO Descripcion (ES)</label>
-              <textarea rows={2} value={seoDescEs} onChange={(e) => setSeoDescEs(e.target.value)} />
+              <textarea rows={2} value={seoDescEs} onChange={(e) => setSeoDescEs(e.target.value)} maxLength={300} />
+              <span className={`field-hint ${seoDescEs.length > 160 ? 'field-hint--warn' : ''}`}>{seoDescEs.length}/160</span>
             </div>
             <div className="form-field">
               <label>SEO Descripcion (GL)</label>
-              <textarea rows={2} value={seoDescGl} onChange={(e) => setSeoDescGl(e.target.value)} />
+              <textarea rows={2} value={seoDescGl} onChange={(e) => setSeoDescGl(e.target.value)} maxLength={300} />
+              <span className={`field-hint ${seoDescGl.length > 160 ? 'field-hint--warn' : ''}`}>{seoDescGl.length}/160</span>
             </div>
           </div>
 
@@ -236,14 +270,17 @@ export function PagesPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(p.id)}>Editar</button>
+                  <button className="btn btn-sm" onClick={() => startEdit(p.id)} disabled={busyId === p.id}>Editar</button>
+                  {p.status === 'publicado' && (
+                    <a href={`${WEB_BASE}/es/${p.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline">Ver</a>
+                  )}
                   {(STATE_TRANSITIONS[p.status] || []).map((t) => (
-                    <button key={t.target} className={`btn btn-sm ${t.style || 'btn-outline'}`} onClick={() => handleStatusChange(p.id, t.target)}>
-                      {t.label}
+                    <button key={t.target} className={`btn btn-sm ${t.style || 'btn-outline'}`} onClick={() => handleStatusChange(p.id, t.target)} disabled={busyId === p.id}>
+                      {busyId === p.id ? '...' : t.label}
                     </button>
                   ))}
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id, p.title?.es || p.slug)}>
-                    Eliminar
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id, p.title?.es || p.slug)} disabled={busyId === p.id}>
+                    {busyId === p.id ? '...' : 'Eliminar'}
                   </button>
                 </div>
               </td>

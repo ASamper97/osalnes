@@ -1,6 +1,6 @@
 import { supabase } from '../db/supabase.js';
 import { AppError } from '../middleware/error-handler.js';
-import { getTranslations, getTranslatedField } from './translation.service.js';
+import { getTranslations } from './translation.service.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,11 +9,39 @@ import { getTranslations, getTranslatedField } from './translation.service.js';
 interface PageInput {
   slug: string;
   template?: string;
-  publicada?: boolean;
   title?: Record<string, string>;
   body?: Record<string, string>;
   seo_title?: Record<string, string>;
   seo_description?: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function validatePageInput(input: Partial<PageInput>, isCreate = false) {
+  const errors: string[] = [];
+  if (isCreate && !input.slug) errors.push('slug es obligatorio');
+  if (isCreate && !input.title?.es) errors.push('title.es es obligatorio');
+  if (input.slug !== undefined) {
+    if (!SLUG_RE.test(input.slug)) errors.push('slug solo admite letras minusculas, numeros y guiones');
+    if (input.slug.length > 300) errors.push('slug demasiado largo (max 300)');
+  }
+  if (input.seo_description) {
+    for (const [lang, val] of Object.entries(input.seo_description)) {
+      if (val.length > 300) errors.push(`seo_description.${lang} demasiado larga (max 300)`);
+    }
+  }
+  if (errors.length > 0) throw new AppError(400, errors.join('; '));
+}
+
+function sanitizeDbError(msg: string): string {
+  if (msg.includes('duplicate key') && msg.includes('slug')) return 'Ya existe una pagina con ese slug';
+  if (msg.includes('duplicate key')) return 'Ya existe un registro duplicado';
+  if (msg.includes('violates foreign key')) return 'Referencia a un registro que no existe';
+  return 'Error al guardar en la base de datos';
 }
 
 // ---------------------------------------------------------------------------
@@ -28,18 +56,34 @@ export async function listPages() {
 
   if (error) throw error;
 
-  return Promise.all(
-    (data || []).map(async (r) => ({
-      id: r.id,
-      slug: r.slug,
-      template: r.template,
-      status: r.estado_editorial,
-      publishedAt: r.published_at,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-      title: await getTranslatedField('pagina', r.id, 'title'),
-    })),
-  );
+  const rows = data || [];
+  if (rows.length === 0) return [];
+
+  // Batch-fetch titles in 1 query (fix N+1)
+  const ids = rows.map((r) => r.id);
+  const { data: translations } = await supabase
+    .from('traduccion')
+    .select('entidad_id, idioma, valor')
+    .eq('entidad_tipo', 'pagina')
+    .eq('campo', 'title')
+    .in('entidad_id', ids);
+
+  const titleMap: Record<string, Record<string, string>> = {};
+  for (const t of translations || []) {
+    if (!titleMap[t.entidad_id]) titleMap[t.entidad_id] = {};
+    titleMap[t.entidad_id][t.idioma] = t.valor;
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    template: r.template,
+    status: r.estado_editorial,
+    publishedAt: r.published_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    title: titleMap[r.id] || {},
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +121,8 @@ export async function getPageById(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function createPage(input: PageInput) {
+  validatePageInput(input, true);
+
   const { data, error } = await supabase
     .from('pagina')
     .insert({
@@ -87,7 +133,7 @@ export async function createPage(input: PageInput) {
     .select()
     .single();
 
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
 
   await savePageTranslations(data.id, input);
   return getPageById(data.id);
@@ -98,6 +144,8 @@ export async function createPage(input: PageInput) {
 // ---------------------------------------------------------------------------
 
 export async function updatePage(id: string, input: Partial<PageInput>) {
+  validatePageInput(input);
+
   const update: Record<string, unknown> = {};
   if (input.slug !== undefined) update.slug = input.slug;
   if (input.template !== undefined) update.template = input.template;
@@ -108,7 +156,7 @@ export async function updatePage(id: string, input: Partial<PageInput>) {
       .update(update)
       .eq('id', id);
 
-    if (error) throw new AppError(400, error.message);
+    if (error) throw new AppError(400, sanitizeDbError(error.message));
   }
 
   await savePageTranslations(id, input);
@@ -144,7 +192,7 @@ export async function updatePageStatus(id: string, newStatus: string) {
   if (newStatus === 'publicado') update.published_at = new Date().toISOString();
 
   const { error } = await supabase.from('pagina').update(update).eq('id', id);
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
 
   return getPageById(id);
 }
@@ -162,7 +210,7 @@ export async function deletePage(id: string) {
     .eq('entidad_id', id);
 
   const { error } = await supabase.from('pagina').delete().eq('id', id);
-  if (error) throw new AppError(400, error.message);
+  if (error) throw new AppError(400, sanitizeDbError(error.message));
 
   return { deleted: true };
 }
