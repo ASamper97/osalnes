@@ -1,6 +1,7 @@
 import { supabase } from '../db/supabase.js';
 import { getTranslations } from './translation.service.js';
 import { AppError } from '../middleware/error-handler.js';
+import { enqueueTranslations } from './autotranslate.service.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -245,6 +246,10 @@ export async function createResource(input: CreateResourceInput) {
     if (input.seo_title) await saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title);
     if (input.seo_description) await saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description);
 
+    // Enqueue auto-translations (async, fire-and-forget)
+    if (input.name) enqueueTranslations('recurso_turistico', data.id, 'name', input.name);
+    if (input.description) enqueueTranslations('recurso_turistico', data.id, 'description', input.description);
+
     if (input.category_ids?.length) {
       const { error: catError } = await supabase.from('recurso_categoria').insert(
         input.category_ids.map((cid) => ({ recurso_id: data.id, categoria_id: cid })),
@@ -310,6 +315,10 @@ export async function updateResource(id: string, input: Partial<CreateResourceIn
   if (input.description) await saveTranslations('recurso_turistico', id, 'description', input.description);
   if (input.seo_title) await saveTranslations('recurso_turistico', id, 'seo_title', input.seo_title);
   if (input.seo_description) await saveTranslations('recurso_turistico', id, 'seo_description', input.seo_description);
+
+  // Enqueue auto-translations (async, fire-and-forget)
+  if (input.name) enqueueTranslations('recurso_turistico', id, 'name', input.name);
+  if (input.description) enqueueTranslations('recurso_turistico', id, 'description', input.description);
 
   // Update categories
   if (input.category_ids !== undefined) {

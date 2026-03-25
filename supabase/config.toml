@@ -6,3 +6,6 @@ verify_jwt = false
 
 [functions.assistant]
 verify_jwt = false
+
+[functions.auto-translate]
+verify_jwt = false
