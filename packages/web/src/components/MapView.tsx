@@ -1,27 +1,48 @@
 'use client';
 
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { useEffect, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import Link from 'next/link';
 import type { Locale } from '@/i18n/config';
 
-// Fix Leaflet default marker icon — deferred until client-side
-let _iconSetup = false;
-function ensureLeafletIcons() {
-  if (_iconSetup || typeof window === 'undefined') return;
-  _iconSetup = true;
-  const defaultIcon = L.icon({
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
+// ---------------------------------------------------------------------------
+// Typology group colors (UNE 178503 groups)
+// ---------------------------------------------------------------------------
+const GROUP_COLORS: Record<string, { color: string; label: Record<string, string> }> = {
+  alojamiento:   { color: '#2E86C1', label: { es: 'Alojamiento', gl: 'Aloxamento' } },
+  restauracion:  { color: '#E67E22', label: { es: 'Restauración', gl: 'Restauración' } },
+  recurso:       { color: '#27AE60', label: { es: 'Atracciones', gl: 'Atracción' } },
+  evento:        { color: '#8E44AD', label: { es: 'Eventos', gl: 'Eventos' } },
+  transporte:    { color: '#607D8B', label: { es: 'Transporte', gl: 'Transporte' } },
+  servicio:      { color: '#E74C3C', label: { es: 'Servicios', gl: 'Servizos' } },
+};
+
+const DEFAULT_MARKER_COLOR = '#1a5276';
+
+// Cache icons per grupo to avoid re-creating DOM elements
+const _iconCache: Record<string, L.DivIcon> = {};
+
+function getMarkerIcon(grupo: string | null): L.DivIcon {
+  const key = grupo || '_default';
+  if (_iconCache[key]) return _iconCache[key];
+
+  const color = (grupo && GROUP_COLORS[grupo]?.color) || DEFAULT_MARKER_COLOR;
+  const svg = `<svg width="28" height="42" viewBox="0 0 28 42" xmlns="http://www.w3.org/2000/svg">` +
+    `<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 28 14 28s14-17.5 14-28C28 6.27 21.73 0 14 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>` +
+    `<circle cx="14" cy="14" r="5.5" fill="#fff"/>` +
+    `</svg>`;
+
+  const icon = L.divIcon({
+    className: 'marker-icon-custom',
+    html: svg,
+    iconSize: [28, 42],
+    iconAnchor: [14, 42],
+    popupAnchor: [0, -36],
   });
-  L.Marker.prototype.options.icon = defaultIcon;
+  _iconCache[key] = icon;
+  return icon;
 }
 
 interface MapResource {
@@ -29,6 +50,7 @@ interface MapResource {
   slug: string;
   name: Record<string, string>;
   rdfType: string;
+  grupo: string | null;
   location: {
     latitude: number | null;
     longitude: number | null;
@@ -66,8 +88,6 @@ function BoundsLoader({ onBoundsChange }: { onBoundsChange: (bounds: string) => 
 }
 
 export function MapView({ lang, dict, typologies, municipalities }: MapViewProps) {
-  ensureLeafletIcons();
-
   const [resources, setResources] = useState<MapResource[]>([]);
   const [bounds, setBounds] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -169,41 +189,59 @@ export function MapView({ lang, dict, typologies, municipalities }: MapViewProps
           />
           <BoundsLoader onBoundsChange={setBounds} />
 
-          {geoResources.map((r) => (
-            <Marker
-              key={r.id}
-              position={[r.location.latitude!, r.location.longitude!]}
-            >
-              <Popup>
-                <div style={{ minWidth: 180 }}>
-                  {r.rdfType && (
-                    <span style={{
-                      display: 'inline-block',
-                      background: 'var(--color-primary)',
-                      color: '#fff',
-                      padding: '0.1rem 0.4rem',
-                      borderRadius: '3px',
-                      fontSize: '0.7rem',
-                      marginBottom: '0.3rem',
-                    }}>
-                      {r.rdfType}
-                    </span>
-                  )}
-                  <h3 style={{ fontSize: '0.95rem', margin: '0.2rem 0' }}>
-                    <Link href={`/${lang}/recurso/${r.slug}`}>
-                      {r.name[lang] || r.name.es || r.name.gl || Object.values(r.name)[0]}
-                    </Link>
-                  </h3>
-                  {r.location.streetAddress && (
-                    <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
-                      {r.location.streetAddress}
-                    </p>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {geoResources.map((r) => {
+            const groupColor = (r.grupo && GROUP_COLORS[r.grupo]?.color) || DEFAULT_MARKER_COLOR;
+            return (
+              <Marker
+                key={r.id}
+                position={[r.location.latitude!, r.location.longitude!]}
+                icon={getMarkerIcon(r.grupo)}
+              >
+                <Popup>
+                  <div style={{ minWidth: 180 }}>
+                    {r.rdfType && (
+                      <span style={{
+                        display: 'inline-block',
+                        background: groupColor,
+                        color: '#fff',
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '3px',
+                        fontSize: '0.7rem',
+                        marginBottom: '0.3rem',
+                      }}>
+                        {r.rdfType}
+                      </span>
+                    )}
+                    <h3 style={{ fontSize: '0.95rem', margin: '0.2rem 0' }}>
+                      <Link href={`/${lang}/recurso/${r.slug}`}>
+                        {r.name[lang] || r.name.es || r.name.gl || Object.values(r.name)[0]}
+                      </Link>
+                    </h3>
+                    {r.location.streetAddress && (
+                      <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
+                        {r.location.streetAddress}
+                      </p>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
+
+        {/* Legend */}
+        <div className="map-legend" role="region" aria-label={dict.legend || 'Leyenda'}>
+          {Object.entries(GROUP_COLORS).map(([key, { color, label }]) => (
+            <div key={key} className="map-legend__item">
+              <span
+                className="map-legend__dot"
+                style={{ background: color }}
+                aria-hidden="true"
+              />
+              <span className="map-legend__label">{label[lang] || label.es}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

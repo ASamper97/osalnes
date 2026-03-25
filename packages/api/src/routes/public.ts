@@ -291,12 +291,13 @@ publicRouter.get(
       res.status(400).json({ error: 'bounds must be lat_sw,lng_sw,lat_ne,lng_ne' });
       return;
     }
-    const [latSw, latNe, lngSw, lngNe] = bounds;
+    const [latSw, lngSw, latNe, lngNe] = bounds;
     const type = req.query.type as string | undefined;
+    const municipio = req.query.municipio as string | undefined;
 
     let query = supabase
       .from('recurso_turistico')
-      .select(`id, uri, slug, tipologia:tipo_id ( type_code ), latitude, longitude`)
+      .select(`id, slug, rdf_type, latitude, longitude, address_street, tipologia:rdf_type ( type_code, grupo )`)
       .eq('estado_editorial', 'publicado')
       .eq('visible_en_mapa', true)
       .gte('latitude', latSw)
@@ -305,13 +306,48 @@ publicRouter.get(
       .lte('longitude', lngNe);
 
     if (type) {
-      query = query.eq('tipologia.type_code', type);
+      query = query.eq('rdf_type', type);
+    }
+    if (municipio) {
+      query = query.eq('municipio_id', municipio);
     }
 
     const { data, error } = await query.limit(500);
     if (error) throw error;
 
-    res.json(data);
+    const rows = data || [];
+
+    // Batch-fetch translated names for all resources in one query
+    const ids = rows.map((r) => r.id);
+    let nameMap: Record<string, Record<string, string>> = {};
+    if (ids.length > 0) {
+      const { data: translations } = await supabase
+        .from('traduccion')
+        .select('entidad_id, idioma, valor')
+        .eq('entidad_tipo', 'recurso_turistico')
+        .eq('campo', 'name')
+        .in('entidad_id', ids);
+
+      for (const t of translations || []) {
+        if (!nameMap[t.entidad_id]) nameMap[t.entidad_id] = {};
+        nameMap[t.entidad_id][t.idioma] = t.valor;
+      }
+    }
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      name: nameMap[r.id] || {},
+      rdfType: r.rdf_type,
+      grupo: (r.tipologia as any)?.grupo || null,
+      location: {
+        latitude: r.latitude,
+        longitude: r.longitude,
+        streetAddress: r.address_street,
+      },
+    }));
+
+    res.json(items);
   }),
 );
 

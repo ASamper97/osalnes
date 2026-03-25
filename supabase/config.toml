@@ -1,5 +1,5 @@
-[project]
-id = "oduglbxjcmmdexwplzvw"
+[functions.api]
+verify_jwt = false
 
-[functions]
-verify_jwt = false  # We verify manually in admin function
+[functions.admin]
+verify_jwt = false

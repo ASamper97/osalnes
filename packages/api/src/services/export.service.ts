@@ -77,7 +77,7 @@ async function processExportJob(
   // Mark as in progress
   await supabase
     .from('export_job')
-    .update({ estado: 'en_proceso', iniciado_at: new Date().toISOString() })
+    .update({ estado: 'en_proceso', started_at: new Date().toISOString() })
     .eq('id', jobId);
 
   try {
@@ -163,10 +163,10 @@ async function processExportJob(
       .from('export_job')
       .update({
         estado: 'completado',
-        finalizado_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
         total_registros: total,
         registros_ok: ok,
-        registros_error: errors,
+        registros_err: errors,
         resultado: { data: results },
       })
       .eq('id', jobId);
@@ -175,7 +175,7 @@ async function processExportJob(
       .from('export_job')
       .update({
         estado: 'error',
-        finalizado_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
         resultado: { error: String(err) },
       })
       .eq('id', jobId);

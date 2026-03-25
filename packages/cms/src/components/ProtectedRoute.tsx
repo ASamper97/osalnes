@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 
 export function ProtectedRoute() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   if (loading) {
     return (
@@ -12,7 +12,14 @@ export function ProtectedRoute() {
     );
   }
 
+  // No Supabase session
   if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // User authenticated but not registered in DTI or deactivated
+  // (auth-context already signs out in this case, but guard just in case)
+  if (!profile) {
     return <Navigate to="/login" replace />;
   }
 

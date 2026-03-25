@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './lib/auth-context';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -11,6 +12,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { PagesPage } from './pages/PagesPage';
 import { NavigationPage } from './pages/NavigationPage';
 import { UsersPage } from './pages/UsersPage';
+import { ExportsPage } from './pages/ExportsPage';
 
 export function App() {
   return (
@@ -20,18 +22,19 @@ export function App() {
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected — requires authentication */}
+          {/* Protected — requires authentication + DTI profile */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/resources" element={<ResourcesPage />} />
-              <Route path="/resources/new" element={<ResourceFormPage />} />
-              <Route path="/resources/:id" element={<ResourceFormPage />} />
-              <Route path="/categories" element={<CategoriesPage />} />
-              <Route path="/products" element={<ProductsPage />} />
-              <Route path="/pages" element={<PagesPage />} />
-              <Route path="/navigation" element={<NavigationPage />} />
-              <Route path="/users" element={<UsersPage />} />
+              <Route path="/" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
+              <Route path="/resources" element={<ErrorBoundary><ResourcesPage /></ErrorBoundary>} />
+              <Route path="/resources/new" element={<ErrorBoundary><ResourceFormPage /></ErrorBoundary>} />
+              <Route path="/resources/:id" element={<ErrorBoundary><ResourceFormPage /></ErrorBoundary>} />
+              <Route path="/categories" element={<ErrorBoundary><CategoriesPage /></ErrorBoundary>} />
+              <Route path="/products" element={<ErrorBoundary><ProductsPage /></ErrorBoundary>} />
+              <Route path="/pages" element={<ErrorBoundary><PagesPage /></ErrorBoundary>} />
+              <Route path="/navigation" element={<ErrorBoundary><NavigationPage /></ErrorBoundary>} />
+              <Route path="/exports" element={<ErrorBoundary><ExportsPage /></ErrorBoundary>} />
+              <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
             </Route>
           </Route>
         </Routes>

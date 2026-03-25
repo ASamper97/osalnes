@@ -1119,7 +1119,7 @@ async function getExportJob(sb: any, jobId: string, req: Request) {
 
 // deno-lint-ignore no-explicit-any
 async function processExportJob(sb: any, jobId: string, tipo: string) {
-  await sb.from('export_job').update({ estado: 'en_proceso', iniciado_at: new Date().toISOString() }).eq('id', jobId);
+  await sb.from('export_job').update({ estado: 'en_proceso', started_at: new Date().toISOString() }).eq('id', jobId);
 
   try {
     const { data: resources, error } = await sb
@@ -1173,13 +1173,13 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
     }
 
     await sb.from('export_job').update({
-      estado: 'completado', finalizado_at: new Date().toISOString(),
-      total_registros: resources?.length || 0, registros_ok: ok, registros_error: errors,
+      estado: 'completado', completed_at: new Date().toISOString(),
+      total_registros: resources?.length || 0, registros_ok: ok, registros_err: errors,
       resultado: { data: results },
     }).eq('id', jobId);
   } catch (err) {
     await sb.from('export_job').update({
-      estado: 'error', finalizado_at: new Date().toISOString(), resultado: { error: String(err) },
+      estado: 'error', completed_at: new Date().toISOString(), resultado: { error: String(err) },
     }).eq('id', jobId);
   }
 }

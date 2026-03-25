@@ -30,15 +30,21 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     .eq('email', user.email)
     .single();
 
-  // Attach user + role to request for downstream handlers
-  (req as any).user = user;
-  (req as any).userRole = dtiUser?.rol || 'editor';
-  (req as any).userActive = dtiUser?.activo ?? true;
+  if (!dtiUser) {
+    res.status(403).json({ error: 'User not registered in DTI system' });
+    return;
+  }
 
-  if (dtiUser && !dtiUser.activo) {
+  if (!dtiUser.activo) {
     res.status(403).json({ error: 'User account is deactivated' });
     return;
   }
+
+  // Attach user + role to request for downstream handlers
+  (req as any).user = user;
+  (req as any).dtiUserId = dtiUser.id;
+  (req as any).userRole = dtiUser.rol;
+  (req as any).userActive = dtiUser.activo;
 
   next();
 }
