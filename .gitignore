@@ -40,3 +40,12 @@ minio-data/
 # Uploads temp
 uploads/
 tmp/
+
+# Supabase CLI temp
+supabase/.temp/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Next.js generated types
+next-env.d.ts
