@@ -85,6 +85,7 @@ export default async function RecursoDetailPage({
       </div>
 
       {/* Info grid */}
+      <h2 className="sr-only">{dict.details || 'Detalles'}</h2>
       <div className="info-grid">
         {/* Location */}
         {resource.location?.streetAddress && (
@@ -126,7 +127,7 @@ export default async function RecursoDetailPage({
           <div className="info-card">
             <div className="info-card__label">{dict.website}</div>
             <div className="info-card__value">
-              <a href={resource.contact.url} target="_blank" rel="noopener noreferrer">
+              <a href={resource.contact.url} target="_blank" rel="noopener noreferrer" aria-label={`${resource.contact.url.replace(/^https?:\/\//, '')} (${dict.opens_new_window || 'abre en ventana nueva'})`}>
                 {resource.contact.url.replace(/^https?:\/\//, '')}
               </a>
             </div>
@@ -164,6 +165,7 @@ export default async function RecursoDetailPage({
             href={`https://www.google.com/maps?q=${resource.location.latitude},${resource.location.longitude}`}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={`${dict.open_map} (${dict.opens_new_window || 'abre en ventana nueva'})`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -184,7 +186,7 @@ export default async function RecursoDetailPage({
       {resource.contact?.sameAs?.length > 0 && (
         <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           {resource.contact.sameAs.map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.85rem' }}>
+            <a key={i} href={url} target="_blank" rel="noopener noreferrer" aria-label={`${url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]} (${dict.opens_new_window || 'abre en ventana nueva'})`} style={{ fontSize: '0.85rem' }}>
               {url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}
             </a>
           ))}

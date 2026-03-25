@@ -58,8 +58,10 @@ function SearchContent({ lang }: { lang: Locale }) {
         {dict.search || 'Buscar'}
       </h1>
 
-      <form className="search-form" onSubmit={handleSubmit}>
+      <form className="search-form" onSubmit={handleSubmit} role="search">
+        <label htmlFor="search-input" className="sr-only">{dict.search || 'Buscar'}</label>
         <input
+          id="search-input"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -86,9 +88,9 @@ function SearchContent({ lang }: { lang: Locale }) {
               <article className="card">
                 <div className="card__body">
                   {r.rdfType && <span className="card__badge">{r.rdfType}</span>}
-                  <h3 className="card__title">
+                  <h2 className="card__title">
                     {r.name?.[lang] || r.name?.es || r.name?.gl || r.slug}
-                  </h3>
+                  </h2>
                   <p className="card__desc">
                     {(r.description?.[lang] || r.description?.es || '').slice(0, 140)}
                   </p>

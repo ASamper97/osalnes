@@ -176,7 +176,7 @@ export function MapView({ lang, dict, typologies, municipalities }: MapViewProps
       </div>
 
       {/* Map */}
-      <div className="map-wrapper" role="application" aria-label={dict.map}>
+      <div className="map-wrapper" role="region" aria-label={dict.map} aria-roledescription={dict.interactive_map || 'Mapa interactivo. Usa las flechas del teclado para navegar, + y - para zoom.'}>
         <MapContainer
           center={CENTER}
           zoom={DEFAULT_ZOOM}

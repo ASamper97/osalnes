@@ -10,7 +10,7 @@ export function Footer({ lang, dict }: FooterProps) {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="site-footer">
+    <footer className="site-footer" role="contentinfo">
       <div className="site-footer__inner">
         <div>
           <p style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
