@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api } from '@/lib/api';
+import { api, type UserItem } from '@/lib/api';
 
 const ROLES = [
   { value: 'admin', label: 'Administrador' },
@@ -9,16 +9,10 @@ const ROLES = [
   { value: 'analitica', label: 'Analitica' },
 ];
 
-interface User {
-  id: string;
-  email: string;
-  nombre: string;
-  rol: string;
-  activo: boolean;
-}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Form
@@ -28,6 +22,7 @@ export function UsersPage() {
   const [rol, setRol] = useState('editor');
   const [activo, setActivo] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function loadUsers() {
     api.getUsers().then(setUsers).catch((e) => setError(e.message));
@@ -43,7 +38,7 @@ export function UsersPage() {
     setActivo(true);
   }
 
-  function startEdit(u: User) {
+  function startEdit(u: UserItem) {
     setEditingId(u.id);
     setEmail(u.email);
     setNombre(u.nombre);
@@ -53,32 +48,43 @@ export function UsersPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    // Client-side validation
+    const errs: string[] = [];
+    if (!email.trim()) errs.push('Email es obligatorio');
+    if (email && !EMAIL_RE.test(email)) errs.push('Formato de email invalido');
+    if (!nombre.trim()) errs.push('Nombre es obligatorio');
+    if (errs.length > 0) { setError(errs.join('\n')); return; }
+
+    setSaving(true);
 
     try {
       if (editingId) {
-        await api.updateUser(editingId, { email, nombre, rol, activo });
+        await api.updateUser(editingId, { nombre, rol, activo });
       } else {
-        await api.createUser({ email, nombre, rol, activo });
+        await api.createUser({ email, nombre, rol });
       }
       resetForm();
       loadUsers();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Desactivar usuario "${name}"?`)) return;
+  async function handleDeactivate(id: string, name: string) {
+    if (!confirm(`Desactivar usuario "${name}"? No podra acceder al CMS.`)) return;
+    setBusyId(id);
     try {
       await api.deleteUser(id);
       if (editingId === id) resetForm();
       loadUsers();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -88,7 +94,7 @@ export function UsersPage() {
         <h1>Usuarios</h1>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="resource-form" style={{ marginBottom: '2rem' }}>
@@ -98,7 +104,8 @@ export function UsersPage() {
           <div className="form-row">
             <div className="form-field">
               <label>Email *</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="usuario@osalnes.gal" />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="usuario@osalnes.gal" disabled={!!editingId} />
+              {editingId && <span className="field-hint">El email no se puede cambiar</span>}
             </div>
             <div className="form-field">
               <label>Nombre *</label>
@@ -157,10 +164,10 @@ export function UsersPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(u)}>Editar</button>
+                  <button className="btn btn-sm" onClick={() => startEdit(u)} disabled={busyId === u.id}>Editar</button>
                   {u.activo && (
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(u.id, u.nombre)}>
-                      Desactivar
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeactivate(u.id, u.nombre)} disabled={busyId === u.id}>
+                      {busyId === u.id ? '...' : 'Desactivar'}
                     </button>
                   )}
                 </div>

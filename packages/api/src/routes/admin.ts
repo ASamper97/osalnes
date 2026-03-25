@@ -524,18 +524,21 @@ adminRouter.get('/users/:id', requireRole('admin'), asyncHandler(async (req, res
 /** POST /api/v1/admin/users — admin only */
 adminRouter.post('/users', requireRole('admin'), asyncHandler(async (req, res) => {
   const user = await userService.createUser(req.body);
+  audit.log('usuario', user.id, 'crear', (req as any).dtiUserId, { email: user.email, rol: user.rol });
   res.status(201).json(user);
 }));
 
 /** PUT /api/v1/admin/users/:id — admin only */
 adminRouter.put('/users/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const user = await userService.updateUser(paramId(req), req.body);
+  audit.log('usuario', paramId(req), 'modificar', (req as any).dtiUserId, { fields: Object.keys(req.body) });
   res.json(user);
 }));
 
 /** DELETE /api/v1/admin/users/:id — admin only */
 adminRouter.delete('/users/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const result = await userService.deleteUser(paramId(req));
+  audit.log('usuario', paramId(req), 'archivar', (req as any).dtiUserId);
   res.json(result);
 }));
 
