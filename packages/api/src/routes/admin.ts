@@ -322,18 +322,21 @@ adminRouter.get('/navigation', asyncHandler(async (req, res) => {
 /** POST /api/v1/admin/navigation — admin only */
 adminRouter.post('/navigation', requireRole('admin'), asyncHandler(async (req, res) => {
   const item = await navigationService.createNavItem(req.body);
+  audit.log('navegacion', item.id, 'crear', (req as any).dtiUserId, { menu: item.menuSlug });
   res.status(201).json(item);
 }));
 
 /** PUT /api/v1/admin/navigation/:id — admin only */
 adminRouter.put('/navigation/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const item = await navigationService.updateNavItem(paramId(req), req.body);
+  audit.log('navegacion', paramId(req), 'modificar', (req as any).dtiUserId);
   res.json(item);
 }));
 
 /** DELETE /api/v1/admin/navigation/:id — admin only */
 adminRouter.delete('/navigation/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const result = await navigationService.deleteNavItem(paramId(req));
+  audit.log('navegacion', paramId(req), 'eliminar', (req as any).dtiUserId);
   res.json(result);
 }));
 
