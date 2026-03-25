@@ -63,5 +63,21 @@
   "resources": "Recursos turísticos",
   "events": "Eventos",
   "transport": "Transporte",
-  "services": "Servizos"
+  "services": "Servizos",
+  "assistant_title": "Asistente turistico",
+  "assistant_subtitle": "O Salnes DTI",
+  "assistant_open": "Abrir asistente turistico",
+  "assistant_welcome": "Ola! Son o teu guia turistico de O Salnes. Preguntame o que queiras sobre a comarca: praias, restaurantes, rutas, monumentos...",
+  "assistant_placeholder": "Escribe a tua pregunta...",
+  "assistant_thinking": "Pensando...",
+  "assistant_error": "Sentimolo, ocorreu un erro. Intentao de novo.",
+  "assistant_suggestion_1": "Que podo facer en Cambados nun dia?",
+  "assistant_suggestion_2": "Recomendame praias en Sanxenxo",
+  "assistant_suggestion_3": "Onde comer ben con vistas ao mar?",
+  "see_on_map": "Ver no mapa",
+  "send": "Enviar",
+  "close": "Pechar",
+  "opens_new_window": "abre en ventana nova",
+  "details": "Detalles",
+  "interactive_map": "Mapa interactivo. Usa as frechas do teclado para navegar, + e - para zoom."
 }

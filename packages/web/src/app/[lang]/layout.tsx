@@ -3,6 +3,7 @@ import { locales, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { Header } from '@/components/ui/Header';
 import { Footer } from '@/components/ui/Footer';
+import { AssistantFAB } from '@/components/AssistantFAB';
 import './globals.css';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://turismo.osalnes.gal';
@@ -76,6 +77,7 @@ export default async function LangLayout({
         <Header lang={params.lang} dict={dict} />
         <main id="main-content">{children}</main>
         <Footer lang={params.lang} dict={dict} />
+        <AssistantFAB lang={params.lang} dict={dict} />
       </body>
     </html>
   );
