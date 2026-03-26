@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem } from '@/lib/api';
+import { SkeletonTable } from '@/components/Skeleton';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -14,6 +15,19 @@ const STATUS_COLORS: Record<string, string> = {
   revision: '#3498db',
   publicado: '#27ae60',
   archivado: '#95a5a6',
+};
+
+const TIPO_GRUPO: Record<string, string> = {
+  Hotel: 'alojamiento', RuralHouse: 'alojamiento', BedAndBreakfast: 'alojamiento',
+  Campground: 'alojamiento', Hostel: 'alojamiento', Apartment: 'alojamiento',
+  Restaurant: 'restauracion', BarOrPub: 'restauracion', CafeOrCoffeeShop: 'restauracion',
+  Winery: 'restauracion', Brewery: 'restauracion', IceCreamShop: 'restauracion',
+  Beach: 'recurso', Museum: 'recurso', Park: 'recurso', TouristAttraction: 'recurso',
+  ViewPoint: 'recurso', LandmarksOrHistoricalBuildings: 'recurso', Monument: 'recurso',
+  Trail: 'recurso', Cave: 'recurso', NaturePark: 'recurso',
+  Event: 'evento', Festival: 'evento', MusicEvent: 'evento', SportsEvent: 'evento',
+  BusStation: 'transporte', Port: 'transporte', TrainStation: 'transporte',
+  TouristInformationCenter: 'servicio', Hospital: 'servicio', Pharmacy: 'servicio',
 };
 
 // Transiciones permitidas (BRI-6.1)
@@ -133,7 +147,7 @@ export function ResourcesPage() {
         </select>
       </div>
 
-      {!resources && !error && <p>Cargando...</p>}
+      {!resources && !error && <SkeletonTable rows={6} />}
 
       {resources && (
         <>
@@ -162,7 +176,7 @@ export function ResourcesPage() {
                     <br />
                     <span style={{ fontSize: '0.75rem', color: '#999' }}>{r.slug}</span>
                   </td>
-                  <td>{r.rdfType}</td>
+                  <td><span className={`tipo-badge tipo-badge--${TIPO_GRUPO[r.rdfType] || 'general'}`}>{r.rdfType}</span></td>
                   <td>
                     <span
                       className="status-badge"

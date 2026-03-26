@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type DashboardStats } from '../lib/api';
+import { SkeletonDashboard } from '../components/Skeleton';
 
 const LANG_LABELS: Record<string, string> = { es: 'Espanol', gl: 'Gallego', en: 'Ingles', fr: 'Frances', pt: 'Portugues' };
 const GROUP_LABELS: Record<string, string> = {
@@ -30,12 +31,7 @@ export function DashboardPage() {
   }
 
   if (!stats) {
-    return (
-      <div>
-        <h1>Dashboard</h1>
-        <p style={{ color: 'var(--cms-text-light)' }}>Cargando estadisticas...</p>
-      </div>
-    );
+    return <SkeletonDashboard />;
   }
 
   const r = stats.resources;

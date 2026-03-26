@@ -18,7 +18,7 @@
   --cms-card-bg: #ffffff;
   --cms-card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --cms-card-shadow-hover: 0 4px 12px rgba(0,0,0,0.08);
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Source Sans 3', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --radius: 8px;
   --radius-sm: 6px;
   --radius-lg: 12px;
@@ -51,7 +51,7 @@ body {
 /* --- Sidebar --- */
 
 .cms-sidebar {
-  background: var(--cms-sidebar-bg);
+  background: linear-gradient(180deg, #0f1c2e 0%, #1a3350 40%, #1a5276 100%);
   color: var(--cms-sidebar-text);
   display: flex;
   flex-direction: column;
@@ -68,6 +68,11 @@ body {
   font-weight: 700;
   color: #fff;
   letter-spacing: -0.02em;
+}
+
+.cms-sidebar-logo-img {
+  max-width: 160px;
+  height: auto;
 }
 
 .cms-sidebar-subtitle {
@@ -99,13 +104,14 @@ body {
 }
 
 .cms-nav-link:hover {
-  background: var(--cms-sidebar-hover);
-  color: var(--cms-sidebar-text-active);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  transform: translateX(3px);
 }
 
 .cms-nav-link.active {
-  background: var(--cms-sidebar-active);
-  color: var(--cms-sidebar-text-active);
+  background: rgba(26, 188, 156, 0.18);
+  color: #fff;
   font-weight: 600;
 }
 
@@ -115,15 +121,20 @@ body {
   left: 0;
   width: 3px;
   height: 24px;
-  background: var(--cms-primary-light);
+  background: #1abc9c;
   border-radius: 0 3px 3px 0;
 }
 
 .cms-nav-icon {
-  font-size: 1rem;
-  width: 1.3rem;
+  font-size: 1.1rem;
+  width: 1.4rem;
   text-align: center;
   flex-shrink: 0;
+  opacity: 0.7;
+}
+.cms-nav-link:hover .cms-nav-icon,
+.cms-nav-link.active .cms-nav-icon {
+  opacity: 1;
 }
 
 /* --- Sidebar footer --- */
@@ -206,38 +217,103 @@ body {
    Login page
    ========================================================================== */
 
-.login-container {
+/* --- Hero login layout (Option C: full-bleed photo + floating form) --- */
+
+.login-hero {
+  display: grid;
+  grid-template-columns: 1fr 420px;
   min-height: 100vh;
+}
+
+/* Left panel: background photo + branding */
+.login-hero__left {
+  position: relative;
+  background: url('/login-bg.jpg') center/cover no-repeat;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--cms-sidebar-bg) 0%, #2c3e50 50%, var(--cms-primary) 100%);
+  align-items: flex-end;
+  padding: 3rem;
 }
 
-.login-card {
-  background: var(--cms-card-bg);
-  border-radius: var(--radius-lg);
-  padding: 2.5rem 2rem;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+.login-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(15, 28, 46, 0.85) 0%,
+    rgba(15, 28, 46, 0.35) 40%,
+    rgba(15, 28, 46, 0.1) 100%
+  );
 }
 
-.login-header {
-  text-align: center;
-  margin-bottom: 2rem;
+.login-hero__content {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
 }
 
-.login-header h1 {
-  font-size: 1.6rem;
-  color: var(--cms-primary);
-  margin-bottom: 0.3rem;
+.login-hero__logo {
+  max-width: 200px;
+  height: auto;
+  margin-bottom: 1.25rem;
+  filter: brightness(0) invert(1);
+}
+
+.login-hero__title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.15;
+  margin-bottom: 0.75rem;
   letter-spacing: -0.02em;
 }
 
-.login-header p {
+.login-hero__subtitle {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+  margin-bottom: 2rem;
+}
+
+.login-hero__footer {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 1rem;
+  line-height: 1.5;
+}
+
+/* Right panel: form */
+.login-hero__right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+  background: #fff;
+}
+
+.login-hero__form {
+  width: 100%;
+  max-width: 340px;
+}
+
+.login-hero__form-logo {
+  display: block;
+  max-width: 120px;
+  height: auto;
+  margin: 0 auto 1.5rem;
+}
+
+.login-hero__form h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.35rem;
+}
+
+.login-hero__form-sub {
   font-size: 0.85rem;
   color: var(--cms-text-light);
+  margin-bottom: 2rem;
 }
 
 .login-error {
@@ -252,7 +328,7 @@ body {
 
 .login-btn {
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.8rem;
   background: var(--cms-primary);
   color: #fff;
   border: none;
@@ -260,12 +336,83 @@ body {
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   transition: all var(--transition);
 }
 
-.login-btn:hover { background: var(--cms-primary-light); transform: translateY(-1px); }
-.login-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.login-btn:hover { background: var(--cms-primary-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26, 82, 118, 0.3); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* Responsive: stack on narrow screens */
+@media (max-width: 860px) {
+  .login-hero {
+    grid-template-columns: 1fr;
+    grid-template-rows: 280px 1fr;
+  }
+  .login-hero__left {
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .login-hero__title { font-size: 1.5rem; }
+  .login-hero__subtitle { display: none; }
+  .login-hero__footer { display: none; }
+}
+
+/* ==========================================================================
+   Skeleton loading
+   ========================================================================== */
+
+@keyframes skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--cms-border) 25%, #f0f2f5 50%, var(--cms-border) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-text {
+  height: 0.85rem;
+  margin-bottom: 0.5rem;
+  width: 80%;
+}
+
+.skeleton-text--short { width: 40%; }
+.skeleton-text--medium { width: 60%; }
+
+.skeleton-card {
+  height: 100px;
+  border-radius: var(--radius);
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-row > .skeleton {
+  flex: 1;
+  height: 90px;
+}
+
+.skeleton-table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.skeleton-table-row > .skeleton {
+  height: 1rem;
+}
 
 /* ==========================================================================
    Page header
@@ -491,6 +638,47 @@ body {
 .status-badge--revision { background: var(--status-revision); }
 .status-badge--archivado { background: var(--status-archivado); }
 
+/* Typology badges by grupo */
+.tipo-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.tipo-badge--alojamiento { background: #eaf2f8; color: #1a5276; }
+.tipo-badge--restauracion { background: #eafaf1; color: #1e8449; }
+.tipo-badge--recurso { background: #fef9e7; color: #b7950b; }
+.tipo-badge--evento { background: #f5eef8; color: #7d3c98; }
+.tipo-badge--transporte { background: #f0f3f4; color: #566573; }
+.tipo-badge--servicio { background: #fdf2e9; color: #ca6f1e; }
+.tipo-badge--general { background: #f0f3f4; color: #2c3e50; }
+
+/* Translate button (inline in form labels) */
+.translate-btn {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  margin-left: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #1abc9c;
+  background: rgba(26, 188, 156, 0.1);
+  border: 1px solid rgba(26, 188, 156, 0.3);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  vertical-align: middle;
+}
+.translate-btn:hover:not(:disabled) {
+  background: rgba(26, 188, 156, 0.2);
+  border-color: #1abc9c;
+}
+.translate-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ==========================================================================
    Pagination
    ========================================================================== */
@@ -693,9 +881,16 @@ body {
   border-radius: var(--radius);
   padding: 1.25rem;
   box-shadow: var(--cms-card-shadow);
-  transition: box-shadow var(--transition);
+  transition: box-shadow var(--transition), transform var(--transition);
+  border-top: 3px solid var(--cms-primary);
 }
-.stat-card:hover { box-shadow: var(--cms-card-shadow-hover); }
+.stat-card:hover { box-shadow: var(--cms-card-shadow-hover); transform: translateY(-2px); }
+.stat-card:nth-child(2) { border-top-color: #27ae60; }
+.stat-card:nth-child(3) { border-top-color: #3498db; }
+.stat-card:nth-child(4) { border-top-color: #f39c12; }
+.stat-card:nth-child(5) { border-top-color: #95a5a6; }
+.stat-card:nth-child(6) { border-top-color: #1abc9c; }
+.stat-card:nth-child(7) { border-top-color: #8e44ad; }
 
 .stat-card__label {
   font-size: 0.7rem;
@@ -708,7 +903,7 @@ body {
 .stat-card__value {
   font-size: 1.85rem;
   font-weight: 700;
-  color: var(--cms-primary);
+  color: var(--cms-text);
   letter-spacing: -0.02em;
 }
 
@@ -736,14 +931,15 @@ body {
   color: var(--cms-text);
 }
 .quality-bar__track {
-  height: 6px;
+  height: 8px;
   background: var(--cms-border);
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
 }
 .quality-bar__fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a5276, #1abc9c);
   transition: width 0.5s ease;
 }
 

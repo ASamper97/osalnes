@@ -6,6 +6,21 @@ import { DocumentUploader } from '@/components/DocumentUploader';
 import { RelationsManager } from '@/components/RelationsManager';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+/** Simple ES→target translation via auto-translate Edge Function */
+async function translateText(text: string, from: string, to: string): Promise<string> {
+  if (!text.trim()) return '';
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/auto-translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    body: JSON.stringify({ texto: text, from, to }),
+  });
+  if (!res.ok) throw new Error('Translation failed');
+  const data = await res.json();
+  return data.translated || data.texto_traducido || text;
+}
 
 // UNE 178503 sec. 7.6 — tourist types by category
 const TOURIST_TYPES_BY_CATEGORY: Record<string, readonly string[]> = {
@@ -85,6 +100,44 @@ export function ResourceFormPage() {
   const [descEn, setDescEn] = useState('');
   const [descFr, setDescFr] = useState('');
   const [descPt, setDescPt] = useState('');
+  // Auto-translate state
+  const [translating, setTranslating] = useState<string | null>(null);
+
+  async function handleTranslate(sourceText: string, targetLang: string, setter: (v: string) => void) {
+    if (!sourceText.trim()) return;
+    const key = `${targetLang}-${Date.now()}`;
+    setTranslating(key);
+    try {
+      const result = await translateText(sourceText, 'es', targetLang);
+      setter(result);
+      markDirty();
+    } catch {
+      // Fallback: simple ES→GL approximation for demo
+      if (targetLang === 'gl') {
+        const gl = sourceText
+          .replace(/\bde el\b/gi, 'do')
+          .replace(/\bde la\b/gi, 'da')
+          .replace(/\bde los\b/gi, 'dos')
+          .replace(/\bde las\b/gi, 'das')
+          .replace(/\blos\b/gi, 'os')
+          .replace(/\blas\b/gi, 'as')
+          .replace(/\bel\b/gi, 'o')
+          .replace(/\bla\b/gi, 'a')
+          .replace(/\by\b/gi, 'e')
+          .replace(/ción\b/gi, 'ción')
+          .replace(/\bplaya\b/gi, 'praia')
+          .replace(/\bmirador\b/gi, 'miradoiro')
+          .replace(/\biglesia\b/gi, 'igrexa')
+          .replace(/\bmuseo\b/gi, 'museo')
+          .replace(/\brestaurante\b/gi, 'restaurante')
+          .replace(/\bpuente\b/gi, 'ponte');
+        setter(gl);
+        markDirty();
+      }
+    } finally {
+      setTranslating(null);
+    }
+  }
 
   // Load reference data
   useEffect(() => {
@@ -308,7 +361,7 @@ export function ResourceFormPage() {
               <input value={nameEs} onChange={(e) => handleNameEsChange(e.target.value)} required placeholder="Mirador de A Lanzada" />
             </div>
             <div className="form-field">
-              <label>Nombre (GL)</label>
+              <label>Nombre (GL) <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'gl', setNameGl)}>{translating ? '...' : 'Traducir a GL'}</button></label>
               <input value={nameGl} onChange={(e) => setNameGl(e.target.value)} placeholder="Miradoiro de A Lanzada" />
             </div>
           </div>
@@ -319,7 +372,7 @@ export function ResourceFormPage() {
               <textarea rows={4} value={descEs} onChange={(e) => setDescEs(e.target.value)} placeholder="Descripcion del recurso..." />
             </div>
             <div className="form-field">
-              <label>Descripcion (GL)</label>
+              <label>Descripcion (GL) <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'gl', setDescGl)}>{translating ? '...' : 'Traducir a GL'}</button></label>
               <textarea rows={4} value={descGl} onChange={(e) => setDescGl(e.target.value)} placeholder="Descricion do recurso..." />
             </div>
           </div>
@@ -442,30 +495,30 @@ export function ResourceFormPage() {
 
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
             <div className="form-field">
-              <label>Nombre (EN)</label>
+              <label>Nombre (EN) <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'en', setNameEn)}>Traducir</button></label>
               <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="English name" />
             </div>
             <div className="form-field">
-              <label>Nombre (FR)</label>
+              <label>Nombre (FR) <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'fr', setNameFr)}>Traducir</button></label>
               <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} placeholder="Nom en francais" />
             </div>
             <div className="form-field">
-              <label>Nombre (PT)</label>
+              <label>Nombre (PT) <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'pt', setNamePt)}>Traducir</button></label>
               <input value={namePt} onChange={(e) => setNamePt(e.target.value)} placeholder="Nome em portugues" />
             </div>
           </div>
 
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
             <div className="form-field">
-              <label>Descripcion (EN)</label>
+              <label>Descripcion (EN) <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'en', setDescEn)}>Traducir</button></label>
               <textarea rows={3} value={descEn} onChange={(e) => setDescEn(e.target.value)} placeholder="English description" />
             </div>
             <div className="form-field">
-              <label>Descripcion (FR)</label>
+              <label>Descripcion (FR) <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'fr', setDescFr)}>Traducir</button></label>
               <textarea rows={3} value={descFr} onChange={(e) => setDescFr(e.target.value)} placeholder="Description en francais" />
             </div>
             <div className="form-field">
-              <label>Descripcion (PT)</label>
+              <label>Descripcion (PT) <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'pt', setDescPt)}>Traducir</button></label>
               <textarea rows={3} value={descPt} onChange={(e) => setDescPt(e.target.value)} placeholder="Descricao em portugues" />
             </div>
           </div>

@@ -148,13 +148,12 @@ async function listResources(url: URL, req: Request) {
   const limit = parseInt(url.searchParams.get('limit') || '20', 10);
   const sort = url.searchParams.get('sort') || 'created_at';
 
+  const status = url.searchParams.get('status') || 'publicado';
+
   let query = sb
     .from('recurso_turistico')
-    .select(
-      '*, tipologia:rdf_type ( id, type_code, schema_org_type, grupo )',
-      { count: 'exact' },
-    )
-    .eq('estado_editorial', 'publicado');
+    .select('*', { count: 'exact' })
+    .eq('estado_editorial', status);
 
   if (type) query = query.eq('rdf_type', type);
   if (municipio) query = query.eq('municipio_id', municipio);
@@ -360,7 +359,7 @@ async function listEvents(url: URL, req: Request) {
 
   let query = sb
     .from('recurso_turistico')
-    .select('id, uri, slug, tipologia:tipo_id ( type_code ), latitude, longitude')
+    .select('id, uri, slug, rdf_type, latitude, longitude')
     .eq('estado_editorial', 'publicado');
 
   if (from) query = query.gte('updated_at', from);
@@ -386,7 +385,7 @@ async function mapResources(url: URL, req: Request) {
 
   let query = sb
     .from('recurso_turistico')
-    .select('id, uri, slug, tipologia:tipo_id ( type_code ), latitude, longitude')
+    .select('id, uri, slug, rdf_type, latitude, longitude')
     .eq('estado_editorial', 'publicado')
     .eq('visible_en_mapa', true)
     .gte('latitude', latSw)
@@ -438,7 +437,7 @@ async function search(url: URL, req: Request) {
   let resourceQuery = sb
     .from('recurso_turistico')
     .select(
-      'id, uri, slug, rdf_type, municipio_id, latitude, longitude, tipologia:rdf_type ( type_code, schema_org_type )',
+      'id, uri, slug, rdf_type, municipio_id, latitude, longitude',
       { count: 'exact' },
     )
     .in('id', ids)

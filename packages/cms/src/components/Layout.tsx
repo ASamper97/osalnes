@@ -46,7 +46,7 @@ export function Layout() {
     <div className="cms-layout">
       <aside className="cms-sidebar">
         <div className="cms-sidebar-brand">
-          <div className="cms-sidebar-logo">O Salnes</div>
+          <img src="/logo-osalnes.png" alt="O Salnes" className="cms-sidebar-logo-img" />
           <div className="cms-sidebar-subtitle">DTI CMS</div>
         </div>
         <nav>

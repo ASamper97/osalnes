@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 30_000; // 30 seconds
+const LOCKOUT_MS = 30_000;
 
 export function LoginPage() {
   const { signIn, user } = useAuth();
@@ -15,7 +15,6 @@ export function LoginPage() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const attempts = useRef(0);
 
-  // If already logged in, redirect
   if (user) {
     navigate('/', { replace: true });
     return null;
@@ -43,7 +42,6 @@ export function LoginPage() {
         const until = Date.now() + LOCKOUT_MS;
         setLockedUntil(until);
         setError(`Demasiados intentos fallidos. Bloqueado durante ${LOCKOUT_MS / 1000} segundos.`);
-        // Auto-unlock after lockout period
         setTimeout(() => {
           setLockedUntil(null);
           attempts.current = 0;
@@ -60,49 +58,66 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <h1>DTI Salnes</h1>
-          <p>Panel de administracion</p>
+    <div className="login-hero">
+      {/* Left: branding over background photo */}
+      <div className="login-hero__left">
+        <div className="login-hero__overlay" />
+        <div className="login-hero__content">
+          <img src="/logo-osalnes.png" alt="O Salnes" className="login-hero__logo" />
+          <h1 className="login-hero__title">Destino Turistico Intelixente</h1>
+          <p className="login-hero__subtitle">
+            Plataforma de xestion de recursos turisticos da Mancomunidade de O Salnes
+          </p>
+          <div className="login-hero__footer">
+            Financiado por la Union Europea — NextGenerationEU (PRTR, Componente 14)
+          </div>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit}>
-          {error && <div className="login-error">{error}</div>}
+      {/* Right: login form */}
+      <div className="login-hero__right">
+        <div className="login-hero__form">
+          <img src="/logo-osalnes.png" alt="O Salnes" className="login-hero__form-logo" />
+          <h2>Acceso ao panel</h2>
+          <p className="login-hero__form-sub">Introduce as tuas credenciais para continuar</p>
 
-          <div className="form-field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@osalnes.gal"
-              required
-              autoFocus
-              disabled={isLocked}
-              autoComplete="email"
-            />
-          </div>
+          <form onSubmit={handleSubmit}>
+            {error && <div className="login-error">{error}</div>}
 
-          <div className="form-field">
-            <label htmlFor="password">Contrasena</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              disabled={isLocked}
-              autoComplete="current-password"
-            />
-          </div>
+            <div className="form-field">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@osalnes.gal"
+                required
+                autoFocus
+                disabled={isLocked}
+                autoComplete="email"
+              />
+            </div>
 
-          <button type="submit" className="login-btn" disabled={loading || isLocked}>
-            {isLocked ? 'Bloqueado' : loading ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
+            <div className="form-field">
+              <label htmlFor="password">Contrasinal</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                disabled={isLocked}
+                autoComplete="current-password"
+              />
+            </div>
+
+            <button type="submit" className="login-btn" disabled={loading || isLocked}>
+              {isLocked ? 'Bloqueado' : loading ? 'Entrando...' : 'Entrar'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

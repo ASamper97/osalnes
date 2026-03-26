@@ -54,6 +54,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // Direct translation mode: { texto, from, to }
+    const contentType = req.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body = await req.clone().json().catch(() => null);
+      if (body?.texto && body?.to) {
+        const translated = await translateText(body.texto, body.from || 'es', body.to);
+        return json({ translated, from: body.from || 'es', to: body.to, provider: PROVIDER }, 200, req);
+      }
+    }
     // 1. Fetch pending jobs (oldest first, limited to batch size)
     const { data: jobs, error } = await sb
       .from('translation_job')

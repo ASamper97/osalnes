@@ -33,6 +33,112 @@ Deno.serve(async (req: Request) => {
     const sb = getAdminClient();
 
     // ==================================================================
+    // Profile & Stats (required by CMS dashboard)
+    // ==================================================================
+
+    if (method === 'GET' && path === '/profile') {
+      return json({ id: user.id, email: user.email, role: user.role, active: user.active }, 200, req);
+    }
+
+    if (method === 'GET' && path === '/stats') {
+      // Resource counts by status
+      const [published, draft, review, archived, total] = await Promise.all([
+        sb.from('recurso_turistico').select('*', { count: 'exact', head: true }).eq('estado_editorial', 'publicado'),
+        sb.from('recurso_turistico').select('*', { count: 'exact', head: true }).eq('estado_editorial', 'borrador'),
+        sb.from('recurso_turistico').select('*', { count: 'exact', head: true }).eq('estado_editorial', 'revision'),
+        sb.from('recurso_turistico').select('*', { count: 'exact', head: true }).eq('estado_editorial', 'archivado'),
+        sb.from('recurso_turistico').select('*', { count: 'exact', head: true }),
+      ]);
+
+      const { count: muniCount } = await sb.from('municipio').select('*', { count: 'exact', head: true });
+      const { count: catCount } = await sb.from('categoria').select('*', { count: 'exact', head: true });
+
+      // Quality metrics
+      const { data: allRes } = await sb
+        .from('recurso_turistico')
+        .select('id, latitude, longitude')
+        .eq('estado_editorial', 'publicado');
+
+      const withCoords = (allRes || []).filter((r) => r.latitude && r.longitude).length;
+      const pubCount = published.count || 0;
+
+      // Resources by municipality
+      const { data: byMuni } = await sb
+        .from('recurso_turistico')
+        .select('municipio_id')
+        .eq('estado_editorial', 'publicado');
+
+      const muniDist: Record<string, number> = {};
+      for (const r of byMuni || []) {
+        muniDist[r.municipio_id] = (muniDist[r.municipio_id] || 0) + 1;
+      }
+
+      // Resources by type
+      const { data: byType } = await sb
+        .from('recurso_turistico')
+        .select('rdf_type')
+        .eq('estado_editorial', 'publicado');
+
+      const typeDist: Record<string, number> = {};
+      for (const r of byType || []) {
+        typeDist[r.rdf_type] = (typeDist[r.rdf_type] || 0) + 1;
+      }
+
+      // Municipality names for chart
+      const muniIds = Object.keys(muniDist);
+      const resourcesByMunicipio: { name: string; count: number }[] = [];
+      if (muniIds.length > 0) {
+        const { data: muniNames } = await sb
+          .from('traduccion')
+          .select('entidad_id, valor')
+          .eq('entidad_tipo', 'municipio')
+          .eq('campo', 'name')
+          .eq('idioma', 'es')
+          .in('entidad_id', muniIds);
+        const nameMap: Record<string, string> = {};
+        for (const m of muniNames || []) nameMap[m.entidad_id] = m.valor;
+        for (const [id, count] of Object.entries(muniDist)) {
+          resourcesByMunicipio.push({ name: nameMap[id] || id, count });
+        }
+        resourcesByMunicipio.sort((a, b) => b.count - a.count);
+      }
+
+      // Group by tipo (grupo)
+      const { data: tipoData } = await sb.from('tipologia').select('type_code, grupo');
+      const grupoMap: Record<string, string> = {};
+      for (const t of tipoData || []) grupoMap[t.type_code] = t.grupo;
+      const grupoDist: Record<string, number> = {};
+      for (const [type, count] of Object.entries(typeDist)) {
+        const grupo = grupoMap[type] || 'otro';
+        grupoDist[grupo] = (grupoDist[grupo] || 0) + count;
+      }
+      const resourcesByGroup = Object.entries(grupoDist).map(([grupo, count]) => ({ grupo, count }));
+
+      return json({
+        resources: {
+          total: total.count || 0,
+          published: pubCount,
+          draft: draft.count || 0,
+          review: review.count || 0,
+          archived: archived.count || 0,
+        },
+        municipalities: muniCount || 0,
+        categories: catCount || 0,
+        quality: {
+          withCoordinates: pubCount > 0 ? Math.round((withCoords / pubCount) * 100) : 0,
+          withImages: 0,
+          withDescription: 0,
+          translations: { es: 100, gl: 100, en: 0, fr: 0, pt: 0 },
+        },
+        alerts: [],
+        resourcesByMunicipio,
+        resourcesByGroup,
+        recentChanges: [],
+        lastExport: null,
+      }, 200, req);
+    }
+
+    // ==================================================================
     // CRUD Recursos
     // ==================================================================
 
