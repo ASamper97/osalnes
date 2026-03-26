@@ -65,6 +65,7 @@ export function ResourceFormPage() {
 
   // Form state
   const [rdfType, setRdfType] = useState('TouristAttraction');
+  const [rdfTypesSecondary, setRdfTypesSecondary] = useState<string[]>([]);
   const [slug, setSlug] = useState('');
   const [nameEs, setNameEs] = useState('');
   const [nameGl, setNameGl] = useState('');
@@ -154,6 +155,7 @@ export function ResourceFormPage() {
     api.getResource(id!)
       .then((r) => {
         setRdfType(r.rdfType || '');
+        setRdfTypesSecondary(r.rdfTypes || []);
         setSlug(r.slug || '');
         setNameEs(r.name?.es || '');
         setNameGl(r.name?.gl || '');
@@ -244,6 +246,7 @@ export function ResourceFormPage() {
 
     const body = {
       rdf_type: rdfType,
+      rdf_types: rdfTypesSecondary.filter((t) => t !== rdfType),
       slug,
       municipio_id: municipioId || null,
       zona_id: zonaId || null,
@@ -335,6 +338,31 @@ export function ResourceFormPage() {
                   </option>
                 ))}
               </select>
+              {/* Secondary typologies */}
+              <details style={{ marginTop: '0.5rem' }}>
+                <summary style={{ fontSize: '0.78rem', color: 'var(--cms-text-light)', cursor: 'pointer' }}>
+                  Tipologias secundarias ({rdfTypesSecondary.length})
+                </summary>
+                <div className="secondary-types-grid">
+                  {typologies.filter((t) => t.typeCode !== rdfType).map((t) => (
+                    <label key={t.typeCode} className="secondary-type-check">
+                      <input
+                        type="checkbox"
+                        checked={rdfTypesSecondary.includes(t.typeCode)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setRdfTypesSecondary((prev) => [...prev, t.typeCode]);
+                          } else {
+                            setRdfTypesSecondary((prev) => prev.filter((x) => x !== t.typeCode));
+                          }
+                          markDirty();
+                        }}
+                      />
+                      {t.name?.es || t.typeCode}
+                    </label>
+                  ))}
+                </div>
+              </details>
             </div>
 
             <div className="form-field">

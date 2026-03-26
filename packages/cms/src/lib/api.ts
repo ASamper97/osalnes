@@ -118,6 +118,7 @@ export interface ResourceSummary {
   id: string;
   uri: string;
   rdfType: string;
+  rdfTypes: string[];
   slug: string;
   name: LocalizedValue;
   description: LocalizedValue;
@@ -150,6 +151,7 @@ export interface ResourceSummary {
  */
 export interface ResourceInput {
   rdf_type: string;
+  rdf_types?: string[];
   slug: string;
   municipio_id?: string | null;
   zona_id?: string | null;
@@ -441,6 +443,9 @@ export const api = {
 
   deleteAsset: (id: string) =>
     adminFetch<DeleteResult>(`/assets/${id}`, { method: 'DELETE' }),
+
+  reorderAssets: (items: { id: string; orden: number }[]) =>
+    adminFetch<{ ok: boolean }>('/assets/reorder', { method: 'PATCH', body: JSON.stringify({ items }) }),
 
   // ---------------------------------------------------------------------------
   // Admin — Documents

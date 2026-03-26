@@ -271,6 +271,15 @@ Deno.serve(async (req: Request) => {
       return await deleteAsset(sb, assetId.id, req);
     }
 
+    if (method === 'PATCH' && path === '/assets/reorder') {
+      const { items } = await req.json();
+      if (!Array.isArray(items)) return json({ error: 'items array required' }, 400, req);
+      await Promise.all(items.map((item: { id: string; orden: number }) =>
+        sb.from('asset_multimedia').update({ orden: item.orden }).eq('id', item.id)
+      ));
+      return json({ ok: true }, 200, req);
+    }
+
     // ==================================================================
     // Categorías
     // ==================================================================
@@ -599,6 +608,7 @@ async function createResource(sb: any, input: any, req: Request) {
     .insert({
       uri,
       rdf_type: input.rdf_type,
+      rdf_types: input.rdf_types || [],
       slug: input.slug,
       municipio_id: input.municipio_id || null,
       zona_id: input.zona_id || null,
@@ -646,7 +656,7 @@ async function updateResource(sb: any, id: string, input: any, req: Request) {
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
 
   const fields = [
-    'rdf_type', 'municipio_id', 'zona_id', 'latitude', 'longitude',
+    'rdf_type', 'rdf_types', 'municipio_id', 'zona_id', 'latitude', 'longitude',
     'address_street', 'address_postal', 'telephone', 'email', 'url',
     'same_as', 'tourist_types', 'rating_value', 'serves_cuisine',
     'is_accessible_for_free', 'public_access', 'occupancy',
@@ -1719,7 +1729,7 @@ async function mapResourceRow(sb: any, row: Record<string, any>) {
     .eq('recurso_id', row.id);
 
   return {
-    id: row.id, uri: row.uri, rdfType: row.rdf_type, slug: row.slug,
+    id: row.id, uri: row.uri, rdfType: row.rdf_type, rdfTypes: row.rdf_types || [], slug: row.slug,
     name: translations.name || {}, description: translations.description || {},
     seoTitle: translations.seo_title || {}, seoDescription: translations.seo_description || {},
     location: {

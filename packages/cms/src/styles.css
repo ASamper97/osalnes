@@ -864,6 +864,50 @@ body {
 .media-item:hover .media-delete-btn { opacity: 1; }
 .media-delete-btn:hover { background: #c0392b; }
 
+.secondary-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: var(--cms-bg);
+  border-radius: var(--radius-sm);
+}
+
+.secondary-type-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.secondary-type-check input { margin: 0; }
+
+.media-item[draggable] { cursor: grab; }
+.media-item[draggable]:active { cursor: grabbing; }
+.media-item--dragging { opacity: 0.4; }
+.media-item--dragover { outline: 2px dashed #1abc9c; outline-offset: 2px; }
+
+.media-item__order {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
 /* ==========================================================================
    Dashboard
    ========================================================================== */
