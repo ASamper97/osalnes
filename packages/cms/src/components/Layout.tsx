@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
+import { CmsAssistant } from './CmsAssistant';
 
 type Role = 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
 
@@ -79,6 +80,7 @@ export function Layout() {
       <div className="cms-content">
         <Outlet />
       </div>
+      <CmsAssistant />
     </div>
   );
 }

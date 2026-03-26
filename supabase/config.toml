@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.auto-translate]
 verify_jwt = false
+
+[functions.cms-assistant]
+verify_jwt = false
