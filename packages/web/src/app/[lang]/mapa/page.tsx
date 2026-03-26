@@ -1,51 +1,48 @@
-import type { Metadata } from 'next';
-import nextDynamic from 'next/dynamic';
+'use client';
+
+import { useEffect, useState, Suspense } from 'react';
 import type { Locale } from '@/i18n/config';
-import { getDictionary } from '@/i18n/dictionaries';
-import { getTypologies, getMunicipalities } from '@/lib/api-client';
+import type { Typology, Municipality } from '@/lib/api-client';
 
-// Skip static prerendering — Leaflet requires browser APIs (window)
-export const dynamic = 'force-dynamic';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
-// Leaflet requires browser APIs — disable SSR
-const MapView = nextDynamic(() => import('@/components/MapView').then((m) => m.MapView), {
-  ssr: false,
-  loading: () => (
-    <div style={{ height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-alt)', borderRadius: 'var(--radius)' }}>
-      <p style={{ color: 'var(--color-muted)' }}>Cargando mapa...</p>
-    </div>
-  ),
-});
-
-export async function generateMetadata({ params }: { params: { lang: Locale } }): Promise<Metadata> {
-  const dict = await getDictionary(params.lang);
-  return { title: dict.map };
-}
-
-export default async function MapaPage({
+export default function MapaPage({
   params,
 }: {
   params: { lang: Locale };
 }) {
   const lang = params.lang;
-  const dict = await getDictionary(lang);
+  const [MapView, setMapView] = useState<any>(null);
+  const [typologies, setTypologies] = useState<Typology[]>([]);
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [dict, setDict] = useState<Record<string, string>>({});
 
-  const [typologies, municipalities] = await Promise.all([
-    getTypologies().catch(() => []),
-    getMunicipalities().catch(() => []),
-  ]);
+  useEffect(() => {
+    // Load map component dynamically (client-only)
+    import('@/components/MapView').then((m) => setMapView(() => m.MapView));
+    // Load data
+    fetch(`${API_BASE}/typologies`).then((r) => r.json()).then(setTypologies).catch(() => {});
+    fetch(`${API_BASE}/municipalities`).then((r) => r.json()).then(setMunicipalities).catch(() => {});
+    import(`@/i18n/dictionaries/${lang}.json`).then((m) => setDict(m.default));
+  }, [lang]);
 
   return (
     <>
       <h1 style={{ fontSize: '2rem', color: 'var(--color-primary)', marginBottom: '1rem' }}>
-        {dict.map}
+        {dict.map || 'Mapa'}
       </h1>
-      <MapView
-        lang={lang}
-        dict={dict}
-        typologies={typologies}
-        municipalities={municipalities}
-      />
+      {MapView ? (
+        <MapView
+          lang={lang}
+          dict={dict}
+          typologies={typologies}
+          municipalities={municipalities}
+        />
+      ) : (
+        <div style={{ height: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-alt)', borderRadius: '8px' }}>
+          <p style={{ color: 'var(--color-muted)' }}>Cargando mapa...</p>
+        </div>
+      )}
     </>
   );
 }
