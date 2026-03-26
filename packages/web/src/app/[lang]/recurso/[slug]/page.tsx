@@ -6,6 +6,8 @@ import { getDictionary } from '@/i18n/dictionaries';
 import { getResourceBySlug } from '@/lib/api-client';
 import { resourceJsonLd, breadcrumbJsonLd } from '@/lib/jsonld';
 
+export const runtime = 'edge';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 export async function generateStaticParams() {

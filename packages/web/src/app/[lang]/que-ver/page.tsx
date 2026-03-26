@@ -4,6 +4,8 @@ import { getDictionary } from '@/i18n/dictionaries';
 import { getResources, getTypologies, getMunicipalities } from '@/lib/api-client';
 import { ResourceList } from '@/components/ResourceList';
 
+export const runtime = 'edge';
+
 const QUE_VER_TYPES = [
   'LandmarksOrHistoricalBuildings', 'Museum', 'Church', 'Beach',
   'Park', 'NaturalAttraction', 'CivicStructure', 'Monument',

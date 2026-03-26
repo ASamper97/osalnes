@@ -4,6 +4,8 @@ import { getDictionary } from '@/i18n/dictionaries';
 import { getResources, getCategories, getMunicipalities, getEvents } from '@/lib/api-client';
 import { websiteJsonLd, destinationJsonLd } from '@/lib/jsonld';
 
+export const runtime = 'edge';
+
 export default async function HomePage({
   params,
 }: {

@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { locales } from '@/i18n/config';
 
+export const runtime = 'edge';
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://turismo.osalnes.gal';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 

@@ -6,6 +6,8 @@ import { Footer } from '@/components/ui/Footer';
 import { AssistantFAB } from '@/components/AssistantFAB';
 import './globals.css';
 
+export const runtime = 'edge';
+
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://turismo.osalnes.gal';
 
 export async function generateStaticParams() {

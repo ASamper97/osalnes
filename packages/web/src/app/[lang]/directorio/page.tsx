@@ -4,6 +4,8 @@ import { getDictionary } from '@/i18n/dictionaries';
 import { getResources, getTypologies, getMunicipalities } from '@/lib/api-client';
 import { ResourceList } from '@/components/ResourceList';
 
+export const runtime = 'edge';
+
 export async function generateMetadata({ params }: { params: { lang: Locale } }): Promise<Metadata> {
   const dict = await getDictionary(params.lang);
   return { title: dict.directory };

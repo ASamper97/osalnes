@@ -4,6 +4,8 @@ import type { Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { getEvents } from '@/lib/api-client';
 
+export const runtime = 'edge';
+
 export async function generateMetadata({ params }: { params: { lang: Locale } }): Promise<Metadata> {
   const dict = await getDictionary(params.lang);
   return { title: dict.agenda };
