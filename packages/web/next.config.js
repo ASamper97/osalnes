@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
+  trailingSlash: true,
+
   // Imágenes remotas desde CDN/Supabase Storage
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'http',

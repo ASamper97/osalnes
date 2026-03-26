@@ -1,10 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { Locale } from '@/i18n/config';
+import { locales, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
-import { getResourceBySlug } from '@/lib/api-client';
+import { getResources, getResourceBySlug } from '@/lib/api-client';
 import { resourceJsonLd, breadcrumbJsonLd } from '@/lib/jsonld';
+
+export async function generateStaticParams() {
+  const { items } = await getResources({ limit: 200, status: 'publicado' }).catch(() => ({ items: [] }));
+  const params: { lang: string; slug: string }[] = [];
+  for (const r of items) {
+    for (const lang of locales) {
+      params.push({ lang, slug: r.slug });
+    }
+  }
+  return params;
+}
 
 export async function generateMetadata({
   params,

@@ -34,7 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Dynamic resource pages
   try {
     const res = await fetch(`${API_BASE}/resources?status=publicado&limit=1000`, {
-      next: { revalidate: 3600 },
+      cache: 'no-store',
     });
     if (res.ok) {
       const data = await res.json();

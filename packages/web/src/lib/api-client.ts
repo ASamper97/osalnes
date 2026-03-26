@@ -40,9 +40,12 @@ export interface Resource {
   municipioId: string | null;
   contact: { telephone: string[]; email: string[]; url: string | null; sameAs: string[] };
   touristTypes: string[];
+  ratingValue: number | null;
+  servesCuisine: string[];
   openingHours: string | null;
   isAccessibleForFree: boolean | null;
   publicAccess: boolean | null;
+  occupancy: number | null;
   status: string;
   visibleOnMap: boolean;
   publishedAt: string | null;
