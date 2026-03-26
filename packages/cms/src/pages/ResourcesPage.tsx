@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem } from '@/lib/api';
 import { SkeletonTable } from '@/components/Skeleton';
+import { QrModal } from '@/components/QrModal';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -49,6 +50,7 @@ export function ResourcesPage() {
   const [searchName, setSearchName] = useState('');
   const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [qrResource, setQrResource] = useState<{ slug: string; name: string } | null>(null);
 
   const loadResources = useCallback(() => {
     const params: Record<string, string> = { page: String(page), limit: '20' };
@@ -193,6 +195,9 @@ export function ResourcesPage() {
                       <button className="btn btn-sm" onClick={() => navigate(`/resources/${r.id}`)} disabled={busyId === r.id}>
                         Editar
                       </button>
+                      <button className="btn btn-sm btn-outline" onClick={() => setQrResource({ slug: r.slug, name: r.name?.es || r.name?.gl || r.slug })} title="Generar QR">
+                        QR
+                      </button>
                       {(STATE_TRANSITIONS[r.status] || []).map((t) => (
                         <button
                           key={t.target}
@@ -222,6 +227,9 @@ export function ResourcesPage() {
             </div>
           )}
         </>
+      )}
+      {qrResource && (
+        <QrModal slug={qrResource.slug} name={qrResource.name} onClose={() => setQrResource(null)} />
       )}
     </div>
   );

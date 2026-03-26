@@ -67,7 +67,7 @@ export function CmsAssistant() {
       <button
         className="cms-ai-fab"
         onClick={() => setOpen(!open)}
-        title="Asistente IA"
+        title="ARIA"
       >
         {open ? '✕' : '✦'}
       </button>
@@ -77,16 +77,16 @@ export function CmsAssistant() {
         <div className="cms-ai-panel">
           <div className="cms-ai-header">
             <span className="cms-ai-header__dot" />
-            <strong>Asistente IA</strong>
-            <span style={{ fontSize: '0.7rem', color: 'var(--cms-text-light)' }}>Gemini</span>
+            <strong>ARIA</strong>
+            <span style={{ fontSize: '0.65rem', color: '#1abc9c', fontWeight: 500 }}>A Ria + IA</span>
           </div>
 
           <div className="cms-ai-messages" ref={scrollRef}>
             {messages.length === 0 && (
               <div className="cms-ai-welcome">
-                <p style={{ marginBottom: '0.75rem', fontWeight: 600 }}>Como podo axudarte?</p>
+                <p style={{ marginBottom: '0.5rem', fontWeight: 700, fontSize: '1.1rem' }}>Ola! Son ARIA</p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-light)', marginBottom: '1rem' }}>
-                  Podo escribir descricions, traducir, optimizar SEO ou responder preguntas.
+                  A tua asistente intelixente de O Salnes. Podo escribir descricions, traducir, optimizar SEO ou responder preguntas.
                 </p>
                 <div className="cms-ai-suggestions">
                   {SUGGESTIONS.map((s, i) => (
@@ -121,7 +121,7 @@ export function CmsAssistant() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Pregunta ao asistente..."
+              placeholder="Pregunta a ARIA..."
               disabled={loading}
               autoFocus
             />

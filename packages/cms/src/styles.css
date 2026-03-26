@@ -1076,6 +1076,75 @@ body {
 .quick-search__input:focus { border-color: var(--cms-primary); box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.1); }
 
 /* ==========================================================================
+   QR Code Modal
+   ========================================================================== */
+
+.qr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.qr-modal {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: 360px;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.qr-modal__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--cms-text-light);
+  padding: 0.25rem;
+}
+
+.qr-modal__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--cms-primary);
+  margin-bottom: 0.25rem;
+}
+
+.qr-modal__name {
+  font-size: 0.9rem;
+  color: var(--cms-text);
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.qr-modal__canvas {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.qr-modal__url {
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  word-break: break-all;
+  margin-bottom: 1.25rem;
+}
+
+.qr-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+/* ==========================================================================
    CMS AI Assistant
    ========================================================================== */
 
