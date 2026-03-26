@@ -280,6 +280,23 @@ export interface UserItem {
   created_at: string;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  entidad_tipo: string;
+  entidad_id: string;
+  accion: string;
+  usuario_id: string | null;
+  cambios: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ZoneItem {
+  id: string;
+  slug: string;
+  municipioId: string;
+  name: LocalizedValue;
+}
+
 export interface ProductItem {
   id: string;
   slug: string;
@@ -485,6 +502,22 @@ export const api = {
   // Admin — Products
   // ---------------------------------------------------------------------------
 
+  // Audit log
+  getAuditLog: (params?: { page?: number; entidad_tipo?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.entidad_tipo) qs.set('entidad_tipo', params.entidad_tipo);
+    const q = qs.toString();
+    return adminFetch<PaginatedResult<AuditLogEntry>>(`/audit${q ? `?${q}` : ''}`);
+  },
+
+  // Zones
+  getZones: (municipio?: string) => adminFetch<ZoneItem[]>(`/zones${municipio ? `?municipio=${municipio}` : ''}`),
+  createZone: (data: { slug: string; municipio_id: string; name: LocalizedValue }) => adminFetch<{ id: string }>('/zones', { method: 'POST', body: JSON.stringify(data) }),
+  updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue }>) => adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteZone: (id: string) => adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'DELETE' }),
+
+  // Products
   getProducts: () => adminFetch<ProductItem[]>('/products'),
 
   createProduct: (data: { slug: string; name: LocalizedValue }) =>

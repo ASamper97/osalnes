@@ -9,6 +9,8 @@ import { ResourcesPage } from './pages/ResourcesPage';
 import { ResourceFormPage } from './pages/ResourceFormPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { ZonesPage } from './pages/ZonesPage';
+import { AuditLogPage } from './pages/AuditLogPage';
 import { PagesPage } from './pages/PagesPage';
 import { NavigationPage } from './pages/NavigationPage';
 import { UsersPage } from './pages/UsersPage';
@@ -31,10 +33,12 @@ export function App() {
               <Route path="/resources/:id" element={<ErrorBoundary><ResourceFormPage /></ErrorBoundary>} />
               <Route path="/categories" element={<ErrorBoundary><CategoriesPage /></ErrorBoundary>} />
               <Route path="/products" element={<ErrorBoundary><ProductsPage /></ErrorBoundary>} />
+              <Route path="/zones" element={<ErrorBoundary><ZonesPage /></ErrorBoundary>} />
               <Route path="/pages" element={<ErrorBoundary><PagesPage /></ErrorBoundary>} />
               <Route path="/navigation" element={<ErrorBoundary><NavigationPage /></ErrorBoundary>} />
               <Route path="/exports" element={<ErrorBoundary><ExportsPage /></ErrorBoundary>} />
               <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
+              <Route path="/audit" element={<ErrorBoundary><AuditLogPage /></ErrorBoundary>} />
             </Route>
           </Route>
         </Routes>

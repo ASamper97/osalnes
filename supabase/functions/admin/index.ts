@@ -472,6 +472,86 @@ Deno.serve(async (req: Request) => {
     }
 
     // ==================================================================
+    // Audit log
+    // ==================================================================
+
+    if (method === 'GET' && path === '/audit') {
+      const page = parseInt(url.searchParams.get('page') || '1', 10);
+      const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+      const entidadTipo = url.searchParams.get('entidad_tipo') || undefined;
+      const offset = (page - 1) * limit;
+
+      let q = sb.from('log_cambios').select('*', { count: 'exact' }).order('created_at', { ascending: false });
+      if (entidadTipo) q = q.eq('entidad_tipo', entidadTipo);
+      const { data, error: err, count } = await q.range(offset, offset + limit - 1);
+      if (err) throw err;
+
+      return json({
+        items: data || [],
+        total: count || 0,
+        page,
+        limit,
+        pages: Math.ceil((count || 0) / limit),
+      }, 200, req);
+    }
+
+    // ==================================================================
+    // Zonas geográficas
+    // ==================================================================
+
+    if (method === 'GET' && path === '/zones') {
+      const municipio = url.searchParams.get('municipio') || undefined;
+      let q = sb.from('zona').select('id, slug, municipio_id').order('slug');
+      if (municipio) q = q.eq('municipio_id', municipio);
+      const { data, error: err } = await q;
+      if (err) throw err;
+      const items = await Promise.all((data || []).map(async (z) => ({
+        id: z.id,
+        slug: z.slug,
+        municipioId: z.municipio_id,
+        name: await getTranslatedField('zona', z.id, 'name'),
+      })));
+      return json(items, 200, req);
+    }
+
+    if (method === 'POST' && path === '/zones') {
+      const body = await req.json();
+      if (!body.slug || !body.municipio_id) return json({ error: 'slug and municipio_id required' }, 400, req);
+      const { data, error: err } = await sb.from('zona').insert({
+        slug: body.slug,
+        municipio_id: body.municipio_id,
+      }).select('id').single();
+      if (err) throw err;
+      if (body.name) {
+        await saveTranslations('zona', data.id, 'name', body.name);
+      }
+      return json({ id: data.id }, 201, req);
+    }
+
+    const zoneId = matchRoute('/zones/:id', path);
+
+    if (method === 'PUT' && zoneId) {
+      const body = await req.json();
+      const updates: Record<string, unknown> = {};
+      if (body.slug) updates.slug = body.slug;
+      if (body.municipio_id) updates.municipio_id = body.municipio_id;
+      if (Object.keys(updates).length > 0) {
+        const { error: err } = await sb.from('zona').update(updates).eq('id', zoneId.id);
+        if (err) throw err;
+      }
+      if (body.name) {
+        await saveTranslations('zona', zoneId.id, 'name', body.name);
+      }
+      return json({ ok: true }, 200, req);
+    }
+
+    if (method === 'DELETE' && zoneId) {
+      const { error: err } = await sb.from('zona').delete().eq('id', zoneId.id);
+      if (err) throw err;
+      return json({ ok: true }, 200, req);
+    }
+
+    // ==================================================================
     // Productos turísticos
     // ==================================================================
 

@@ -1,0 +1,192 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
+
+export function ZonesPage() {
+  const [zones, setZones] = useState<ZoneItem[]>([]);
+  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [editing, setEditing] = useState<string | null>(null);
+  const [slug, setSlug] = useState('');
+  const [municipioId, setMunicipioId] = useState('');
+  const [nameEs, setNameEs] = useState('');
+  const [nameGl, setNameGl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [filterMunicipio, setFilterMunicipio] = useState('');
+
+  async function load() {
+    try {
+      const [z, m] = await Promise.all([api.getZones(), api.getMunicipalities()]);
+      setZones(z);
+      setMunicipalities(m);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function resetForm() {
+    setEditing(null);
+    setSlug('');
+    setMunicipioId('');
+    setNameEs('');
+    setNameGl('');
+  }
+
+  function startEdit(z: ZoneItem) {
+    setEditing(z.id);
+    setSlug(z.slug);
+    setMunicipioId(z.municipioId);
+    setNameEs(z.name?.es || '');
+    setNameGl(z.name?.gl || '');
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!slug || !municipioId || !nameEs) return;
+    setSaving(true);
+    setError(null);
+
+    try {
+      const data = {
+        slug,
+        municipio_id: municipioId,
+        name: { es: nameEs, ...(nameGl && { gl: nameGl }) },
+      };
+
+      if (editing && editing !== 'new') {
+        await api.updateZone(editing, data);
+      } else {
+        await api.createZone(data);
+      }
+      resetForm();
+      await load();
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`Eliminar zona "${name}"? Los recursos vinculados perderan su zona.`)) return;
+    setBusyId(id);
+    try {
+      await api.deleteZone(id);
+      await load();
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function getMunicipioName(id: string) {
+    return municipalities.find((m) => m.id === id)?.name?.es || id;
+  }
+
+  const filtered = filterMunicipio
+    ? zones.filter((z) => z.municipioId === filterMunicipio)
+    : zones;
+
+  if (loading) return <div><h1>Zonas</h1><p style={{ color: 'var(--cms-text-light)' }}>Cargando...</p></div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>Zonas geograficas</h1>
+        <button className="btn btn-primary" onClick={() => { resetForm(); setEditing('new'); }}>
+          + Nueva zona
+        </button>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Filter */}
+      <div style={{ marginBottom: '1rem' }}>
+        <select value={filterMunicipio} onChange={(e) => setFilterMunicipio(e.target.value)}>
+          <option value="">Todos los municipios</option>
+          {municipalities.map((m) => (
+            <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Form */}
+      {editing && (
+        <form onSubmit={handleSubmit} className="inline-form" style={{ marginBottom: '1.5rem' }}>
+          <div className="form-row">
+            <div className="form-field">
+              <label>Slug *</label>
+              <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="centro-historico" required />
+            </div>
+            <div className="form-field">
+              <label>Municipio *</label>
+              <select value={municipioId} onChange={(e) => setMunicipioId(e.target.value)} required>
+                <option value="">Seleccionar...</option>
+                {municipalities.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-field">
+              <label>Nombre (ES) *</label>
+              <input value={nameEs} onChange={(e) => setNameEs(e.target.value)} placeholder="Centro historico" required />
+            </div>
+            <div className="form-field">
+              <label>Nombre (GL)</label>
+              <input value={nameGl} onChange={(e) => setNameGl(e.target.value)} placeholder="Centro historico" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Guardando...' : editing === 'new' ? 'Crear' : 'Guardar'}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={resetForm}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      {/* Table */}
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Slug</th>
+            <th>Nombre (ES)</th>
+            <th>Nombre (GL)</th>
+            <th>Municipio</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length === 0 && (
+            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin zonas{filterMunicipio ? ' en este municipio' : ''}</td></tr>
+          )}
+          {filtered.map((z) => (
+            <tr key={z.id}>
+              <td><code style={{ fontSize: '0.8rem' }}>{z.slug}</code></td>
+              <td>{z.name?.es || '-'}</td>
+              <td>{z.name?.gl || '-'}</td>
+              <td>{getMunicipioName(z.municipioId)}</td>
+              <td>
+                <div className="action-btns">
+                  <button className="btn btn-sm" onClick={() => startEdit(z)}>Editar</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(z.id, z.name?.es || z.slug)} disabled={busyId === z.id}>
+                    {busyId === z.id ? '...' : 'Eliminar'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

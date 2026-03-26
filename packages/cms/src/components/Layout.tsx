@@ -18,9 +18,11 @@ const navItems: NavItem[] = [
   { path: '/resources', label: 'Recursos', icon: '\u{1F3D6}\uFE0F', roles: ['admin', 'editor', 'validador', 'tecnico'] },
   { path: '/categories', label: 'Categorias', icon: '\u{1F4C1}', roles: ['admin'] },
   { path: '/products', label: 'Productos', icon: '\u{1F3AF}', roles: ['admin', 'editor'] },
+  { path: '/zones', label: 'Zonas', icon: '\u{1F4CD}', roles: ['admin', 'editor', 'tecnico'] },
   { path: '/pages', label: 'Paginas', icon: '\u{1F4C4}', roles: ['admin', 'editor'] },
   { path: '/navigation', label: 'Navegacion', icon: '\u2630\uFE0F', roles: ['admin'] },
   { path: '/exports', label: 'Exportaciones', icon: '\u{1F4E4}', roles: ['admin', 'tecnico'] },
+  { path: '/audit', label: 'Actividad', icon: '\u{1F4CB}', roles: ['admin', 'tecnico'] },
   { path: '/users', label: 'Usuarios', icon: '\u{1F465}', roles: ['admin'] },
 ];
 

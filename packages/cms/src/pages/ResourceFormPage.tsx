@@ -71,6 +71,8 @@ export function ResourceFormPage() {
   const [descEs, setDescEs] = useState('');
   const [descGl, setDescGl] = useState('');
   const [municipioId, setMunicipioId] = useState('');
+  const [zonaId, setZonaId] = useState('');
+  const [zones, setZones] = useState<{ id: string; slug: string; name: Record<string, string> }[]>([]);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [addressStreet, setAddressStreet] = useState('');
@@ -158,6 +160,7 @@ export function ResourceFormPage() {
         setDescEs(r.description?.es || '');
         setDescGl(r.description?.gl || '');
         setMunicipioId(r.municipioId || '');
+        setZonaId(r.zonaId || '');
         setLatitude(r.location?.latitude?.toString() || '');
         setLongitude(r.location?.longitude?.toString() || '');
         setAddressStreet(r.location?.streetAddress || '');
@@ -243,6 +246,7 @@ export function ResourceFormPage() {
       rdf_type: rdfType,
       slug,
       municipio_id: municipioId || null,
+      zona_id: zonaId || null,
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
       address_street: addressStreet || null,
@@ -340,14 +344,25 @@ export function ResourceFormPage() {
             </div>
           </div>
 
-          <div className="form-field">
-            <label>Municipio</label>
-            <select value={municipioId} onChange={(e) => setMunicipioId(e.target.value)}>
-              <option value="">-- Sin municipio --</option>
-              {municipalities.map((m) => (
-                <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
-              ))}
-            </select>
+          <div className="form-row">
+            <div className="form-field">
+              <label>Municipio</label>
+              <select value={municipioId} onChange={(e) => { setMunicipioId(e.target.value); setZonaId(''); if (e.target.value) { api.getZones(e.target.value).then(setZones).catch(() => setZones([])); } else { setZones([]); } }}>
+                <option value="">-- Sin municipio --</option>
+                {municipalities.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Zona</label>
+              <select value={zonaId} onChange={(e) => setZonaId(e.target.value)} disabled={!municipioId}>
+                <option value="">-- Sin zona --</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>{z.name?.es || z.slug}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </fieldset>
 
