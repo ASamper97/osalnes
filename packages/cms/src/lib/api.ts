@@ -143,6 +143,11 @@ export interface ResourceSummary {
   categoryIds: string[];
 }
 
+/**
+ * Input format for creating/updating resources.
+ * Uses snake_case to match database column names (what the admin API expects).
+ * Note: ResourceSummary (output) uses camelCase (mapped by the API).
+ */
 export interface ResourceInput {
   rdf_type: string;
   slug: string;
