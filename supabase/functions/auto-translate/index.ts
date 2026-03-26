@@ -167,6 +167,9 @@ Deno.serve(async (req: Request) => {
 // ---------------------------------------------------------------------------
 
 async function translateText(text: string, from: string, to: string): Promise<string> {
+  // Auto-detect: use Gemini if key available, otherwise fall to configured provider
+  const geminiKey = Deno.env.get('GEMINI_API_KEY');
+  if (geminiKey) return geminiTranslate(text, from, to, geminiKey);
   if (PROVIDER === 'mock') return mockTranslate(text, from, to);
   if (PROVIDER === 'libretranslate') return libreTranslate(text, from, to);
   if (PROVIDER === 'deepl') return deeplTranslate(text, from, to);
@@ -229,4 +232,34 @@ async function deeplTranslate(text: string, from: string, to: string): Promise<s
 
   const data = await res.json();
   return data.translations?.[0]?.text || '';
+}
+
+/** Gemini — Google AI translation (uses GEMINI_API_KEY secret) */
+async function geminiTranslate(text: string, from: string, to: string, apiKey: string): Promise<string> {
+  const langNames: Record<string, string> = {
+    es: 'Spanish', gl: 'Galician', en: 'English', fr: 'French', pt: 'Portuguese',
+  };
+  const fromLang = langNames[from] || from;
+  const toLang = langNames[to] || to;
+
+  const prompt = `Translate the following text from ${fromLang} to ${toLang}. Return ONLY the translated text, nothing else. Do not add quotes, explanations, or formatting.\n\nText: ${text}`;
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 512 },
+    }),
+  });
+
+  if (!res.ok) {
+    console.error('[auto-translate] Gemini error:', res.status);
+    // Fallback to mock if Gemini fails (rate limit, etc.)
+    return mockTranslate(text, from, to);
+  }
+
+  const data = await res.json();
+  const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  return translated || text;
 }

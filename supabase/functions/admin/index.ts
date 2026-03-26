@@ -744,6 +744,32 @@ async function updateResourceStatus(sb: any, id: string, newStatus: string, req:
     .single();
 
   if (error) throw { status: 400, message: error.message };
+
+  // Audit log (UNE 178502 trazabilidad)
+  sb.from('log_cambios').insert({
+    entidad_tipo: 'recurso_turistico',
+    entidad_id: id,
+    accion: newStatus === 'publicado' ? 'publicar' : newStatus === 'archivado' ? 'archivar' : 'modificar',
+    cambios: { from: current.estado_editorial, to: newStatus },
+  }).then(() => {}, () => {}); // fire and forget
+
+  // Optional webhook notification
+  const webhookUrl = Deno.env.get('WEBHOOK_STATUS_CHANGE');
+  if (webhookUrl && (newStatus === 'publicado' || newStatus === 'revision')) {
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'resource.status_changed',
+        resource_id: id,
+        slug: data.slug,
+        from_status: current.estado_editorial,
+        to_status: newStatus,
+        timestamp: new Date().toISOString(),
+      }),
+    }).catch(() => {}); // fire and forget
+  }
+
   return json(await mapResourceRow(sb, data), 200, req);
 }
 

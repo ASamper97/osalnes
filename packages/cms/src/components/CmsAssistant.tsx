@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -9,19 +10,48 @@ interface Message {
   content: string;
 }
 
-const SUGGESTIONS = [
-  'Escribe una descripcion turistica de una playa gallega',
-  'Traduce al gallego: "Restaurante con vistas al mar"',
-  'Sugiere un titulo SEO para un hotel en Sanxenxo',
+// Context-aware suggestions based on current page
+function getSuggestions(path: string): string[] {
+  if (path.includes('/resources/') && path !== '/resources/new') {
+    return [
+      'Mejora la descripcion de este recurso',
+      'Traduce el nombre y descripcion a gallego',
+      'Sugiere un titulo SEO optimizado',
+      'Que informacion le falta a este recurso?',
+    ];
+  }
+  if (path === '/resources/new') {
+    return [
+      'Escribe una descripcion turistica de una playa',
+      'Que campos son obligatorios para un recurso?',
+      'Sugiere tipos de turista para un restaurante',
+      'Ayudame a rellenar los datos de un hotel',
+    ];
+  }
+  if (path === '/' || path === '') {
+    return [
+      'Como puedo mejorar la calidad de los datos?',
+      'Que indicadores UNE 178502 debemos mejorar?',
+      'Cuantos recursos nos faltan por completar?',
+      'Sugiere contenido para atraer mas turistas',
+    ];
+  }
+  return [
+    'Escribe una descripcion turistica de una playa gallega',
+    'Traduce al gallego: "Restaurante con vistas al mar"',
+    'Sugiere un titulo SEO para un hotel en Sanxenxo',
   'Que informacion deberia tener un recurso turistico completo?',
-];
+  ];
+}
 
 export function CmsAssistant() {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const suggestions = getSuggestions(location.pathname);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -47,6 +77,7 @@ export function CmsAssistant() {
         },
         body: JSON.stringify({
           message: msg,
+          context: { page: location.pathname },
           history: messages.slice(-8),
         }),
       });
@@ -89,7 +120,7 @@ export function CmsAssistant() {
                   A tua asistente intelixente de O Salnes. Podo escribir descricions, traducir, optimizar SEO ou responder preguntas.
                 </p>
                 <div className="cms-ai-suggestions">
-                  {SUGGESTIONS.map((s, i) => (
+                  {suggestions.map((s, i) => (
                     <button key={i} className="cms-ai-suggestion" onClick={() => send(s)}>
                       {s}
                     </button>
