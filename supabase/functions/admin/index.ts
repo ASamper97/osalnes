@@ -53,14 +53,71 @@ Deno.serve(async (req: Request) => {
       const { count: muniCount } = await sb.from('municipio').select('*', { count: 'exact', head: true });
       const { count: catCount } = await sb.from('categoria').select('*', { count: 'exact', head: true });
 
-      // Quality metrics
+      // Quality metrics — fetch more fields for UNE 178502 indicators
       const { data: allRes } = await sb
         .from('recurso_turistico')
-        .select('id, latitude, longitude')
+        .select('id, latitude, longitude, updated_at')
         .eq('estado_editorial', 'publicado');
 
-      const withCoords = (allRes || []).filter((r) => r.latitude && r.longitude).length;
       const pubCount = published.count || 0;
+      const withCoords = (allRes || []).filter((r) => r.latitude && r.longitude).length;
+
+      // UNE 178502: descriptions completeness
+      const pubIds = (allRes || []).map((r) => r.id);
+      let withDesc = 0;
+      let translationCounts: Record<string, number> = { es: 0, gl: 0, en: 0, fr: 0, pt: 0 };
+      if (pubIds.length > 0) {
+        const { data: descTrans } = await sb
+          .from('traduccion')
+          .select('entidad_id, campo, idioma')
+          .eq('entidad_tipo', 'recurso_turistico')
+          .in('campo', ['description', 'name'])
+          .in('entidad_id', pubIds);
+        const descSet = new Set<string>();
+        const nameByLang: Record<string, Set<string>> = { es: new Set(), gl: new Set(), en: new Set(), fr: new Set(), pt: new Set() };
+        for (const t of descTrans || []) {
+          if (t.campo === 'description') descSet.add(t.entidad_id);
+          if (t.campo === 'name' && nameByLang[t.idioma]) nameByLang[t.idioma].add(t.entidad_id);
+        }
+        withDesc = descSet.size;
+        for (const lang of Object.keys(translationCounts)) {
+          translationCounts[lang] = pubCount > 0 ? Math.round((nameByLang[lang].size / pubCount) * 100) : 0;
+        }
+      }
+
+      // UNE 178502: images completeness
+      let withImages = 0;
+      if (pubIds.length > 0) {
+        const { data: imgData } = await sb
+          .from('asset_multimedia')
+          .select('entidad_id')
+          .eq('entidad_tipo', 'recurso_turistico')
+          .in('entidad_id', pubIds);
+        withImages = new Set((imgData || []).map((i) => i.entidad_id)).size;
+      }
+
+      // UNE 178502: freshness (updated in last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const updatedLast30 = (allRes || []).filter((r) => r.updated_at >= thirtyDaysAgo).length;
+      const updatedLast90 = (allRes || []).filter((r) => r.updated_at >= ninetyDaysAgo).length;
+
+      // UNE 178502: interoperability (exports)
+      const { data: exportJobs } = await sb
+        .from('export_job')
+        .select('estado')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const exportsOk = (exportJobs || []).filter((e) => e.estado === 'completado').length;
+      const exportsTotal = (exportJobs || []).length;
+
+      // Recent changes (trazabilidad UNE 178502 sec. 6.4)
+      const { data: recentLogs } = await sb
+        .from('log_cambios')
+        .select('id, entidad_tipo, entidad_id, accion, usuario_id, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
 
       // Resources by municipality
       const { data: byMuni } = await sb
@@ -114,6 +171,22 @@ Deno.serve(async (req: Request) => {
       }
       const resourcesByGroup = Object.entries(grupoDist).map(([grupo, count]) => ({ grupo, count }));
 
+      // Last export
+      const { data: lastExportData } = await sb
+        .from('export_job')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      // Build alerts
+      const alerts: { level: string; message: string }[] = [];
+      const coordPct = pubCount > 0 ? Math.round((withCoords / pubCount) * 100) : 0;
+      const descPct = pubCount > 0 ? Math.round((withDesc / pubCount) * 100) : 0;
+      const imgPct = pubCount > 0 ? Math.round((withImages / pubCount) * 100) : 0;
+      if (coordPct < 80) alerts.push({ level: 'warning', message: `Solo ${coordPct}% de recursos tienen coordenadas` });
+      if (imgPct < 50) alerts.push({ level: 'warning', message: `Solo ${imgPct}% de recursos tienen imagenes` });
+      if (descPct < 70) alerts.push({ level: 'info', message: `${descPct}% de recursos tienen descripcion` });
+
       return json({
         resources: {
           total: total.count || 0,
@@ -125,16 +198,29 @@ Deno.serve(async (req: Request) => {
         municipalities: muniCount || 0,
         categories: catCount || 0,
         quality: {
-          withCoordinates: pubCount > 0 ? Math.round((withCoords / pubCount) * 100) : 0,
-          withImages: 0,
-          withDescription: 0,
-          translations: { es: 100, gl: 100, en: 0, fr: 0, pt: 0 },
+          withCoordinates: coordPct,
+          withImages: imgPct,
+          withDescription: descPct,
+          translations: translationCounts,
         },
-        alerts: [],
+        une178502: {
+          digitalizacion: pubCount > 0 ? Math.round(((withCoords + withDesc + withImages) / (pubCount * 3)) * 100) : 0,
+          multilinguismo: pubCount > 0 ? Math.round(Object.values(translationCounts).reduce((a, b) => a + b, 0) / 5) : 0,
+          geolocalizacion: coordPct,
+          actualizacion30d: pubCount > 0 ? Math.round((updatedLast30 / pubCount) * 100) : 0,
+          actualizacion90d: pubCount > 0 ? Math.round((updatedLast90 / pubCount) * 100) : 0,
+          interoperabilidad: exportsTotal > 0 ? Math.round((exportsOk / exportsTotal) * 100) : 0,
+        },
+        alerts,
         resourcesByMunicipio,
         resourcesByGroup,
-        recentChanges: [],
-        lastExport: null,
+        recentChanges: (recentLogs || []).map((c) => ({
+          id: c.id,
+          entidad_tipo: c.entidad_tipo,
+          accion: c.accion,
+          created_at: c.created_at,
+        })),
+        lastExport: lastExportData?.[0] || null,
       }, 200, req);
     }
 

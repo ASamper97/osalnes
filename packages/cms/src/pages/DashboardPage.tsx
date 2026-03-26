@@ -79,9 +79,27 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* UNE 178502 sec. 6.5 — Data quality */}
+      {/* UNE 178502 — Indicadores del destino */}
+      {stats.une178502 && (
+        <div className="dashboard-section">
+          <h2>Indicadores UNE 178502</h2>
+          <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-light)', marginBottom: '1rem' }}>
+            Indicadores de madurez del Destino Turistico Intelixente
+          </p>
+          <div className="une-indicators">
+            <UneIndicator label="Indice de digitalizacion" value={stats.une178502.digitalizacion} desc="Recursos con coordenadas + descripcion + imagen" />
+            <UneIndicator label="Indice de multilinguismo" value={stats.une178502.multilinguismo} desc="Media de traducciones en 5 idiomas" />
+            <UneIndicator label="Indice de geolocalizacion" value={stats.une178502.geolocalizacion} desc="Recursos con coordenadas GPS" />
+            <UneIndicator label="Actualizacion (30 dias)" value={stats.une178502.actualizacion30d} desc="Recursos modificados ultimo mes" />
+            <UneIndicator label="Actualizacion (90 dias)" value={stats.une178502.actualizacion90d} desc="Recursos modificados ultimo trimestre" />
+            <UneIndicator label="Interoperabilidad PID" value={stats.une178502.interoperabilidad} desc="Exportaciones exitosas a SEGITTUR" />
+          </div>
+        </div>
+      )}
+
+      {/* Data quality detail */}
       <div className="dashboard-section">
-        <h2>Calidad del dato (UNE 178502 sec. 6.5)</h2>
+        <h2>Calidad del dato</h2>
         <div className="dashboard-grid dashboard-grid--2">
           <QualityBar label="Con coordenadas" percent={stats.quality.withCoordinates} />
           <QualityBar label="Con imagenes" percent={stats.quality.withImages} />
@@ -93,7 +111,7 @@ export function DashboardPage() {
         </h3>
         <div className="dashboard-grid dashboard-grid--2">
           {Object.entries(stats.quality.translations).map(([lang, pct]) => (
-            <QualityBar key={lang} label={LANG_LABELS[lang] || lang} percent={pct} />
+            <QualityBar key={lang} label={LANG_LABELS[lang] || lang} percent={pct as number} />
           ))}
         </div>
       </div>
@@ -227,6 +245,35 @@ function QualityBar({ label, percent }: { label: string; percent: number }) {
       </div>
       <div className="quality-bar__track">
         <div className="quality-bar__fill" style={{ width: `${percent}%`, background: barColor }} />
+      </div>
+    </div>
+  );
+}
+
+function UneIndicator({ label, value, desc }: { label: string; value: number; desc: string }) {
+  const color = value >= 80 ? '#27ae60' : value >= 50 ? '#f39c12' : '#e74c3c';
+  const grade = value >= 80 ? 'A' : value >= 60 ? 'B' : value >= 40 ? 'C' : 'D';
+  return (
+    <div className="une-indicator">
+      <div className="une-indicator__gauge">
+        <svg viewBox="0 0 36 36" className="une-indicator__circle">
+          <path
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none" stroke="#e5e8eb" strokeWidth="3"
+          />
+          <path
+            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none" stroke={color} strokeWidth="3"
+            strokeDasharray={`${value}, 100`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="une-indicator__value">{grade}</div>
+      </div>
+      <div className="une-indicator__text">
+        <div className="une-indicator__label">{label}</div>
+        <div className="une-indicator__pct" style={{ color }}>{value}%</div>
+        <div className="une-indicator__desc">{desc}</div>
       </div>
     </div>
   );
