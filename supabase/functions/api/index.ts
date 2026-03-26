@@ -149,6 +149,23 @@ async function listResources(url: URL, req: Request) {
   const sort = url.searchParams.get('sort') || 'created_at';
 
   const status = url.searchParams.get('status') || 'publicado';
+  const nameQuery = url.searchParams.get('q') || undefined;
+
+  // If searching by name, first find matching IDs from translations
+  let matchingIds: string[] | undefined;
+  if (nameQuery && nameQuery.length >= 2) {
+    const { data: tData } = await sb
+      .from('traduccion')
+      .select('entidad_id')
+      .eq('entidad_tipo', 'recurso_turistico')
+      .eq('campo', 'name')
+      .ilike('valor', `%${nameQuery}%`)
+      .limit(100);
+    matchingIds = [...new Set((tData || []).map((r) => r.entidad_id))];
+    if (matchingIds.length === 0) {
+      return json({ items: [], total: 0, page, limit, pages: 0 }, 200, req);
+    }
+  }
 
   let query = sb
     .from('recurso_turistico')
@@ -157,6 +174,7 @@ async function listResources(url: URL, req: Request) {
 
   if (type) query = query.eq('rdf_type', type);
   if (municipio) query = query.eq('municipio_id', municipio);
+  if (matchingIds) query = query.in('id', matchingIds);
 
   const offset = (page - 1) * limit;
   const orderCol = sort === 'updated' ? 'updated_at' : 'created_at';

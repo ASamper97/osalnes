@@ -99,8 +99,16 @@ export interface DashboardStats {
     withDescription: number;
     translations: Record<string, number>;
   };
-  alerts: { level: 'warning' | 'error'; message: string }[];
-  resourcesByMunicipio: { id: string; slug: string; count: number }[];
+  une178502?: {
+    digitalizacion: number;
+    multilinguismo: number;
+    geolocalizacion: number;
+    actualizacion30d: number;
+    actualizacion90d: number;
+    interoperabilidad: number;
+  };
+  alerts: { level: 'warning' | 'error' | 'info'; message: string }[];
+  resourcesByMunicipio: { id?: string; slug?: string; name?: string; count: number }[];
   resourcesByGroup: { grupo: string; count: number }[];
   recentChanges: { id: string; entidad_tipo: string; entidad_id: string; accion: string; usuario_id: string; created_at: string }[];
   lastExport: { id: string; tipo: string; estado: string; registros_ok: number; registros_err: number; created_at: string; completed_at: string | null } | null;

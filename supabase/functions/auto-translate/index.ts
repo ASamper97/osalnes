@@ -24,8 +24,10 @@ const API_KEY = Deno.env.get('TRANSLATE_API_KEY') || '';
 const BATCH_SIZE = parseInt(Deno.env.get('TRANSLATE_BATCH_SIZE') || '20');
 
 // Language code mapping for external APIs
+// Note: GL (Galician) maps to 'gl' natively. For APIs without GL support,
+// PT (Portuguese) is the closest approximation but should be marked for review.
 const LANG_MAP: Record<string, string> = {
-  es: 'es', gl: 'pt', en: 'en', fr: 'fr', pt: 'pt',
+  es: 'es', gl: 'gl', en: 'en', fr: 'fr', pt: 'pt',
 };
 
 Deno.serve(async (req: Request) => {
