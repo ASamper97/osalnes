@@ -5,16 +5,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v
 
 interface FetchOptions {
   lang?: string;
-  revalidate?: number;
 }
 
 async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
   const url = new URL(`${API_BASE}${path}`);
   if (opts.lang) url.searchParams.set('lang', opts.lang);
 
-  const res = await fetch(url.toString(), {
-    next: { revalidate: opts.revalidate ?? 60 },
-  });
+  const res = await fetch(url.toString(), { cache: 'no-store' });
 
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${path}`);

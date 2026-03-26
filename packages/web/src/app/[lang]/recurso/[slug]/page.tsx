@@ -3,18 +3,29 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
-import { getResources, getResourceBySlug } from '@/lib/api-client';
+import { getResourceBySlug } from '@/lib/api-client';
 import { resourceJsonLd, breadcrumbJsonLd } from '@/lib/jsonld';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
 export async function generateStaticParams() {
-  const { items } = await getResources({ limit: 200, status: 'publicado' }).catch(() => ({ items: [] }));
-  const params: { lang: string; slug: string }[] = [];
-  for (const r of items) {
-    for (const lang of locales) {
-      params.push({ lang, slug: r.slug });
-    }
+  try {
+    const res = await fetch(`${API_BASE}/resources?limit=200&status=publicado`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items: { slug: string }[] = data.items || [];
+    return items.flatMap((r) => locales.map((lang) => ({ lang, slug: r.slug })));
+  } catch {
+    // Fallback: demo resources so build never fails
+    const slugs = [
+      'praia-a-lanzada', 'praia-areas', 'praia-da-barrosa', 'praia-o-vao',
+      'parador-de-cambados', 'hotel-spa-nanin-playa', 'camping-paisaxe',
+      'restaurante-yayo-daporta', 'restaurante-d-berto', 'marisqueria-pepe-vieira',
+      'pazo-de-fefinans', 'illa-de-arousa-ponte', 'torre-de-san-sadurnino',
+      'mirador-da-siradella', 'festa-do-albarino',
+    ];
+    return slugs.flatMap((slug) => locales.map((lang) => ({ lang, slug })));
   }
-  return params;
 }
 
 export async function generateMetadata({
