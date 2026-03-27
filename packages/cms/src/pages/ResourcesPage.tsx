@@ -35,7 +35,7 @@ const TIPO_GRUPO: Record<string, string> = {
 const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?: string }[]> = {
   borrador:  [{ target: 'revision', label: 'Enviar a revision' }, { target: 'archivado', label: 'Archivar', style: 'btn-danger' }],
   revision:  [{ target: 'publicado', label: 'Publicar', style: 'btn-primary' }, { target: 'borrador', label: 'Devolver a borrador' }],
-  publicado: [{ target: 'archivado', label: 'Archivar' }, { target: 'borrador', label: 'Despublicar' }],
+  publicado: [{ target: 'archivado', label: 'Archivar' }],
   archivado: [{ target: 'borrador', label: 'Reactivar' }],
 };
 

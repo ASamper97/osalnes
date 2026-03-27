@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?: string }[]> = {
   borrador:  [{ target: 'revision', label: 'Enviar a revision' }],
   revision:  [{ target: 'publicado', label: 'Publicar', style: 'btn-primary' }, { target: 'borrador', label: 'Devolver' }],
-  publicado: [{ target: 'archivado', label: 'Archivar' }, { target: 'borrador', label: 'Despublicar' }],
+  publicado: [{ target: 'archivado', label: 'Archivar' }],
   archivado: [{ target: 'borrador', label: 'Reactivar' }],
 };
 
