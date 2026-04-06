@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type PageItem } from '@/lib/api';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const TEMPLATES = ['default', 'landing', 'info', 'experiencia'];
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 
 export function PagesPage() {
+  const navigate = useNavigate();
   const [pages, setPages] = useState<PageItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -151,6 +153,9 @@ export function PagesPage() {
     <div>
       <div className="page-header">
         <h1>Paginas editoriales</h1>
+        <div className="page-header__actions">
+          <button className="btn btn-primary" onClick={() => navigate('/pages/new')}>+ Nueva pagina (asistente)</button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
@@ -270,7 +275,8 @@ export function PagesPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(p.id)} disabled={busyId === p.id}>Editar</button>
+                  <button className="btn btn-sm" onClick={() => navigate(`/pages/${p.id}/edit`)} disabled={busyId === p.id}>Editar</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => startEdit(p.id)} disabled={busyId === p.id}>Edicion rapida</button>
                   {p.status === 'publicado' && (
                     <a href={`${WEB_BASE}/es/${p.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline">Ver</a>
                   )}
