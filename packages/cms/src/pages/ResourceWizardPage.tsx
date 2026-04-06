@@ -5,6 +5,10 @@ import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } fr
 import { MediaUploader } from '@/components/MediaUploader';
 import { DocumentUploader } from '@/components/DocumentUploader';
 import { RelationsManager } from '@/components/RelationsManager';
+import { AiWritingAssistant } from '@/components/AiWritingAssistant';
+import { AiSeoGenerator } from '@/components/AiSeoGenerator';
+import { AiQualityScore } from '@/components/AiQualityScore';
+import type { SeoResult } from '@/lib/ai';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -559,6 +563,17 @@ export function ResourceWizardPage() {
                 {descEs.split(/\s+/).filter(Boolean).length} palabras
               </span>
             </div>
+            <AiWritingAssistant
+              text={descEs}
+              lang="es"
+              onAccept={(t) => { setDescEs(t); markDirty(); }}
+              translationTargets={[
+                { lang: 'gl', label: 'Gallego', onAccept: (t) => { setDescGl(t); markDirty(); } },
+                { lang: 'en', label: 'Ingles', onAccept: (t) => { setDescEn(t); markDirty(); } },
+                { lang: 'fr', label: 'Frances', onAccept: (t) => { setDescFr(t); markDirty(); } },
+                { lang: 'pt', label: 'Portugues', onAccept: (t) => { setDescPt(t); markDirty(); } },
+              ]}
+            />
           </WizardFieldGroup>
 
           <WizardFieldGroup
@@ -810,6 +825,20 @@ export function ResourceWizardPage() {
           ================================================================ */}
       {currentStep === 5 && (
         <>
+          <AiSeoGenerator
+            name={nameEs}
+            description={descEs}
+            type={currentTypology?.name?.es || rdfType}
+            municipality={municipalities.find((m) => m.id === municipioId)?.name?.es || ''}
+            onApply={(seo: SeoResult) => {
+              setSeoTitleEs(seo.title_es);
+              setSeoTitleGl(seo.title_gl);
+              setSeoDescEs(seo.desc_es);
+              setSeoDescGl(seo.desc_gl);
+              markDirty();
+            }}
+          />
+
           <WizardFieldGroup
             title="SEO — Titulo y descripcion para buscadores"
             description="Estos textos aparecen en los resultados de Google. Un buen SEO atrae mas visitantes."
@@ -899,6 +928,18 @@ export function ResourceWizardPage() {
           STEP 7 — Revision final
           ================================================================ */}
       {currentStep === 6 && (
+        <>
+        <AiQualityScore
+          resourceData={{
+            nameEs, nameGl, descEs, descGl, rdfType,
+            latitude, longitude, telephone, email, url,
+            seoTitleEs, seoDescEs, nameEn, nameFr, namePt,
+            touristTypes, selectedCategories,
+            municipio: municipalities.find((m) => m.id === municipioId)?.name?.es || '',
+            hasMedia: !!savedId,
+          }}
+          onApplyTouristTypes={(types) => { setTouristTypes(types); markDirty(); }}
+        />
         <div className="wizard__completion-grid">
           <WizardCompletionCard
             title="Identificacion"
@@ -971,6 +1012,7 @@ export function ResourceWizardPage() {
             ]}
           />
         </div>
+        </>
       )}
     </Wizard>
   );

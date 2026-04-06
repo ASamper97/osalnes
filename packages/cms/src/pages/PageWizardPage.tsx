@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type PageItem } from '@/lib/api';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
+import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -265,6 +266,14 @@ export function PageWizardPage() {
               <textarea rows={10} value={bodyEs} onChange={(e) => setBodyEs(e.target.value)} placeholder="Escribe aqui el contenido de la pagina..." />
               <span className="field-hint">{bodyEs.split(/\s+/).filter(Boolean).length} palabras</span>
             </div>
+            <AiWritingAssistant
+              text={bodyEs}
+              lang="es"
+              onAccept={(t) => setBodyEs(t)}
+              translationTargets={[
+                { lang: 'gl', label: 'Gallego', onAccept: (t) => setBodyGl(t) },
+              ]}
+            />
           </WizardFieldGroup>
 
           <WizardFieldGroup
