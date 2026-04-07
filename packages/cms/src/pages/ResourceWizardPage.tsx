@@ -11,6 +11,8 @@ import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { TemplateSelector } from '@/components/TemplateSelector';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
+import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 
@@ -80,6 +82,11 @@ export function ResourceWizardPage() {
   const [activeTemplate, setActiveTemplate] = useState<ResourceTemplate | null>(null);
   // Live preview panel
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Editorial state
+  const [editorialStatus, setEditorialStatus] = useState<EditorialState>('borrador');
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  // Forces ActivityTimeline to refetch after a status transition
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
   // ── Form state ──────────────────────────────────────────────
   // Step 1: Identificacion
@@ -135,6 +142,20 @@ export function ResourceWizardPage() {
   // ── Helpers ──────────────────────────────────────────────────
 
   function markDirty() { dirty.current = true; }
+
+  /** Editorial state transition handler */
+  async function handleStatusTransition(newStatus: EditorialState) {
+    if (!savedId) return;
+    setError(null);
+    try {
+      const updated = await api.updateResourceStatus(savedId, newStatus);
+      setEditorialStatus((updated.status as EditorialState) || newStatus);
+      setPublishedAt(updated.publishedAt || null);
+      setActivityRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    }
+  }
 
   /** Apply a template's defaults to the wizard state. Optionally enrich with imported data. */
   function applyTemplate(template: ResourceTemplate, imported?: ImportedResource) {
@@ -260,6 +281,8 @@ export function ResourceWizardPage() {
         setDescFr(r.description?.fr || '');
         setDescPt(r.description?.pt || '');
         setSavedId(r.id);
+        setEditorialStatus((r.status as EditorialState) || 'borrador');
+        setPublishedAt(r.publishedAt || null);
         setLoading(false);
       })
       .catch((err) => { setError(err.message); setLoading(false); });
@@ -488,6 +511,16 @@ export function ResourceWizardPage() {
     >
       {error && (
         <div className="alert alert-error" style={{ whiteSpace: 'pre-line', marginBottom: '1rem' }}>{error}</div>
+      )}
+
+      {/* Editorial status bar — only when editing existing resource */}
+      {!isNew && savedId && (
+        <EditorialStatusBar
+          currentStatus={editorialStatus}
+          publishedAt={publishedAt}
+          onTransition={handleStatusTransition}
+          disabled={saving}
+        />
       )}
 
       {/* ================================================================
@@ -1084,6 +1117,17 @@ export function ResourceWizardPage() {
             ]}
           />
         </div>
+
+        {/* Activity timeline — only for existing resources */}
+        {!isNew && savedId && (
+          <div style={{ marginTop: '1.25rem' }}>
+            <ActivityTimeline
+              key={activityRefreshKey}
+              entidadTipo="recurso_turistico"
+              entidadId={savedId}
+            />
+          </div>
+        )}
         </>
       )}
     </Wizard>

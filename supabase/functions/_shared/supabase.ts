@@ -3,7 +3,7 @@
  * Environment variables SUPABASE_URL, SUPABASE_ANON_KEY, and
  * SUPABASE_SERVICE_ROLE_KEY are automatically injected by Supabase.
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 let _admin: SupabaseClient | null = null;
 

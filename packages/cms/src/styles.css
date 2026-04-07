@@ -3055,6 +3055,266 @@ body {
   font-size: 1rem;
 }
 
+/* ==========================================================================
+   EditorialStatusBar — Flujo editorial visual (Kanban horizontal)
+   ========================================================================== */
+
+.editorial-bar {
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--cms-card-shadow);
+}
+
+.editorial-bar__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.editorial-bar__label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cms-text-light);
+}
+
+.editorial-bar__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+  margin-top: 0.15rem;
+}
+
+.editorial-bar__desc {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  margin-top: 0.15rem;
+}
+
+.editorial-bar__published {
+  font-size: 0.74rem;
+  color: var(--status-publicado);
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
+
+.editorial-bar__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+/* Kanban flow */
+
+.editorial-bar__flow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  position: relative;
+}
+
+.editorial-bar__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0.4rem;
+  border: 1.5px solid var(--cms-border);
+  border-radius: var(--radius);
+  background: var(--cms-bg);
+  text-align: center;
+  position: relative;
+  transition: all var(--transition);
+}
+
+.editorial-bar__step::after {
+  content: '→';
+  position: absolute;
+  right: -0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cms-text-light);
+  font-size: 0.95rem;
+  font-weight: 700;
+  z-index: 2;
+}
+
+.editorial-bar__step:last-child::after {
+  display: none;
+}
+
+.editorial-bar__step--past {
+  border-color: var(--status-publicado);
+  background: rgba(39, 174, 96, 0.06);
+}
+
+.editorial-bar__step--past .editorial-bar__step-label {
+  color: var(--status-publicado);
+}
+
+.editorial-bar__step--current {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-subtle);
+  box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.12);
+  transform: scale(1.03);
+}
+
+.editorial-bar__step--current .editorial-bar__step-label {
+  color: var(--cms-primary);
+  font-weight: 700;
+}
+
+.editorial-bar__step--muted {
+  opacity: 0.4;
+}
+
+.editorial-bar__step-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.editorial-bar__step-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cms-text-light);
+}
+
+@media (max-width: 700px) {
+  .editorial-bar__header {
+    flex-direction: column;
+  }
+  .editorial-bar__step::after {
+    display: none;
+  }
+  .editorial-bar__step-label {
+    display: none;
+  }
+  .editorial-bar__flow {
+    gap: 0.3rem;
+  }
+}
+
+/* ==========================================================================
+   ActivityTimeline — Historial vertical de cambios
+   ========================================================================== */
+
+.activity-timeline {
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--cms-card-shadow);
+}
+
+.activity-timeline__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.85rem;
+  letter-spacing: -0.01em;
+}
+
+.activity-timeline__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+.activity-timeline__list::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: var(--cms-border);
+}
+
+.activity-timeline__item {
+  display: flex;
+  gap: 0.85rem;
+  padding-bottom: 0.85rem;
+  position: relative;
+}
+
+.activity-timeline__item:last-child {
+  padding-bottom: 0;
+}
+
+.activity-timeline__dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  border: 2px solid var(--cms-card-bg);
+  box-shadow: 0 0 0 1px var(--cms-border);
+}
+
+.activity-timeline__dot span {
+  font-size: 0.78rem;
+  filter: grayscale(0) brightness(2);
+}
+
+.activity-timeline__content {
+  flex: 1;
+  padding-top: 0.2rem;
+}
+
+.activity-timeline__action {
+  font-size: 0.85rem;
+  color: var(--cms-text);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.activity-timeline__meta {
+  font-size: 0.72rem;
+  color: var(--cms-text-light);
+  margin-top: 0.15rem;
+}
+
+.activity-timeline__more {
+  margin-top: 0.85rem;
+  width: 100%;
+}
+
+.activity-timeline--loading,
+.activity-timeline--empty {
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--cms-text-light);
+}
+
+.activity-timeline--empty span {
+  display: block;
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.5;
+}
+
 /* Responsive */
 
 @media (max-width: 700px) {

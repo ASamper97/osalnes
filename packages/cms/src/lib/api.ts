@@ -508,10 +508,11 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   // Audit log
-  getAuditLog: (params?: { page?: number; entidad_tipo?: string }) => {
+  getAuditLog: (params?: { page?: number; entidad_tipo?: string; entidad_id?: string }) => {
     const qs = new URLSearchParams();
     if (params?.page) qs.set('page', String(params.page));
     if (params?.entidad_tipo) qs.set('entidad_tipo', params.entidad_tipo);
+    if (params?.entidad_id) qs.set('entidad_id', params.entidad_id);
     const q = qs.toString();
     return adminFetch<PaginatedResult<AuditLogEntry>>(`/audit${q ? `?${q}` : ''}`);
   },

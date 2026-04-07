@@ -488,10 +488,12 @@ Deno.serve(async (req: Request) => {
       const page = parseInt(url.searchParams.get('page') || '1', 10);
       const limit = parseInt(url.searchParams.get('limit') || '50', 10);
       const entidadTipo = url.searchParams.get('entidad_tipo') || undefined;
+      const entidadId = url.searchParams.get('entidad_id') || undefined;
       const offset = (page - 1) * limit;
 
       let q = sb.from('log_cambios').select('*', { count: 'exact' }).order('created_at', { ascending: false });
       if (entidadTipo) q = q.eq('entidad_tipo', entidadTipo);
+      if (entidadId) q = q.eq('entidad_id', entidadId);
       const { data, error: err, count } = await q.range(offset, offset + limit - 1);
       if (err) throw err;
 
