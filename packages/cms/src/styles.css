@@ -2302,4 +2302,195 @@ body {
   font-weight: 600;
 }
 
+/* ==========================================================================
+   RichTextEditor (TipTap) — Editor WYSIWYG
+   ========================================================================== */
+
+.rte {
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius);
+  background: var(--cms-card-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+
+.rte:focus-within {
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.1);
+}
+
+/* --- Toolbar --- */
+
+.rte__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.5rem;
+  background: #f8f9fb;
+  border-bottom: 1px solid var(--cms-border);
+  flex-wrap: wrap;
+}
+
+.rte__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--cms-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all var(--transition);
+}
+
+.rte__btn:hover:not(:disabled) {
+  background: var(--cms-card-bg);
+  border-color: var(--cms-border);
+}
+
+.rte__btn--active {
+  background: var(--cms-primary-subtle);
+  color: var(--cms-primary);
+  border-color: rgba(26, 82, 118, 0.2);
+}
+
+.rte__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rte__btn--ai {
+  background: rgba(142, 68, 173, 0.06);
+  color: #8e44ad;
+  border-color: rgba(142, 68, 173, 0.2);
+  padding: 0 0.7rem;
+  font-size: 0.74rem;
+  margin-left: auto;
+}
+
+.rte__btn--ai:hover:not(:disabled) {
+  background: rgba(142, 68, 173, 0.12);
+  border-color: rgba(142, 68, 173, 0.4);
+}
+
+.rte__sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--cms-border);
+  margin: 0 0.25rem;
+}
+
+.rte__toolbar-spacer {
+  flex: 1;
+}
+
+/* --- Content area --- */
+
+.rte__content {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--cms-text);
+  overflow-y: auto;
+}
+
+.rte__content .ProseMirror {
+  outline: none;
+  min-height: 120px;
+}
+
+.rte__content .ProseMirror p {
+  margin: 0 0 0.6rem 0;
+}
+
+.rte__content .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
+.rte__content .ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+}
+
+.rte__content .ProseMirror h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.85rem 0 0.4rem;
+  color: var(--cms-text);
+}
+
+.rte__content .ProseMirror ul,
+.rte__content .ProseMirror ol {
+  padding-left: 1.5rem;
+  margin: 0 0 0.6rem 0;
+}
+
+.rte__content .ProseMirror li {
+  margin-bottom: 0.2rem;
+}
+
+.rte__content .ProseMirror blockquote {
+  border-left: 3px solid var(--cms-primary);
+  padding-left: 0.85rem;
+  margin: 0.6rem 0;
+  font-style: italic;
+  color: var(--cms-text-light);
+}
+
+.rte__content .ProseMirror a,
+.rte__content .ProseMirror .rte-link {
+  color: var(--cms-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.rte__content .ProseMirror strong {
+  font-weight: 700;
+}
+
+/* Placeholder */
+.rte__content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--cms-text-light);
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+
+/* --- Footer --- */
+
+.rte__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: #fafbfc;
+  border-top: 1px solid var(--cms-border);
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+}
+
+.rte__count {
+  font-weight: 500;
+}
+
+.rte__error {
+  color: #c0392b;
+  font-weight: 600;
+}
+
 

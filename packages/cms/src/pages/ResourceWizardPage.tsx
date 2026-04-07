@@ -8,6 +8,7 @@ import { RelationsManager } from '@/components/RelationsManager';
 import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 import { AiSeoGenerator } from '@/components/AiSeoGenerator';
 import { AiQualityScore } from '@/components/AiQualityScore';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import type { SeoResult } from '@/lib/ai';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
@@ -550,19 +551,14 @@ export function ResourceWizardPage() {
           <WizardFieldGroup
             title="Descripcion en castellano"
             description="Describe el recurso de forma atractiva e informativa. Esta es la descripcion principal que veran los visitantes."
-            tip="Una buena descripcion tiene entre 100 y 300 palabras, menciona lo que hace unico al recurso y da informacion practica."
+            tip="Una buena descripcion tiene entre 100 y 300 palabras, menciona lo que hace unico al recurso y da informacion practica. Usa los botones de la barra superior para dar formato (negrita, listas, titulos...) y el boton 'Mejorar con IA' para que la IA reescriba el texto."
           >
-            <div className="form-field">
-              <textarea
-                rows={6}
-                value={descEs}
-                onChange={(e) => { setDescEs(e.target.value); markDirty(); }}
-                placeholder="Describe el recurso: que es, que lo hace especial, que puede encontrar el visitante..."
-              />
-              <span className="field-hint">
-                {descEs.split(/\s+/).filter(Boolean).length} palabras
-              </span>
-            </div>
+            <RichTextEditor
+              value={descEs}
+              onChange={(html) => { setDescEs(html); markDirty(); }}
+              placeholder="Describe el recurso: que es, que lo hace especial, que puede encontrar el visitante..."
+              minHeight={220}
+            />
             <AiWritingAssistant
               text={descEs}
               lang="es"
@@ -580,27 +576,22 @@ export function ResourceWizardPage() {
             title="Descripcion en gallego"
             description="Traduce o adapta la descripcion al gallego. Puedes usar el boton de traduccion automatica como punto de partida."
           >
-            <div className="form-field">
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.35rem' }}>
-                <button
-                  type="button"
-                  className="translate-btn"
-                  disabled={!descEs || !!translating}
-                  onClick={() => handleTranslate(descEs, 'gl', setDescGl)}
-                >
-                  {translating ? 'Traduciendo...' : 'Traducir automaticamente a GL'}
-                </button>
-              </div>
-              <textarea
-                rows={6}
-                value={descGl}
-                onChange={(e) => { setDescGl(e.target.value); markDirty(); }}
-                placeholder="Descricion do recurso en galego..."
-              />
-              <span className="field-hint">
-                {descGl.split(/\s+/).filter(Boolean).length} palabras
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.35rem' }}>
+              <button
+                type="button"
+                className="translate-btn"
+                disabled={!descEs || !!translating}
+                onClick={() => handleTranslate(descEs, 'gl', setDescGl)}
+              >
+                {translating ? 'Traduciendo...' : 'Traducir automaticamente a GL'}
+              </button>
             </div>
+            <RichTextEditor
+              value={descGl}
+              onChange={(html) => { setDescGl(html); markDirty(); }}
+              placeholder="Descricion do recurso en galego..."
+              minHeight={220}
+            />
           </WizardFieldGroup>
 
           <WizardFieldGroup title="Opciones de visibilidad">

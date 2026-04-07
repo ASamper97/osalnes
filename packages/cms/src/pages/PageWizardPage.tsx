@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, type PageItem } from '@/lib/api';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
 import { AiWritingAssistant } from '@/components/AiWritingAssistant';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -259,13 +260,15 @@ export function PageWizardPage() {
         <>
           <WizardFieldGroup
             title="Contenido en castellano"
-            description="El cuerpo principal de la pagina. Puedes usar HTML basico para dar formato."
-            tip="Estructura el contenido con parrafos claros. Usa encabezados (<h2>, <h3>) para organizar secciones largas."
+            description="El cuerpo principal de la pagina. Usa la barra superior para dar formato."
+            tip="Estructura el contenido con parrafos claros. Usa encabezados H2 y H3 para organizar secciones largas. Pulsa 'Mejorar con IA' para reescribir el texto."
           >
-            <div className="form-field">
-              <textarea rows={10} value={bodyEs} onChange={(e) => setBodyEs(e.target.value)} placeholder="Escribe aqui el contenido de la pagina..." />
-              <span className="field-hint">{bodyEs.split(/\s+/).filter(Boolean).length} palabras</span>
-            </div>
+            <RichTextEditor
+              value={bodyEs}
+              onChange={(html) => setBodyEs(html)}
+              placeholder="Escribe aqui el contenido de la pagina..."
+              minHeight={300}
+            />
             <AiWritingAssistant
               text={bodyEs}
               lang="es"
@@ -290,10 +293,12 @@ export function PageWizardPage() {
                 {translating ? 'Traduciendo...' : 'Traducir automaticamente a GL'}
               </button>
             </div>
-            <div className="form-field">
-              <textarea rows={10} value={bodyGl} onChange={(e) => setBodyGl(e.target.value)} placeholder="Contido en galego..." />
-              <span className="field-hint">{bodyGl.split(/\s+/).filter(Boolean).length} palabras</span>
-            </div>
+            <RichTextEditor
+              value={bodyGl}
+              onChange={(html) => setBodyGl(html)}
+              placeholder="Contido en galego..."
+              minHeight={300}
+            />
           </WizardFieldGroup>
         </>
       )}
