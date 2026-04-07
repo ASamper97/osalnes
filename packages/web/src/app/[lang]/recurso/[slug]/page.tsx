@@ -101,11 +101,13 @@ export default async function RecursoDetailPage({
         )}
       </div>
 
-      {/* Description */}
+      {/* Description — supports HTML from TipTap editor (with fallback to plain text) */}
       <div className="resource-detail__desc">
-        {description.split('\n').map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
+        {/<[a-z][\s\S]*>/i.test(description) ? (
+          <div dangerouslySetInnerHTML={{ __html: description }} />
+        ) : (
+          description.split('\n').map((p, i) => <p key={i}>{p}</p>)
+        )}
       </div>
 
       {/* Info grid */}
