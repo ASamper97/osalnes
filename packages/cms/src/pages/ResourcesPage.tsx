@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem } from '@/lib/api';
 import { SkeletonTable } from '@/components/Skeleton';
 import { QrModal } from '@/components/QrModal';
+import { BulkAiActions } from '@/components/BulkAiActions';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -51,6 +52,22 @@ export function ResourcesPage() {
   const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [qrResource, setQrResource] = useState<{ slug: string; name: string } | null>(null);
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   const loadResources = useCallback(() => {
     const params: Record<string, string> = { page: String(page), limit: '20' };
@@ -109,6 +126,21 @@ export function ResourcesPage() {
     );
   }, [resources, searchName]);
 
+  const visibleAllSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+
+  function toggleSelectAllVisible() {
+    const visibleIds = filtered.map((r) => r.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (visibleAllSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -160,6 +192,14 @@ export function ResourcesPage() {
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '32px' }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleAllSelected}
+                    onChange={toggleSelectAllVisible}
+                    aria-label="Seleccionar todos los visibles"
+                  />
+                </th>
                 <th>Nombre</th>
                 <th>Tipologia</th>
                 <th>Estado</th>
@@ -169,10 +209,18 @@ export function ResourcesPage() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin recursos</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin recursos</td></tr>
               )}
               {filtered.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={selectedIds.has(r.id) ? 'data-table__row--selected' : ''}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                      aria-label={`Seleccionar ${r.name?.es || r.slug}`}
+                    />
+                  </td>
                   <td>
                     <strong>{r.name?.es || r.name?.gl || r.slug}</strong>
                     <br />
@@ -230,6 +278,40 @@ export function ResourcesPage() {
       )}
       {qrResource && (
         <QrModal slug={qrResource.slug} name={qrResource.name} onClose={() => setQrResource(null)} />
+      )}
+
+      {/* Floating selection bar — visible when there are selected resources */}
+      {selectedIds.size > 0 && (
+        <div className="bulk-selection-bar">
+          <span className="bulk-selection-bar__count">
+            <strong>{selectedIds.size}</strong> {selectedIds.size === 1 ? 'recurso seleccionado' : 'recursos seleccionados'}
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => setBulkOpen(true)}
+          >
+            ✨ Acciones IA en lote
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={clearSelection}
+          >
+            Deseleccionar
+          </button>
+        </div>
+      )}
+
+      {bulkOpen && (
+        <BulkAiActions
+          selectedIds={Array.from(selectedIds)}
+          onClose={() => setBulkOpen(false)}
+          onComplete={() => {
+            clearSelection();
+            loadResources();
+          }}
+        />
       )}
     </div>
   );
