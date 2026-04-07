@@ -1,5 +1,6 @@
 /**
  * AI Batch — Supabase Edge Function
+ * Auto-deployed via GitHub Actions (deploy-functions.yml)
  *
  * Procesa multiples recursos turisticos en lote con acciones de IA.
  * Acciones disponibles:
