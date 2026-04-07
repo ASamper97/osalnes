@@ -10,6 +10,7 @@ import { AiSeoGenerator } from '@/components/AiSeoGenerator';
 import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { TemplateSelector } from '@/components/TemplateSelector';
+import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 
@@ -77,6 +78,8 @@ export function ResourceWizardPage() {
   // Template selector — only shown for new resources before the wizard starts
   const [templateApplied, setTemplateApplied] = useState(!isNew);
   const [activeTemplate, setActiveTemplate] = useState<ResourceTemplate | null>(null);
+  // Live preview panel
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // ── Form state ──────────────────────────────────────────────
   // Step 1: Identificacion
@@ -442,7 +445,31 @@ export function ResourceWizardPage() {
     );
   }
 
+  // Get typology group for the preview badge
+  const typologyGroup = currentTypology?.grupo;
+
+  // Build preview data from current form state
+  const previewData = {
+    name: nameEs,
+    type: currentTypology?.name?.es || rdfType,
+    typeGroup: typologyGroup,
+    description: descEs,
+    municipio: municipalities.find((m) => m.id === municipioId)?.name?.es,
+    address: addressStreet,
+    postalCode: addressPostal,
+    telephone,
+    email,
+    url,
+    openingHours,
+    ratingValue,
+    cuisine: servesCuisine,
+    isAccessibleForFree,
+    latitude,
+    longitude,
+  };
+
   return (
+    <>
     <Wizard
       steps={steps}
       currentStep={currentStep}
@@ -1060,5 +1087,24 @@ export function ResourceWizardPage() {
         </>
       )}
     </Wizard>
+
+    {/* Floating preview button */}
+    <button
+      type="button"
+      className="preview-fab"
+      onClick={() => setPreviewOpen(true)}
+      title="Ver vista previa de como queda en la web"
+    >
+      <span className="preview-fab__icon">👁</span>
+      Vista previa
+    </button>
+
+    {/* Live preview panel */}
+    <LivePreviewPanel
+      open={previewOpen}
+      onClose={() => setPreviewOpen(false)}
+      data={previewData}
+    />
+    </>
   );
 }
