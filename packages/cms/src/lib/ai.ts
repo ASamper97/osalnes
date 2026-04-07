@@ -6,6 +6,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 const AI_URL = `${SUPABASE_URL}/functions/v1/ai-writer`;
+const IMPORT_URL = `${SUPABASE_URL}/functions/v1/import-from-url`;
 
 interface AiRequestBase {
   action: string;
@@ -146,4 +147,42 @@ export async function aiCategorize(context: {
   }
 
   return { tourist_types: [], reasoning: '' };
+}
+
+/** Import resource data from an external URL using AI */
+export interface ImportedResource {
+  name?: string;
+  rdf_type?: string;
+  description?: string;
+  address?: string;
+  postal_code?: string;
+  telephone?: string[];
+  email?: string[];
+  url?: string;
+  opening_hours?: string;
+  latitude?: number;
+  longitude?: number;
+  tourist_types?: string[];
+  rating_value?: number;
+  cuisine?: string[];
+  extracted_from?: string;
+}
+
+export async function aiImportFromUrl(url: string): Promise<ImportedResource> {
+  const res = await fetch(IMPORT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Error de conexion con IA' }));
+    throw new Error(err.error || `Error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.result || {};
 }

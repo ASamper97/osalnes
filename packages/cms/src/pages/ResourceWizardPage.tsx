@@ -9,7 +9,9 @@ import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 import { AiSeoGenerator } from '@/components/AiSeoGenerator';
 import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
-import type { SeoResult } from '@/lib/ai';
+import { TemplateSelector } from '@/components/TemplateSelector';
+import type { SeoResult, ImportedResource } from '@/lib/ai';
+import type { ResourceTemplate } from '@/data/resource-templates';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -72,6 +74,9 @@ export function ResourceWizardPage() {
   const [savedId, setSavedId] = useState<string | null>(id || null);
   const dirty = useRef(false);
   const [translating, setTranslating] = useState<string | null>(null);
+  // Template selector — only shown for new resources before the wizard starts
+  const [templateApplied, setTemplateApplied] = useState(!isNew);
+  const [activeTemplate, setActiveTemplate] = useState<ResourceTemplate | null>(null);
 
   // ── Form state ──────────────────────────────────────────────
   // Step 1: Identificacion
@@ -127,6 +132,43 @@ export function ResourceWizardPage() {
   // ── Helpers ──────────────────────────────────────────────────
 
   function markDirty() { dirty.current = true; }
+
+  /** Apply a template's defaults to the wizard state. Optionally enrich with imported data. */
+  function applyTemplate(template: ResourceTemplate, imported?: ImportedResource) {
+    setActiveTemplate(template);
+
+    // 1. rdfType from template (or from imported data if available)
+    setRdfType(imported?.rdf_type || template.rdfType);
+
+    // 2. Smart defaults from template
+    if (template.defaults.isAccessibleForFree !== undefined) setIsAccessibleForFree(template.defaults.isAccessibleForFree);
+    if (template.defaults.publicAccess !== undefined) setPublicAccess(template.defaults.publicAccess);
+    if (template.defaults.visibleOnMap !== undefined) setVisibleOnMap(template.defaults.visibleOnMap);
+    if (template.defaults.touristTypes) setTouristTypes([...template.defaults.touristTypes]);
+
+    // 3. Override with imported data when present
+    if (imported) {
+      if (imported.name) {
+        setNameEs(imported.name);
+        setSlug(slugify(imported.name));
+      }
+      if (imported.description) setDescEs(`<p>${imported.description.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`);
+      if (imported.address) setAddressStreet(imported.address);
+      if (imported.postal_code) setAddressPostal(imported.postal_code);
+      if (imported.telephone?.length) setTelephone(imported.telephone.join(', '));
+      if (imported.email?.length) setEmail(imported.email.join(', '));
+      if (imported.url) setUrl(imported.url);
+      if (imported.opening_hours) setOpeningHours(imported.opening_hours);
+      if (imported.latitude !== undefined && imported.latitude !== null) setLatitude(imported.latitude.toString());
+      if (imported.longitude !== undefined && imported.longitude !== null) setLongitude(imported.longitude.toString());
+      if (imported.rating_value) setRatingValue(imported.rating_value.toString());
+      if (imported.cuisine?.length) setServesCuisine(imported.cuisine.join(', '));
+      if (imported.tourist_types?.length) setTouristTypes(imported.tourist_types);
+    }
+
+    setTemplateApplied(true);
+    markDirty();
+  }
 
   async function handleTranslate(sourceText: string, targetLang: string, setter: (v: string) => void) {
     if (!sourceText.trim()) return;
@@ -390,6 +432,16 @@ export function ResourceWizardPage() {
 
   if (loading) return <p>Cargando recurso...</p>;
 
+  // Show TemplateSelector before the wizard for new resources
+  if (isNew && !templateApplied) {
+    return (
+      <TemplateSelector
+        onSelect={applyTemplate}
+        onCancel={() => navigate('/resources')}
+      />
+    );
+  }
+
   return (
     <Wizard
       steps={steps}
@@ -399,7 +451,9 @@ export function ResourceWizardPage() {
       saving={saving}
       title={isNew ? 'Nuevo recurso turistico' : 'Editar recurso'}
       subtitle={isNew
-        ? 'Te guiamos paso a paso para crear un recurso completo y bien documentado'
+        ? activeTemplate
+          ? `${activeTemplate.icon} Plantilla: ${activeTemplate.name} — ${activeTemplate.description}`
+          : 'Te guiamos paso a paso para crear un recurso completo y bien documentado'
         : `Editando: ${nameEs || slug}`
       }
       finishLabel={isNew ? 'Crear recurso' : 'Guardar cambios'}
