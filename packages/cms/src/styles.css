@@ -1937,6 +1937,167 @@ body {
   pointer-events: none;
 }
 
+/* ==========================================================================
+   UsersPage — Role cards selector
+   ========================================================================== */
+
+.users-form {
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--cms-card-shadow);
+}
+
+.users-form__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.users-role-section {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cms-border);
+}
+
+.users-role-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.25rem;
+}
+
+.users-role-hint {
+  font-size: 0.8rem;
+  color: var(--cms-text-light);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.users-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.role-card {
+  --role-color: var(--cms-primary);
+  background: var(--cms-card-bg);
+  border: 1.5px solid var(--cms-border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all var(--transition);
+  position: relative;
+  border-top: 3px solid var(--role-color);
+}
+
+.role-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.08);
+  border-color: var(--role-color);
+}
+
+.role-card--active {
+  border-color: var(--role-color);
+  background: color-mix(in srgb, var(--role-color) 6%, var(--cms-card-bg));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role-color) 15%, transparent);
+}
+
+.role-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.role-card__icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.role-card__header strong {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--cms-text);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.role-card__short {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--cms-text-light);
+  font-weight: 500;
+  margin-top: 0.1rem;
+}
+
+.role-card__check {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--role-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.role-card__permissions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.role-card__perm--yes,
+.role-card__perm--no {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.role-card__perm--yes {
+  color: var(--cms-text);
+}
+
+.role-card__perm--no {
+  color: var(--cms-text-light);
+  font-style: italic;
+}
+
+.users-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  background: var(--cms-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
 @media (max-width: 700px) {
   .onboarding-tour__tooltip {
     width: calc(100vw - 24px);

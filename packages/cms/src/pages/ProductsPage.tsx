@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type ProductItem } from '@/lib/api';
 
 export function ProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +100,11 @@ export function ProductsPage() {
     <div>
       <div className="page-header">
         <h1>Productos turisticos</h1>
+        <div className="page-header__actions">
+          <button className="btn btn-primary" onClick={() => navigate('/products/new')}>
+            + Nuevo producto (asistente)
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
@@ -193,7 +200,8 @@ export function ProductsPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(p)} disabled={busyId === p.id}>Editar</button>
+                  <button className="btn btn-sm" onClick={() => navigate(`/products/${p.id}/edit`)} disabled={busyId === p.id}>Editar</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => startEdit(p)} disabled={busyId === p.id}>Edicion rapida</button>
                   <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id, p.name?.es || p.slug)} disabled={busyId === p.id}>
                     {busyId === p.id ? '...' : 'Eliminar'}
                   </button>

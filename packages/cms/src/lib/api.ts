@@ -527,10 +527,10 @@ export const api = {
   // Products
   getProducts: () => adminFetch<ProductItem[]>('/products'),
 
-  createProduct: (data: { slug: string; name: LocalizedValue }) =>
+  createProduct: (data: { slug: string; name: LocalizedValue; description?: LocalizedValue; activo?: boolean }) =>
     adminFetch<ProductItem>('/products', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateProduct: (id: string, data: Partial<{ slug: string; name: LocalizedValue; activo: boolean }>) =>
+  updateProduct: (id: string, data: Partial<{ slug: string; name: LocalizedValue; description: LocalizedValue; activo: boolean }>) =>
     adminFetch<ProductItem>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteProduct: (id: string) =>

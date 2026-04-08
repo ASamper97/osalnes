@@ -1,12 +1,91 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type UserItem } from '@/lib/api';
 
-const ROLES = [
-  { value: 'admin', label: 'Administrador' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'validador', label: 'Validador' },
-  { value: 'tecnico', label: 'Tecnico' },
-  { value: 'analitica', label: 'Analitica' },
+/**
+ * UsersPage — Gestion de usuarios con selector de rol explicativo
+ *
+ * En lugar de un dropdown opaco "Rol", el usuario ve 5 cards visuales
+ * con descripcion clara de que puede y que no puede hacer cada rol.
+ */
+
+interface RoleDef {
+  value: string;
+  label: string;
+  icon: string;
+  short: string;
+  permissions: string[];
+  color: string;
+}
+
+const ROLES: RoleDef[] = [
+  {
+    value: 'admin',
+    label: 'Administrador',
+    icon: '👑',
+    short: 'Acceso completo al CMS',
+    permissions: [
+      'Crear, editar y eliminar todo',
+      'Gestionar usuarios y roles',
+      'Configurar navegacion del portal',
+      'Ejecutar exportaciones a SEGITTUR',
+      'Ver auditoria completa',
+    ],
+    color: '#1a5276',
+  },
+  {
+    value: 'editor',
+    label: 'Editor',
+    icon: '✏️',
+    short: 'Crea y edita contenido',
+    permissions: [
+      'Crear y editar recursos turisticos',
+      'Subir multimedia y documentos',
+      'Crear paginas editoriales',
+      'Enviar a revision',
+      'NO puede publicar directamente',
+    ],
+    color: '#27ae60',
+  },
+  {
+    value: 'validador',
+    label: 'Validador',
+    icon: '✅',
+    short: 'Aprueba y publica',
+    permissions: [
+      'Revisar contenido pendiente',
+      'Aprobar y publicar recursos',
+      'Devolver a borrador con comentarios',
+      'NO puede crear contenido nuevo',
+    ],
+    color: '#3498db',
+  },
+  {
+    value: 'tecnico',
+    label: 'Tecnico',
+    icon: '🔧',
+    short: 'Mantenimiento y operacion',
+    permissions: [
+      'Ejecutar exportaciones',
+      'Ver logs de actividad',
+      'Acceso a recursos en modo lectura',
+      'NO puede modificar contenido',
+      'NO puede gestionar usuarios',
+    ],
+    color: '#f39c12',
+  },
+  {
+    value: 'analitica',
+    label: 'Analitica',
+    icon: '📊',
+    short: 'Solo consulta',
+    permissions: [
+      'Ver dashboard y metricas',
+      'Consultar todos los recursos',
+      'Ver actividad y exportaciones',
+      'NO puede modificar nada',
+    ],
+    color: '#8e44ad',
+  },
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -17,6 +96,7 @@ export function UsersPage() {
 
   // Form
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState('editor');
@@ -32,14 +112,21 @@ export function UsersPage() {
 
   function resetForm() {
     setEditingId(null);
+    setShowForm(false);
     setEmail('');
     setNombre('');
     setRol('editor');
     setActivo(true);
   }
 
+  function startCreate() {
+    resetForm();
+    setShowForm(true);
+  }
+
   function startEdit(u: UserItem) {
     setEditingId(u.id);
+    setShowForm(true);
     setEmail(u.email);
     setNombre(u.nombre);
     setRol(u.rol);
@@ -50,7 +137,6 @@ export function UsersPage() {
     e.preventDefault();
     setError(null);
 
-    // Client-side validation
     const errs: string[] = [];
     if (!email.trim()) errs.push('Email es obligatorio');
     if (email && !EMAIL_RE.test(email)) errs.push('Formato de email invalido');
@@ -88,23 +174,45 @@ export function UsersPage() {
     }
   }
 
+  function getRoleLabel(value: string): string {
+    return ROLES.find((r) => r.value === value)?.label || value;
+  }
+
+  function getRoleIcon(value: string): string {
+    return ROLES.find((r) => r.value === value)?.icon || '👤';
+  }
+
   return (
     <div>
       <div className="page-header">
         <h1>Usuarios</h1>
+        <div className="page-header__actions">
+          {!showForm && (
+            <button className="btn btn-primary" onClick={startCreate}>
+              + Nuevo usuario
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="resource-form" style={{ marginBottom: '2rem' }}>
-        <fieldset>
-          <legend>{editingId ? 'Editar usuario' : 'Nuevo usuario'}</legend>
+      {/* Form with role cards */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="users-form">
+          <h2 className="users-form__title">{editingId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
 
           <div className="form-row">
             <div className="form-field">
               <label>Email *</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="usuario@osalnes.gal" disabled={!!editingId} />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="usuario@osalnes.gal"
+                disabled={!!editingId}
+              />
               {editingId && <span className="field-hint">El email no se puede cambiar</span>}
             </div>
             <div className="form-field">
@@ -113,29 +221,63 @@ export function UsersPage() {
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-field">
-              <label>Rol *</label>
-              <select value={rol} onChange={(e) => setRol(e.target.value)}>
-                {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-            <div className="form-field" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingTop: '1.5rem' }}>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-                Activo
-              </label>
+          {/* Role selector — visual cards */}
+          <div className="users-role-section">
+            <h3 className="users-role-title">Rol del usuario</h3>
+            <p className="users-role-hint">Cada rol tiene permisos diferentes. Elige el que mejor se ajuste a las funciones de esta persona.</p>
+
+            <div className="users-role-grid">
+              {ROLES.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  className={`role-card ${rol === r.value ? 'role-card--active' : ''}`}
+                  onClick={() => setRol(r.value)}
+                  style={{ '--role-color': r.color } as React.CSSProperties}
+                >
+                  <div className="role-card__header">
+                    <span className="role-card__icon">{r.icon}</span>
+                    <div>
+                      <strong>{r.label}</strong>
+                      <span className="role-card__short">{r.short}</span>
+                    </div>
+                    {rol === r.value && <span className="role-card__check">✓</span>}
+                  </div>
+                  <ul className="role-card__permissions">
+                    {r.permissions.map((perm, i) => {
+                      const isNegative = perm.startsWith('NO');
+                      return (
+                        <li key={i} className={isNegative ? 'role-card__perm--no' : 'role-card__perm--yes'}>
+                          {isNegative ? '✕' : '✓'} {perm}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </button>
+              ))}
             </div>
           </div>
+
+          {editingId && (
+            <div className="form-row">
+              <div className="form-field">
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
+                  Usuario activo
+                </label>
+                <span className="field-hint">Desactivar para revocar acceso al CMS sin eliminar la cuenta</span>
+              </div>
+            </div>
+          )}
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear usuario'}
             </button>
-            {editingId && <button type="button" className="btn" onClick={resetForm}>Cancelar</button>}
+            <button type="button" className="btn" onClick={resetForm}>Cancelar</button>
           </div>
-        </fieldset>
-      </form>
+        </form>
+      )}
 
       {/* Table */}
       <table className="data-table">
@@ -156,7 +298,11 @@ export function UsersPage() {
             <tr key={u.id}>
               <td><strong>{u.nombre}</strong></td>
               <td>{u.email}</td>
-              <td>{ROLES.find((r) => r.value === u.rol)?.label || u.rol}</td>
+              <td>
+                <span className="users-role-badge">
+                  {getRoleIcon(u.rol)} {getRoleLabel(u.rol)}
+                </span>
+              </td>
               <td>
                 <span className="status-badge" style={{ background: u.activo ? '#27ae60' : '#95a5a6' }}>
                   {u.activo ? 'Activo' : 'Inactivo'}

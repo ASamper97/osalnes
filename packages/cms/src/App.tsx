@@ -11,6 +11,7 @@ import { ResourceWizardPage } from './pages/ResourceWizardPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { CategoryWizardPage } from './pages/CategoryWizardPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { ProductWizardPage } from './pages/ProductWizardPage';
 import { ZonesPage } from './pages/ZonesPage';
 import { ZonesMapPage } from './pages/ZonesMapPage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -42,6 +43,8 @@ export function App() {
               <Route path="/categories/new" element={<ErrorBoundary><CategoryWizardPage /></ErrorBoundary>} />
               <Route path="/categories/:id/edit" element={<ErrorBoundary><CategoryWizardPage /></ErrorBoundary>} />
               <Route path="/products" element={<ErrorBoundary><ProductsPage /></ErrorBoundary>} />
+              <Route path="/products/new" element={<ErrorBoundary><ProductWizardPage /></ErrorBoundary>} />
+              <Route path="/products/:id/edit" element={<ErrorBoundary><ProductWizardPage /></ErrorBoundary>} />
               <Route path="/zones" element={<ErrorBoundary><ZonesMapPage /></ErrorBoundary>} />
               {/* Formulario clasico disponible como fallback */}
               <Route path="/zones/classic" element={<ErrorBoundary><ZonesPage /></ErrorBoundary>} />
