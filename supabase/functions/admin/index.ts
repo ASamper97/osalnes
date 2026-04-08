@@ -477,7 +477,28 @@ Deno.serve(async (req: Request) => {
 
     if (method === 'DELETE' && userId) {
       requireRole(user, 'admin');
-      return await deleteUser(sb, userId.id, req);
+      return await deleteUserHard(sb, userId.id, req);
+    }
+
+    // POST /users/:id/deactivate
+    const deactivateMatch = matchRoute('/users/:id/deactivate', path);
+    if (method === 'POST' && deactivateMatch) {
+      requireRole(user, 'admin');
+      return await deactivateUser(sb, deactivateMatch.id, req);
+    }
+
+    // POST /users/:id/activate
+    const activateMatch = matchRoute('/users/:id/activate', path);
+    if (method === 'POST' && activateMatch) {
+      requireRole(user, 'admin');
+      return await activateUser(sb, activateMatch.id, req);
+    }
+
+    // POST /users/:id/resend-invite
+    const resendMatch = matchRoute('/users/:id/resend-invite', path);
+    if (method === 'POST' && resendMatch) {
+      requireRole(user, 'admin');
+      return await resendInvite(sb, resendMatch.id, req);
     }
 
     // ==================================================================
@@ -1620,36 +1641,97 @@ async function getUserById(sb: any, id: string, req: Request) {
   return json(data, 200, req);
 }
 
+/**
+ * Create user via Supabase Auth invitation flow.
+ *
+ * Steps:
+ *   1. Validate role
+ *   2. Call sb.auth.admin.inviteUserByEmail() — creates user in auth.users
+ *      and sends invitation email with magic link
+ *   3. Insert profile in `usuario` table with role and name
+ *   4. If profile insert fails, rollback by deleting the auth user
+ *
+ * The admin NEVER sees a password. The invited user configures their
+ * own password via the /auth/setup-password page after clicking the
+ * link in the invitation email.
+ */
 // deno-lint-ignore no-explicit-any
 async function createUser(sb: any, input: any, req: Request) {
   if (!VALID_ROLES.includes(input.rol)) {
     throw { status: 400, message: `Rol invalido: ${input.rol}. Validos: ${VALID_ROLES.join(', ')}` };
   }
+  if (!input.email || !input.nombre) {
+    throw { status: 400, message: 'Email y nombre son obligatorios' };
+  }
 
-  const { data, error } = await sb
+  // Check the email isn't already in the usuario table
+  const { data: existing } = await sb
     .from('usuario')
-    .insert({ email: input.email, nombre: input.nombre, rol: input.rol, activo: input.activo ?? true })
+    .select('id')
+    .eq('email', input.email)
+    .maybeSingle();
+  if (existing) {
+    throw { status: 409, message: 'Ya existe un usuario con ese email' };
+  }
+
+  // 1. Send invitation via Supabase Auth admin API
+  const redirectTo = input.redirectTo || `${Deno.env.get('CMS_URL') || 'https://osalnes-cms.pages.dev'}/auth/setup-password`;
+
+  const { data: authData, error: authError } = await sb.auth.admin.inviteUserByEmail(input.email, {
+    redirectTo,
+    data: { nombre: input.nombre, rol: input.rol },
+  });
+
+  if (authError) {
+    console.error('[createUser] inviteUserByEmail error:', authError);
+    if (authError.message?.includes('already')) {
+      throw { status: 409, message: 'Ya existe un usuario con ese email en el sistema de autenticacion' };
+    }
+    throw { status: 500, message: `Error al enviar invitacion: ${authError.message}` };
+  }
+
+  // 2. Insert profile in usuario table
+  const { data: profileData, error: profileError } = await sb
+    .from('usuario')
+    .insert({
+      email: input.email,
+      nombre: input.nombre,
+      rol: input.rol,
+      activo: true,
+    })
     .select('id, email, nombre, rol, activo, created_at, updated_at')
     .single();
 
-  if (error) {
-    if (error.code === '23505') throw { status: 409, message: 'Ya existe un usuario con ese email' };
-    throw { status: 400, message: error.message };
+  if (profileError) {
+    // Rollback: delete the auth user we just created
+    console.error('[createUser] profile insert error, rolling back auth user:', profileError);
+    if (authData?.user?.id) {
+      try {
+        await sb.auth.admin.deleteUser(authData.user.id);
+      } catch (rollbackErr) {
+        console.error('[createUser] rollback failed:', rollbackErr);
+      }
+    }
+    if (profileError.code === '23505') {
+      throw { status: 409, message: 'Ya existe un usuario con ese email' };
+    }
+    throw { status: 400, message: profileError.message };
   }
-  return json(data, 201, req);
+
+  return json({ ...profileData, invitation_sent: true }, 201, req);
 }
 
 // deno-lint-ignore no-explicit-any
 async function updateUser(sb: any, id: string, input: any, req: Request) {
   // deno-lint-ignore no-explicit-any
   const update: Record<string, any> = {};
-  if (input.email !== undefined) update.email = input.email;
   if (input.nombre !== undefined) update.nombre = input.nombre;
   if (input.rol !== undefined) {
     if (!VALID_ROLES.includes(input.rol)) throw { status: 400, message: `Rol invalido: ${input.rol}` };
     update.rol = input.rol;
   }
-  if (input.activo !== undefined) update.activo = input.activo;
+  // NOTE: email is intentionally not updatable (would desync auth.users)
+  // NOTE: activo is managed via dedicated activate/deactivate endpoints
 
   const { data, error } = await sb
     .from('usuario')
@@ -1663,11 +1745,128 @@ async function updateUser(sb: any, id: string, input: any, req: Request) {
   return json(data, 200, req);
 }
 
+/** Soft-disable: usuario keeps existing in BBDD but cannot log in */
 // deno-lint-ignore no-explicit-any
-async function deleteUser(sb: any, id: string, req: Request) {
-  const { error } = await sb.from('usuario').update({ activo: false }).eq('id', id);
+async function deactivateUser(sb: any, id: string, req: Request) {
+  // 1. Mark as inactive in usuario table
+  const { data: profile, error } = await sb
+    .from('usuario')
+    .update({ activo: false })
+    .eq('id', id)
+    .select('email')
+    .single();
+
   if (error) throw { status: 400, message: error.message };
+  if (!profile) throw { status: 404, message: 'Usuario no encontrado' };
+
+  // 2. Also ban the user in Supabase Auth (forbids new sessions)
+  try {
+    const { data: { users } } = await sb.auth.admin.listUsers();
+    const authUser = users?.find((u: { email?: string }) => u.email === profile.email);
+    if (authUser) {
+      await sb.auth.admin.updateUserById(authUser.id, { ban_duration: '876000h' }); // ~100 years
+    }
+  } catch (err) {
+    console.error('[deactivateUser] auth ban warning:', err);
+    // Non-fatal: usuario.activo=false is enough to block access via getProfile()
+  }
+
+  return json({ deactivated: true }, 200, req);
+}
+
+/** Re-enable a previously deactivated user */
+// deno-lint-ignore no-explicit-any
+async function activateUser(sb: any, id: string, req: Request) {
+  const { data: profile, error } = await sb
+    .from('usuario')
+    .update({ activo: true })
+    .eq('id', id)
+    .select('email')
+    .single();
+
+  if (error) throw { status: 400, message: error.message };
+  if (!profile) throw { status: 404, message: 'Usuario no encontrado' };
+
+  // Lift the ban from Supabase Auth
+  try {
+    const { data: { users } } = await sb.auth.admin.listUsers();
+    const authUser = users?.find((u: { email?: string }) => u.email === profile.email);
+    if (authUser) {
+      await sb.auth.admin.updateUserById(authUser.id, { ban_duration: 'none' });
+    }
+  } catch (err) {
+    console.error('[activateUser] auth unban warning:', err);
+  }
+
+  return json({ activated: true }, 200, req);
+}
+
+/** Hard delete: removes user from auth.users AND usuario table */
+// deno-lint-ignore no-explicit-any
+async function deleteUserHard(sb: any, id: string, req: Request) {
+  // 1. Get email before deleting
+  const { data: profile, error: fetchError } = await sb
+    .from('usuario')
+    .select('email')
+    .eq('id', id)
+    .single();
+
+  if (fetchError) throw { status: 404, message: 'Usuario no encontrado' };
+
+  // 2. Delete from auth.users (find by email)
+  try {
+    const { data: { users } } = await sb.auth.admin.listUsers();
+    const authUser = users?.find((u: { email?: string }) => u.email === profile.email);
+    if (authUser) {
+      const { error: authError } = await sb.auth.admin.deleteUser(authUser.id);
+      if (authError) {
+        console.error('[deleteUserHard] auth delete error:', authError);
+        // Continue anyway — we still want to remove the profile
+      }
+    }
+  } catch (err) {
+    console.error('[deleteUserHard] auth lookup error:', err);
+  }
+
+  // 3. Delete from usuario table (will fail if FK references exist)
+  const { error: profileError } = await sb.from('usuario').delete().eq('id', id);
+  if (profileError) {
+    if (profileError.code === '23503') {
+      throw {
+        status: 409,
+        message: 'No se puede eliminar: este usuario tiene contenido asociado (recursos creados/modificados). Desactivalo en su lugar.',
+      };
+    }
+    throw { status: 400, message: profileError.message };
+  }
+
   return json({ deleted: true }, 200, req);
+}
+
+/** Resend invitation email to a user that hasn't completed setup */
+// deno-lint-ignore no-explicit-any
+async function resendInvite(sb: any, id: string, req: Request) {
+  const { data: profile, error } = await sb
+    .from('usuario')
+    .select('email, nombre, rol')
+    .eq('id', id)
+    .single();
+
+  if (error || !profile) throw { status: 404, message: 'Usuario no encontrado' };
+
+  const redirectTo = `${Deno.env.get('CMS_URL') || 'https://osalnes-cms.pages.dev'}/auth/setup-password`;
+
+  const { error: inviteError } = await sb.auth.admin.inviteUserByEmail(profile.email, {
+    redirectTo,
+    data: { nombre: profile.nombre, rol: profile.rol },
+  });
+
+  if (inviteError) {
+    console.error('[resendInvite] error:', inviteError);
+    throw { status: 500, message: `Error al reenviar invitacion: ${inviteError.message}` };
+  }
+
+  return json({ resent: true, email: profile.email }, 200, req);
 }
 
 // ========================================================================

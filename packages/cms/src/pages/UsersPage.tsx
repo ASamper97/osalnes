@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type UserItem } from '@/lib/api';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfirm } from '@/components/ConfirmDialog';
+import { useNotifications } from '@/lib/notifications';
 
 /**
  * UsersPage — Gestion de usuarios con selector de rol explicativo
@@ -94,6 +95,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function UsersPage() {
   const confirm = useConfirm();
+  const { notify } = useNotifications();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +105,6 @@ export function UsersPage() {
   const [email, setEmail] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState('editor');
-  const [activo, setActivo] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -119,7 +120,6 @@ export function UsersPage() {
     setEmail('');
     setNombre('');
     setRol('editor');
-    setActivo(true);
   }
 
   function startCreate() {
@@ -133,7 +133,6 @@ export function UsersPage() {
     setEmail(u.email);
     setNombre(u.nombre);
     setRol(u.rol);
-    setActivo(u.activo);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -150,14 +149,26 @@ export function UsersPage() {
 
     try {
       if (editingId) {
-        await api.updateUser(editingId, { nombre, rol, activo });
+        await api.updateUser(editingId, { nombre, rol });
+        notify({
+          type: 'success',
+          title: 'Usuario actualizado',
+          message: `Cambios guardados para "${nombre}".`,
+        });
       } else {
         await api.createUser({ email, nombre, rol });
+        notify({
+          type: 'success',
+          title: 'Invitacion enviada',
+          message: `Se ha enviado un email a ${email} para que configure su contrasena.`,
+        });
       }
       resetForm();
       loadUsers();
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({ type: 'error', title: 'Error', message: msg });
     } finally {
       setSaving(false);
     }
@@ -166,18 +177,90 @@ export function UsersPage() {
   async function handleDeactivate(id: string, name: string) {
     const ok = await confirm({
       title: `Desactivar usuario "${name}"?`,
-      message: 'El usuario no podra volver a acceder al CMS hasta que sea reactivado. La cuenta no se elimina, solo se desactiva.',
+      message: 'El usuario no podra volver a acceder al CMS hasta que sea reactivado. La cuenta y su historial se conservan.',
       confirmLabel: 'Desactivar',
       variant: 'warning',
     });
     if (!ok) return;
     setBusyId(id);
     try {
+      await api.deactivateUser(id);
+      notify({ type: 'warning', title: 'Usuario desactivado', message: `"${name}" ya no puede acceder al CMS.` });
+      loadUsers();
+    } catch (err: unknown) {
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({ type: 'error', title: 'Error al desactivar', message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleActivate(id: string, name: string) {
+    const ok = await confirm({
+      title: `Reactivar usuario "${name}"?`,
+      message: 'El usuario podra volver a acceder al CMS con su contrasena anterior.',
+      confirmLabel: 'Reactivar',
+      variant: 'default',
+    });
+    if (!ok) return;
+    setBusyId(id);
+    try {
+      await api.activateUser(id);
+      notify({ type: 'success', title: 'Usuario reactivado', message: `"${name}" ya puede acceder al CMS.` });
+      loadUsers();
+    } catch (err: unknown) {
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({ type: 'error', title: 'Error al reactivar', message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    const ok = await confirm({
+      title: `Eliminar usuario "${name}" PERMANENTEMENTE?`,
+      message: 'Esta accion no se puede deshacer. Se eliminara la cuenta del sistema de autenticacion y el perfil de la base de datos. Si el usuario tiene contenido asociado (recursos creados), no se podra eliminar — desactivalo en su lugar.',
+      confirmLabel: 'Eliminar definitivamente',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setBusyId(id);
+    try {
       await api.deleteUser(id);
+      notify({ type: 'success', title: 'Usuario eliminado', message: `"${name}" ha sido eliminado permanentemente.` });
       if (editingId === id) resetForm();
       loadUsers();
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({ type: 'error', title: 'No se pudo eliminar', message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleResendInvite(id: string, name: string, userEmail: string) {
+    const ok = await confirm({
+      title: `Reenviar invitacion a "${name}"?`,
+      message: `Se enviara un nuevo email de invitacion a ${userEmail} con un enlace para configurar su contrasena.`,
+      confirmLabel: 'Reenviar invitacion',
+      variant: 'default',
+    });
+    if (!ok) return;
+    setBusyId(id);
+    try {
+      await api.resendInvite(id);
+      notify({
+        type: 'success',
+        title: 'Invitacion reenviada',
+        message: `Email enviado a ${userEmail}.`,
+      });
+    } catch (err: unknown) {
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({ type: 'error', title: 'Error al reenviar', message: msg });
     } finally {
       setBusyId(null);
     }
@@ -210,6 +293,19 @@ export function UsersPage() {
       {showForm && (
         <form onSubmit={handleSubmit} className="users-form">
           <h2 className="users-form__title">{editingId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
+
+          {!editingId && (
+            <div className="users-form__info">
+              <span className="users-form__info-icon">📧</span>
+              <div>
+                <strong>El usuario configurara su propia contrasena</strong>
+                <p>
+                  Al crear el usuario se enviara automaticamente un email de invitacion con un enlace seguro
+                  para que el destinatario elija su contrasena. Tu nunca veras ni gestionaras contrasenas.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="form-row">
             <div className="form-field">
@@ -267,21 +363,9 @@ export function UsersPage() {
             </div>
           </div>
 
-          {editingId && (
-            <div className="form-row">
-              <div className="form-field">
-                <label className="checkbox-label">
-                  <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-                  Usuario activo
-                </label>
-                <span className="field-hint">Desactivar para revocar acceso al CMS sin eliminar la cuenta</span>
-              </div>
-            </div>
-          )}
-
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear usuario'}
+              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear usuario y enviar invitacion'}
             </button>
             <button type="button" className="btn" onClick={resetForm}>Cancelar</button>
           </div>
@@ -324,12 +408,49 @@ export function UsersPage() {
               </td>
               <td>
                 <div className="action-btns">
-                  <button className="btn btn-sm" onClick={() => startEdit(u)} disabled={busyId === u.id}>Editar</button>
-                  {u.activo && (
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDeactivate(u.id, u.nombre)} disabled={busyId === u.id}>
-                      {busyId === u.id ? '...' : 'Desactivar'}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => startEdit(u)}
+                    disabled={busyId === u.id}
+                    title="Editar nombre y rol"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline"
+                    onClick={() => handleResendInvite(u.id, u.nombre, u.email)}
+                    disabled={busyId === u.id}
+                    title="Reenviar email de invitacion para configurar contrasena"
+                  >
+                    📧 Invitar
+                  </button>
+                  {u.activo ? (
+                    <button
+                      className="btn btn-sm btn-warning"
+                      onClick={() => handleDeactivate(u.id, u.nombre)}
+                      disabled={busyId === u.id}
+                      title="Bloquear acceso al CMS sin eliminar"
+                    >
+                      {busyId === u.id ? '...' : '🚫 Desactivar'}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-success"
+                      onClick={() => handleActivate(u.id, u.nombre)}
+                      disabled={busyId === u.id}
+                      title="Restaurar acceso al CMS"
+                    >
+                      {busyId === u.id ? '...' : '✓ Reactivar'}
                     </button>
                   )}
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleDelete(u.id, u.nombre)}
+                    disabled={busyId === u.id}
+                    title="Eliminar usuario permanentemente del sistema"
+                  >
+                    {busyId === u.id ? '...' : '🗑️ Eliminar'}
+                  </button>
                 </div>
               </td>
             </tr>

@@ -495,14 +495,28 @@ export const api = {
 
   getUser: (id: string) => adminFetch<UserItem>(`/users/${id}`),
 
-  createUser: (data: { email: string; nombre: string; rol: string; password?: string }) =>
-    adminFetch<UserItem>('/users', { method: 'POST', body: JSON.stringify(data) }),
+  /** Creates user via Supabase Auth invitation flow. The admin never sees a password. */
+  createUser: (data: { email: string; nombre: string; rol: string; redirectTo?: string }) =>
+    adminFetch<UserItem & { invitation_sent: boolean }>('/users', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateUser: (id: string, data: Partial<{ nombre: string; rol: string; activo: boolean }>) =>
+  updateUser: (id: string, data: Partial<{ nombre: string; rol: string }>) =>
     adminFetch<UserItem>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
+  /** Soft-disable: user keeps existing in BBDD but cannot log in until reactivated. */
+  deactivateUser: (id: string) =>
+    adminFetch<{ deactivated: boolean }>(`/users/${id}/deactivate`, { method: 'POST' }),
+
+  /** Re-enable a previously deactivated user. */
+  activateUser: (id: string) =>
+    adminFetch<{ activated: boolean }>(`/users/${id}/activate`, { method: 'POST' }),
+
+  /** Hard delete: removes user from auth.users AND usuario table. Fails if user has linked content. */
   deleteUser: (id: string) =>
     adminFetch<DeleteResult>(`/users/${id}`, { method: 'DELETE' }),
+
+  /** Resend the invitation email to a user that hasn't completed setup. */
+  resendInvite: (id: string) =>
+    adminFetch<{ resent: boolean; email: string }>(`/users/${id}/resend-invite`, { method: 'POST' }),
 
   // ---------------------------------------------------------------------------
   // Admin — Products

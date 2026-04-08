@@ -6,6 +6,7 @@ import { Layout } from './components/Layout';
 import { ConfirmProvider } from './components/ConfirmDialog';
 import { NotificationsProvider } from './lib/notifications';
 import { LoginPage } from './pages/LoginPage';
+import { SetupPasswordPage } from './pages/SetupPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { ResourceFormPage } from './pages/ResourceFormPage';
@@ -33,6 +34,7 @@ export function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/setup-password" element={<SetupPasswordPage />} />
 
           {/* Protected — requires authentication + DTI profile */}
           <Route element={<ProtectedRoute />}>

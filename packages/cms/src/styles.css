@@ -618,6 +618,12 @@ textarea:focus-visible {
 .btn-danger { color: #c0392b; border-color: #f0d0cc; }
 .btn-danger:hover { background: #fdf0ed; border-color: #e8a9a3; }
 
+.btn-warning { color: #b7791f; border-color: #f9d77e; background: #fffbeb; }
+.btn-warning:hover { background: #fef3c7; border-color: #f59e0b; }
+
+.btn-success { color: #15803d; border-color: #86efac; background: #f0fdf4; }
+.btn-success:hover { background: #dcfce7; border-color: #22c55e; }
+
 .btn-outline { color: var(--cms-primary); border-color: var(--cms-primary); background: transparent; }
 .btn-outline:hover { background: var(--cms-primary-subtle); }
 
@@ -2811,6 +2817,142 @@ textarea:focus-visible {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--cms-text);
+}
+
+/* Info banner inside user form */
+
+.users-form__info {
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, rgba(26, 82, 118, 0.06), rgba(26, 188, 156, 0.06));
+  border: 1px solid rgba(26, 82, 118, 0.2);
+  border-radius: var(--radius);
+}
+
+.users-form__info-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.users-form__info strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--cms-text);
+  margin-bottom: 0.25rem;
+}
+
+.users-form__info p {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   SetupPasswordPage — Pagina publica de configuracion de contrasena
+   ========================================================================== */
+
+.setup-password-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: linear-gradient(135deg, #0f1c2e 0%, #1a3350 50%, #1a5276 100%);
+}
+
+.setup-password__card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--cms-card-bg);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.setup-password__icon {
+  font-size: 3rem;
+  line-height: 1;
+  margin-bottom: 0.85rem;
+}
+
+.setup-password__icon--success {
+  animation: setup-success-pop 0.4s ease;
+}
+
+@keyframes setup-success-pop {
+  0% { transform: scale(0); }
+  80% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.setup-password__card h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.setup-password__email {
+  font-size: 0.85rem;
+  color: var(--cms-text-light);
+  margin-bottom: 0.75rem;
+}
+
+.setup-password__intro {
+  font-size: 0.88rem;
+  color: var(--cms-text-light);
+  line-height: 1.55;
+  margin-bottom: 1.5rem;
+}
+
+.setup-password__card .form-field {
+  text-align: left;
+  margin-bottom: 0.85rem;
+}
+
+.setup-password__card .form-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
+.setup-password__card .form-field input {
+  padding: 0.7rem 0.9rem;
+  font-size: 0.95rem;
+}
+
+.setup-password__rules {
+  list-style: none;
+  padding: 0.85rem 1rem;
+  margin: 0.5rem 0 1.25rem;
+  background: var(--cms-bg);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.setup-password__rules li {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  padding: 0.2rem 0;
+  transition: color var(--transition);
+}
+
+.setup-password__rules li.is-ok {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.setup-password__submit {
+  width: 100%;
+  padding: 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
 }
 
 /* ==========================================================================
