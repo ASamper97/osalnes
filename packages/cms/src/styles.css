@@ -1459,6 +1459,303 @@ body {
   border-color: #1abc9c;
 }
 
+/* ==========================================================================
+   Zones Map Page — Vista visual de zonas con mapa Leaflet
+   ========================================================================== */
+
+.zones-map-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 4rem);
+}
+
+.zones-map__hint {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  font-weight: 500;
+}
+
+.zones-map__layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.zones-map__map {
+  position: relative;
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--cms-card-shadow);
+  background: #e8edf2;
+}
+
+.zones-map__map .leaflet-container {
+  border-radius: var(--radius-lg);
+}
+
+/* Custom marker pin (replaces leaflet's default broken icon paths) */
+
+.zone-marker {
+  background: transparent;
+  border: none;
+}
+
+.zone-marker__pin {
+  width: 28px;
+  height: 38px;
+  background: var(--cms-primary);
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.3);
+  position: relative;
+  transition: all var(--transition);
+}
+
+.zone-marker__pin::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.zone-marker__pin--active {
+  background: #1abc9c;
+  width: 34px;
+  height: 46px;
+  box-shadow: 0 6px 18px rgba(26, 188, 156, 0.5), 0 0 0 4px rgba(26, 188, 156, 0.2);
+}
+
+.zone-marker__pin--legend {
+  display: inline-block;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  width: 16px;
+  height: 22px;
+  border-width: 2px;
+}
+
+.zone-marker__pin--legend.zone-marker__pin--active {
+  width: 18px;
+  height: 24px;
+}
+
+/* Map legend overlay */
+
+.zones-map__legend {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--cms-text);
+  z-index: 400;
+  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.15);
+  backdrop-filter: blur(4px);
+}
+
+.zones-map__legend-item {
+  display: flex;
+  align-items: center;
+}
+
+/* Side panel */
+
+.zones-map__panel {
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--cms-card-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.zones-map__empty {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--cms-text-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.zones-map__empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.85rem;
+  opacity: 0.5;
+}
+
+.zones-map__empty h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.4rem;
+}
+
+.zones-map__empty p {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+.zones-map__panel-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--cms-border);
+  background: linear-gradient(180deg, var(--cms-primary-subtle), transparent);
+}
+
+.zones-map__panel-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cms-text-light);
+}
+
+.zones-map__panel-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+  margin-top: 0.15rem;
+}
+
+.zones-map__panel-count {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--cms-primary);
+  background: var(--cms-primary-subtle);
+  padding: 0.15rem 0.55rem;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.zones-map__add-btn {
+  margin: 1rem 1.25rem 0;
+}
+
+.zones-map__form {
+  margin: 1rem 1.25rem 0;
+  padding: 1rem;
+  background: #fafbfc;
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius);
+}
+
+.zones-map__form h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 0.75rem;
+}
+
+.zones-map__form .form-field {
+  margin-bottom: 0.65rem;
+}
+
+.zones-map__form .form-field label {
+  font-size: 0.72rem;
+}
+
+.zones-map__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.zones-map__list-empty {
+  font-size: 0.82rem;
+  color: var(--cms-text-light);
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+  font-style: italic;
+}
+
+.zones-map__zone {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius);
+  transition: all var(--transition);
+}
+
+.zones-map__zone:hover {
+  border-color: var(--cms-primary-light);
+  background: var(--cms-primary-subtle);
+}
+
+.zones-map__zone--editing {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-subtle);
+  box-shadow: 0 0 0 2px rgba(26, 82, 118, 0.1);
+}
+
+.zones-map__zone-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.zones-map__zone-info strong {
+  font-size: 0.85rem;
+  color: var(--cms-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zones-map__zone-info code {
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  font-family: monospace;
+}
+
+.zones-map__zone-gl {
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  font-style: italic;
+}
+
+@media (max-width: 1100px) {
+  .zones-map__layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 50vh auto;
+  }
+  .zones-map-page {
+    height: auto;
+  }
+  .zones-map__map {
+    min-height: 50vh;
+  }
+}
+
 @media (max-width: 700px) {
   .onboarding-tour__tooltip {
     width: calc(100vw - 24px);
