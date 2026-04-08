@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth-context';
 import { useDarkMode } from '../lib/dark-mode';
 import { CmsAssistant } from './CmsAssistant';
 import { OnboardingTour, shouldShowTour, resetTour } from './OnboardingTour';
+import { GlobalSearch } from './GlobalSearch';
 
 type Role = 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
 
@@ -42,6 +43,19 @@ export function Layout() {
   const { theme, toggle: toggleTheme } = useDarkMode();
   const navigate = useNavigate();
   const [tourOpen, setTourOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K opens global search
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Auto-show tour the first time the user lands on the CMS
   useEffect(() => {
@@ -71,6 +85,16 @@ export function Layout() {
           <img src="/logo-osalnes.png" alt="O Salnes" className="cms-sidebar-logo-img" />
           <div className="cms-sidebar-subtitle">DTI CMS</div>
         </div>
+        <button
+          type="button"
+          className="cms-search-trigger"
+          onClick={() => setSearchOpen(true)}
+          aria-label="Abrir busqueda global"
+        >
+          <span className="cms-search-trigger__icon">🔍</span>
+          <span className="cms-search-trigger__label">Buscar...</span>
+          <kbd className="cms-search-trigger__kbd">Ctrl K</kbd>
+        </button>
         <nav>
           {visibleItems.map((item) => (
             <NavLink
@@ -118,6 +142,7 @@ export function Layout() {
       </div>
       <CmsAssistant />
       <OnboardingTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

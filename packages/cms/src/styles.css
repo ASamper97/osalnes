@@ -1579,6 +1579,241 @@ body {
   transform: scale(1.05);
 }
 
+/* Sidebar search trigger button */
+
+.cms-search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.75rem 0.85rem;
+  padding: 0.5rem 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--cms-sidebar-text);
+  transition: all var(--transition);
+}
+
+.cms-search-trigger:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.cms-search-trigger__icon {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.cms-search-trigger__label {
+  flex: 1;
+  text-align: left;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.cms-search-trigger__kbd {
+  font-family: monospace;
+  font-size: 0.62rem;
+  padding: 0.1rem 0.35rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: var(--cms-sidebar-text);
+  opacity: 0.8;
+}
+
+/* ==========================================================================
+   GlobalSearch — Modal Cmd+K
+   ========================================================================== */
+
+@keyframes global-search-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.global-search__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 28, 46, 0.55);
+  z-index: 3000;
+  animation: confirm-fade-in 0.2s ease;
+}
+
+.global-search {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  max-width: calc(100vw - 32px);
+  max-height: 76vh;
+  background: var(--cms-card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(15, 28, 46, 0.4);
+  z-index: 3001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: global-search-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.global-search__input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.global-search__icon {
+  font-size: 1.1rem;
+  opacity: 0.6;
+}
+
+.global-search__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--cms-text);
+  outline: none;
+  padding: 0;
+}
+
+.global-search__input::placeholder {
+  color: var(--cms-text-light);
+}
+
+.global-search__kbd,
+.global-search__item-enter {
+  font-family: monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  background: var(--cms-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: 4px;
+  color: var(--cms-text-light);
+}
+
+.global-search__results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.global-search__empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.85rem;
+  color: var(--cms-text-light);
+}
+
+.global-search__group {
+  margin-bottom: 0.5rem;
+}
+
+.global-search__group-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cms-text-light);
+  padding: 0.5rem 1.25rem 0.35rem;
+}
+
+.global-search__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--cms-text);
+  transition: background var(--transition);
+}
+
+.global-search__item:hover,
+.global-search__item--selected {
+  background: var(--cms-primary-subtle);
+}
+
+.global-search__item--selected {
+  background: var(--cms-primary-subtle);
+  border-left: 3px solid var(--cms-primary);
+  padding-left: calc(1.25rem - 3px);
+}
+
+.global-search__item-icon {
+  font-size: 1.2rem;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.global-search__item-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.global-search__item-text strong {
+  font-size: 0.88rem;
+  color: var(--cms-text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-search__item-text span {
+  font-size: 0.72rem;
+  color: var(--cms-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.global-search__footer {
+  display: flex;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--cms-bg);
+  border-top: 1px solid var(--cms-border);
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+}
+
+.global-search__footer kbd {
+  display: inline-block;
+  font-family: monospace;
+  font-size: 0.65rem;
+  padding: 0.05rem 0.35rem;
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: 3px;
+  color: var(--cms-text);
+  margin-right: 0.15rem;
+}
+
+@media (max-width: 700px) {
+  .global-search {
+    top: 5vh;
+    width: calc(100vw - 24px);
+  }
+  .cms-search-trigger {
+    margin: 0 0.75rem 0.5rem;
+  }
+}
+
 /* ==========================================================================
    Zones Map Page — Vista visual de zonas con mapa Leaflet
    ========================================================================== */
