@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
+import { useDarkMode } from '../lib/dark-mode';
 import { CmsAssistant } from './CmsAssistant';
 import { OnboardingTour, shouldShowTour, resetTour } from './OnboardingTour';
 
@@ -38,6 +39,7 @@ const ROLE_LABELS: Record<Role, string> = {
 
 export function Layout() {
   const { user, role, signOut } = useAuth();
+  const { theme, toggle: toggleTheme } = useDarkMode();
   const navigate = useNavigate();
   const [tourOpen, setTourOpen] = useState(false);
 
@@ -85,9 +87,20 @@ export function Layout() {
         </nav>
 
         <div className="cms-sidebar-footer">
-          <button type="button" className="cms-tour-btn" onClick={handleReplayTour} title="Ver tour de bienvenida">
-            ✨ Ver tour de bienvenida
-          </button>
+          <div className="cms-sidebar-tools">
+            <button type="button" className="cms-tour-btn" onClick={handleReplayTour} title="Ver tour de bienvenida">
+              ✨ Ver tour
+            </button>
+            <button
+              type="button"
+              className="cms-theme-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
           <div className="cms-user-info">
             <div className="cms-user-avatar">{user?.email?.charAt(0).toUpperCase()}</div>
             <div>

@@ -6,6 +6,13 @@ import { QrModal } from '@/components/QrModal';
 import { BulkAiActions } from '@/components/BulkAiActions';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfirm } from '@/components/ConfirmDialog';
+import {
+  getSavedViews,
+  saveView,
+  deleteView,
+  RESOURCE_BUILTIN_VIEWS,
+  type SavedView,
+} from '@/lib/saved-views';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -58,6 +65,54 @@ export function ResourcesPage() {
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  // Saved views
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState('all');
+
+  useEffect(() => {
+    setSavedViews(getSavedViews('resources'));
+  }, []);
+
+  const allViews: SavedView[] = [...RESOURCE_BUILTIN_VIEWS, ...savedViews];
+
+  function applyView(view: SavedView) {
+    setActiveViewId(view.id);
+    setFilterStatus(view.filters.status || '');
+    setFilterType(view.filters.type || '');
+    setSearchName(view.filters.q || '');
+    setPage(1);
+  }
+
+  function handleSaveCurrentView() {
+    const name = window.prompt('Nombre de la vista:');
+    if (!name?.trim()) return;
+    const newView: SavedView = {
+      id: `custom-${Date.now()}`,
+      name: name.trim(),
+      icon: '⭐',
+      filters: {
+        ...(filterStatus && { status: filterStatus }),
+        ...(filterType && { type: filterType }),
+        ...(searchName && { q: searchName }),
+      },
+    };
+    saveView('resources', newView);
+    setSavedViews((prev) => [...prev, newView]);
+    setActiveViewId(newView.id);
+  }
+
+  async function handleDeleteView(viewId: string, name: string) {
+    const ok = await confirm({
+      title: `Eliminar la vista "${name}"?`,
+      message: 'Esta accion no se puede deshacer. Solo afecta a tus vistas guardadas locales.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    deleteView('resources', viewId);
+    setSavedViews((prev) => prev.filter((v) => v.id !== viewId));
+    if (activeViewId === viewId) setActiveViewId('all');
+  }
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -168,6 +223,37 @@ export function ResourcesPage() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Saved views — tabs */}
+      <div className="saved-views">
+        {allViews.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            className={`saved-view ${activeViewId === v.id ? 'saved-view--active' : ''}`}
+            onClick={() => applyView(v)}
+          >
+            {v.icon && <span className="saved-view__icon">{v.icon}</span>}
+            <span>{v.name}</span>
+            {!v.builtin && (
+              <span
+                className="saved-view__delete"
+                onClick={(e) => { e.stopPropagation(); handleDeleteView(v.id, v.name); }}
+                role="button"
+                aria-label={`Eliminar vista ${v.name}`}
+              >×</span>
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="saved-view saved-view--add"
+          onClick={handleSaveCurrentView}
+          title="Guardar la combinacion actual de filtros como nueva vista"
+        >
+          + Guardar vista
+        </button>
+      </div>
 
       {/* Filters */}
       <div className="filters-bar">

@@ -29,6 +29,93 @@
   --status-archivado: #95a5a6;
 }
 
+/* Dark theme overrides — activated by [data-theme="dark"] on <html> */
+:root[data-theme="dark"] {
+  --cms-primary: #4ba3d6;
+  --cms-primary-light: #7bbde2;
+  --cms-primary-subtle: rgba(75, 163, 214, 0.1);
+  --cms-bg: #0f1822;
+  --cms-text: #e8ecf1;
+  --cms-text-light: #8a96a4;
+  --cms-border: #2a3441;
+  --cms-card-bg: #1a242f;
+  --cms-card-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --cms-card-shadow-hover: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+:root[data-theme="dark"] body {
+  color-scheme: dark;
+}
+
+/* Smooth transition between themes */
+:root,
+body,
+.cms-content,
+.data-table,
+.stat-card,
+.btn,
+.form-field input,
+.form-field select,
+.form-field textarea {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+/* Dark mode adjustments for components that use hardcoded backgrounds */
+:root[data-theme="dark"] .data-table th {
+  background: #131c26;
+}
+:root[data-theme="dark"] .data-table tbody tr:hover {
+  background: #1f2935;
+}
+:root[data-theme="dark"] .filters-bar select,
+:root[data-theme="dark"] .filters-bar input {
+  background: var(--cms-card-bg);
+  color: var(--cms-text);
+}
+:root[data-theme="dark"] .form-field input:disabled {
+  background: #131c26;
+  color: var(--cms-text-light);
+}
+:root[data-theme="dark"] .alert-error {
+  background: rgba(192, 57, 43, 0.15);
+  color: #e8a9a3;
+}
+:root[data-theme="dark"] .alert-warning {
+  background: rgba(243, 156, 18, 0.15);
+  color: #f4d35e;
+}
+:root[data-theme="dark"] .btn:hover { background: #1f2935; border-color: #3a4654; }
+:root[data-theme="dark"] .btn-outline { background: transparent; }
+:root[data-theme="dark"] .btn-danger { color: #e8a9a3; border-color: rgba(192, 57, 43, 0.4); }
+:root[data-theme="dark"] .btn-danger:hover { background: rgba(192, 57, 43, 0.2); }
+:root[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1f2935 25%, #2a3441 50%, #1f2935 75%);
+}
+:root[data-theme="dark"] .field-hint { color: var(--cms-text-light); }
+:root[data-theme="dark"] .preview-card__image { background: linear-gradient(135deg, #1f2935, #2a3441); }
+:root[data-theme="dark"] .preview-card__description,
+:root[data-theme="dark"] .preview-card__info { background: var(--cms-card-bg); }
+:root[data-theme="dark"] .ai-writer__result-text,
+:root[data-theme="dark"] .rte__content { background: var(--cms-card-bg); color: var(--cms-text); }
+:root[data-theme="dark"] .rte__toolbar { background: #131c26; }
+:root[data-theme="dark"] .rte__footer { background: #131c26; }
+:root[data-theme="dark"] .ai-writer__result-actions { background: #131c26; }
+:root[data-theme="dark"] .editorial-bar__step { background: #131c26; }
+:root[data-theme="dark"] .users-form { background: var(--cms-card-bg); }
+:root[data-theme="dark"] .zones-map__form,
+:root[data-theme="dark"] .nav-wizard__resource-list,
+:root[data-theme="dark"] .nav-wizard__example { background: #131c26; }
+:root[data-theme="dark"] .activity-timeline__list::before { background: #2a3441; }
+:root[data-theme="dark"] .ai-quality__list li + li,
+:root[data-theme="dark"] .activity-timeline__item + .activity-timeline__item,
+:root[data-theme="dark"] .bulk-ai__result + .bulk-ai__result { border-top-color: #2a3441; }
+:root[data-theme="dark"] .preview-panel,
+:root[data-theme="dark"] .preview-panel__body,
+:root[data-theme="dark"] .preview-panel__header,
+:root[data-theme="dark"] .preview-panel__footer,
+:root[data-theme="dark"] .bulk-ai__modal,
+:root[data-theme="dark"] .bulk-ai__header { background: var(--cms-card-bg); }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -1459,6 +1546,39 @@ body {
   border-color: #1abc9c;
 }
 
+.cms-sidebar-tools {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.cms-sidebar-tools .cms-tour-btn {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.cms-theme-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--cms-sidebar-text);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all var(--transition);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-theme-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
 /* ==========================================================================
    Zones Map Page — Vista visual de zonas con mapa Leaflet
    ========================================================================== */
@@ -2245,6 +2365,92 @@ body {
 
 .confirm-modal__actions .btn {
   min-width: 110px;
+}
+
+/* ==========================================================================
+   SavedViews — Vistas guardadas tipo tabs
+   ========================================================================== */
+
+.saved-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.saved-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  background: transparent;
+  border: 1px solid var(--cms-border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--cms-text);
+  transition: all var(--transition);
+}
+
+.saved-view:hover {
+  background: var(--cms-card-bg);
+  border-color: var(--cms-primary-light);
+}
+
+.saved-view--active {
+  background: var(--cms-primary);
+  color: #fff;
+  border-color: var(--cms-primary);
+  font-weight: 600;
+}
+
+.saved-view--active:hover {
+  background: var(--cms-primary-light);
+}
+
+.saved-view__icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.saved-view__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 0.2rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.1);
+  color: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition);
+}
+
+.saved-view--active .saved-view__delete {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.saved-view__delete:hover {
+  opacity: 1;
+}
+
+.saved-view--add {
+  border-style: dashed;
+  color: var(--cms-text-light);
+  background: transparent;
+}
+
+.saved-view--add:hover {
+  color: var(--cms-primary);
+  border-color: var(--cms-primary);
 }
 
 @media (max-width: 700px) {
