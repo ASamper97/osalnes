@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type NavItem } from '@/lib/api';
 
 const MENUS = ['header', 'footer', 'sidebar'];
 const TIPOS = ['pagina', 'recurso', 'url_externa', 'categoria', 'tipologia'];
 
 export function NavigationPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<NavItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +124,11 @@ export function NavigationPage() {
     <div>
       <div className="page-header">
         <h1>Navegacion</h1>
-        {!editing && (
-          <button className="btn btn-primary" onClick={() => { setEditing('new'); setMenuSlug(activeMenu); }}>
-            Nuevo elemento
+        <div className="page-header__actions">
+          <button className="btn btn-primary" onClick={() => navigate(`/navigation/new?menu=${activeMenu}`)}>
+            + Nuevo enlace (asistente)
           </button>
-        )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
@@ -251,7 +253,8 @@ export function NavigationPage() {
                 <td>{item.visible ? 'Si' : 'No'}</td>
                 <td>
                   <div className="action-btns">
-                    <button className="btn btn-sm" onClick={() => startEdit(item)} disabled={busyId === item.id}>Editar</button>
+                    <button className="btn btn-sm" onClick={() => navigate(`/navigation/${item.id}/edit`)} disabled={busyId === item.id}>Editar</button>
+                    <button className="btn btn-sm btn-outline" onClick={() => startEdit(item)} disabled={busyId === item.id}>Edicion rapida</button>
                     <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item.id)} disabled={busyId === item.id}>
                       {busyId === item.id ? '...' : 'Eliminar'}
                     </button>

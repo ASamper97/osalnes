@@ -217,11 +217,12 @@ export interface TypologyItem {
 export interface NavItem {
   id: string;
   tipo: string;
-  referencia: string;
+  referencia: string | null;
   orden: number;
   label: LocalizedValue;
   menuSlug?: string;
   parentId?: string | null;
+  visible?: boolean;
 }
 
 export interface PageItem {
@@ -380,10 +381,10 @@ export const api = {
     return adminFetch<NavItem[]>(`/navigation${qs}`);
   },
 
-  createNavItem: (data: { menu_slug: string; tipo: string; referencia: string; orden?: number; label: LocalizedValue; parent_id?: string | null }) =>
+  createNavItem: (data: { menu_slug: string; tipo: string; referencia: string | null; orden?: number; label: LocalizedValue; parent_id?: string | null; visible?: boolean }) =>
     adminFetch<NavItem>('/navigation', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateNavItem: (id: string, data: Partial<{ tipo: string; referencia: string; orden: number; label: LocalizedValue; parent_id: string | null; visible: boolean }>) =>
+  updateNavItem: (id: string, data: Partial<{ tipo: string; referencia: string | null; orden: number; label: LocalizedValue; parent_id: string | null; visible: boolean }>) =>
     adminFetch<NavItem>(`/navigation/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteNavItem: (id: string) =>

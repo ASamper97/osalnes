@@ -15,6 +15,7 @@ import { AuditLogPage } from './pages/AuditLogPage';
 import { PagesPage } from './pages/PagesPage';
 import { PageWizardPage } from './pages/PageWizardPage';
 import { NavigationPage } from './pages/NavigationPage';
+import { NavigationWizardPage } from './pages/NavigationWizardPage';
 import { UsersPage } from './pages/UsersPage';
 import { ExportsPage } from './pages/ExportsPage';
 
@@ -42,6 +43,8 @@ export function App() {
               <Route path="/pages/new" element={<ErrorBoundary><PageWizardPage /></ErrorBoundary>} />
               <Route path="/pages/:id/edit" element={<ErrorBoundary><PageWizardPage /></ErrorBoundary>} />
               <Route path="/navigation" element={<ErrorBoundary><NavigationPage /></ErrorBoundary>} />
+              <Route path="/navigation/new" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
+              <Route path="/navigation/:id/edit" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
               <Route path="/exports" element={<ErrorBoundary><ExportsPage /></ErrorBoundary>} />
               <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
               <Route path="/audit" element={<ErrorBoundary><AuditLogPage /></ErrorBoundary>} />

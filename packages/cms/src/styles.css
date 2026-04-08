@@ -998,6 +998,144 @@ body {
 
 .dashboard-section { margin-top: 1.75rem; }
 .dashboard-section--first { margin-top: 0; }
+
+/* ==========================================================================
+   NavigationWizard — Selectores visuales de menu y tipo
+   ========================================================================== */
+
+.nav-wizard__option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.nav-wizard__option-grid--4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 900px) {
+  .nav-wizard__option-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .nav-wizard__option-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nav-wizard__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--cms-card-bg);
+  border: 1.5px solid var(--cms-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all var(--transition);
+  min-height: 130px;
+}
+
+.nav-wizard__option:hover {
+  border-color: var(--cms-primary-light);
+  background: var(--cms-primary-subtle);
+  transform: translateY(-1px);
+}
+
+.nav-wizard__option--active {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-subtle);
+  box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.12);
+}
+
+.nav-wizard__option-icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.nav-wizard__option strong {
+  font-size: 0.95rem;
+  color: var(--cms-text);
+  font-weight: 700;
+}
+
+.nav-wizard__option p {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  line-height: 1.4;
+}
+
+.nav-wizard__example {
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  font-family: monospace;
+  background: #f5f6f8;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  word-break: break-all;
+}
+
+/* Resource search list */
+
+.nav-wizard__resource-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.25rem;
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-sm);
+  background: #fafbfc;
+}
+
+.nav-wizard__resource {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--cms-card-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all var(--transition);
+}
+
+.nav-wizard__resource:hover {
+  border-color: var(--cms-primary-light);
+  background: var(--cms-primary-subtle);
+}
+
+.nav-wizard__resource--active {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-subtle);
+  box-shadow: 0 0 0 2px rgba(26, 82, 118, 0.15);
+}
+
+.nav-wizard__resource strong {
+  font-size: 0.82rem;
+  color: var(--cms-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-wizard__resource span {
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .dashboard-section h2 {
   font-size: 1rem;
   font-weight: 700;
