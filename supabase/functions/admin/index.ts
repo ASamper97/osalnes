@@ -1642,18 +1642,24 @@ async function getUserById(sb: any, id: string, req: Request) {
 }
 
 /**
- * Create user via Supabase Auth invitation flow.
+ * Create user via Supabase Auth invitation flow (NO EMAIL MODE).
+ *
+ * Uses generateLink() instead of inviteUserByEmail() so that:
+ *   - The user is created in auth.users
+ *   - A magic link is generated and returned to the admin
+ *   - NO email is sent automatically (avoids SMTP dependency)
+ *   - The admin copies the link and shares it via WhatsApp/email/etc.
  *
  * Steps:
- *   1. Validate role
- *   2. Call sb.auth.admin.inviteUserByEmail() — creates user in auth.users
- *      and sends invitation email with magic link
+ *   1. Validate role + check email not already used
+ *   2. Call sb.auth.admin.generateLink({ type: 'invite' }) — creates user
+ *      AND returns the action_link without sending an email
  *   3. Insert profile in `usuario` table with role and name
  *   4. If profile insert fails, rollback by deleting the auth user
+ *   5. Return the user profile + action_link to the admin
  *
- * The admin NEVER sees a password. The invited user configures their
- * own password via the /auth/setup-password page after clicking the
- * link in the invitation email.
+ * The admin NEVER sees a password. The invited user clicks the link,
+ * goes to /auth/setup-password, and configures their own password.
  */
 // deno-lint-ignore no-explicit-any
 async function createUser(sb: any, input: any, req: Request) {
@@ -1674,21 +1680,28 @@ async function createUser(sb: any, input: any, req: Request) {
     throw { status: 409, message: 'Ya existe un usuario con ese email' };
   }
 
-  // 1. Send invitation via Supabase Auth admin API
+  // 1. Generate invite link via Supabase Auth admin API (does NOT send email)
   const redirectTo = input.redirectTo || `${Deno.env.get('CMS_URL') || 'https://osalnes-cms.pages.dev'}/auth/setup-password`;
 
-  const { data: authData, error: authError } = await sb.auth.admin.inviteUserByEmail(input.email, {
-    redirectTo,
-    data: { nombre: input.nombre, rol: input.rol },
+  const { data: linkData, error: authError } = await sb.auth.admin.generateLink({
+    type: 'invite',
+    email: input.email,
+    options: {
+      redirectTo,
+      data: { nombre: input.nombre, rol: input.rol },
+    },
   });
 
   if (authError) {
-    console.error('[createUser] inviteUserByEmail error:', authError);
+    console.error('[createUser] generateLink error:', authError);
     if (authError.message?.includes('already')) {
       throw { status: 409, message: 'Ya existe un usuario con ese email en el sistema de autenticacion' };
     }
-    throw { status: 500, message: `Error al enviar invitacion: ${authError.message}` };
+    throw { status: 500, message: `Error al generar enlace: ${authError.message}` };
   }
+
+  const actionLink = linkData?.properties?.action_link || null;
+  const authUserId = linkData?.user?.id;
 
   // 2. Insert profile in usuario table
   const { data: profileData, error: profileError } = await sb
@@ -1705,9 +1718,9 @@ async function createUser(sb: any, input: any, req: Request) {
   if (profileError) {
     // Rollback: delete the auth user we just created
     console.error('[createUser] profile insert error, rolling back auth user:', profileError);
-    if (authData?.user?.id) {
+    if (authUserId) {
       try {
-        await sb.auth.admin.deleteUser(authData.user.id);
+        await sb.auth.admin.deleteUser(authUserId);
       } catch (rollbackErr) {
         console.error('[createUser] rollback failed:', rollbackErr);
       }
@@ -1718,7 +1731,7 @@ async function createUser(sb: any, input: any, req: Request) {
     throw { status: 400, message: profileError.message };
   }
 
-  return json({ ...profileData, invitation_sent: true }, 201, req);
+  return json({ ...profileData, invitation_link: actionLink }, 201, req);
 }
 
 // deno-lint-ignore no-explicit-any
@@ -1843,7 +1856,12 @@ async function deleteUserHard(sb: any, id: string, req: Request) {
   return json({ deleted: true }, 200, req);
 }
 
-/** Resend invitation email to a user that hasn't completed setup */
+/**
+ * Generate a fresh invitation link for an existing user (NO EMAIL).
+ * Uses generateLink({ type: 'magiclink' }) which works for users that
+ * already exist in auth.users — perfect for "resend invitation" scenarios
+ * where the user was created but never completed the setup-password flow.
+ */
 // deno-lint-ignore no-explicit-any
 async function resendInvite(sb: any, id: string, req: Request) {
   const { data: profile, error } = await sb
@@ -1856,17 +1874,36 @@ async function resendInvite(sb: any, id: string, req: Request) {
 
   const redirectTo = `${Deno.env.get('CMS_URL') || 'https://osalnes-cms.pages.dev'}/auth/setup-password`;
 
-  const { error: inviteError } = await sb.auth.admin.inviteUserByEmail(profile.email, {
-    redirectTo,
-    data: { nombre: profile.nombre, rol: profile.rol },
+  // Try invite first (works if user has not completed setup yet)
+  let actionLink: string | null = null;
+  const { data: inviteData, error: inviteError } = await sb.auth.admin.generateLink({
+    type: 'invite',
+    email: profile.email,
+    options: { redirectTo, data: { nombre: profile.nombre, rol: profile.rol } },
   });
 
-  if (inviteError) {
-    console.error('[resendInvite] error:', inviteError);
-    throw { status: 500, message: `Error al reenviar invitacion: ${inviteError.message}` };
+  if (!inviteError && inviteData?.properties?.action_link) {
+    actionLink = inviteData.properties.action_link;
+  } else {
+    // Fallback: user already accepted invite, generate a magiclink instead
+    const { data: magicData, error: magicError } = await sb.auth.admin.generateLink({
+      type: 'magiclink',
+      email: profile.email,
+      options: { redirectTo },
+    });
+
+    if (magicError) {
+      console.error('[resendInvite] both generateLink calls failed:', inviteError, magicError);
+      throw { status: 500, message: `Error al generar enlace: ${magicError.message}` };
+    }
+    actionLink = magicData?.properties?.action_link || null;
   }
 
-  return json({ resent: true, email: profile.email }, 200, req);
+  if (!actionLink) {
+    throw { status: 500, message: 'No se pudo generar el enlace de invitacion' };
+  }
+
+  return json({ invitation_link: actionLink, email: profile.email }, 200, req);
 }
 
 // ========================================================================

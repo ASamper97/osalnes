@@ -2956,6 +2956,179 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
+   InviteLinkModal — Modal con enlace de invitacion para copiar
+   ========================================================================== */
+
+.invite-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 28, 46, 0.55);
+  z-index: 2000;
+  animation: confirm-fade-in 0.2s ease;
+}
+
+.invite-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  background: var(--cms-card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.85rem 1.5rem;
+  box-shadow: 0 24px 60px rgba(15, 28, 46, 0.4);
+  z-index: 2001;
+  animation: confirm-slide-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-top: 4px solid var(--cms-primary);
+}
+
+.invite-modal__icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.invite-modal__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+  margin-bottom: 0.65rem;
+  text-align: center;
+}
+
+.invite-modal__intro {
+  font-size: 0.88rem;
+  color: var(--cms-text-light);
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+
+.invite-modal__intro strong {
+  color: var(--cms-primary);
+}
+
+/* Link row with input + copy button */
+
+.invite-modal__link-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.invite-modal__link-input {
+  flex: 1;
+  padding: 0.65rem 0.85rem;
+  border: 2px solid var(--cms-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-family: monospace;
+  background: var(--cms-bg);
+  color: var(--cms-text);
+  outline: none;
+  cursor: text;
+}
+
+.invite-modal__link-input:focus {
+  background: var(--cms-card-bg);
+  box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.15);
+}
+
+.invite-modal__copy {
+  padding: 0.65rem 1.1rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+
+.invite-modal__copy.is-copied {
+  background: #27ae60 !important;
+  border-color: #27ae60 !important;
+}
+
+/* Quick share shortcuts */
+
+.invite-modal__shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 0;
+  border-top: 1px dashed var(--cms-border);
+  border-bottom: 1px dashed var(--cms-border);
+  margin-bottom: 1rem;
+}
+
+.invite-modal__shortcuts-label {
+  font-size: 0.75rem;
+  color: var(--cms-text-light);
+  font-weight: 600;
+}
+
+/* Warning box */
+
+.invite-modal__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.95rem;
+  background: #fef9e7;
+  border: 1px solid #f9e79f;
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+}
+
+:root[data-theme="dark"] .invite-modal__warning {
+  background: rgba(243, 156, 18, 0.1);
+  border-color: rgba(243, 156, 18, 0.3);
+}
+
+.invite-modal__warning > span {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.invite-modal__warning strong {
+  display: block;
+  font-size: 0.82rem;
+  color: #7d6608;
+  margin-bottom: 0.15rem;
+}
+
+:root[data-theme="dark"] .invite-modal__warning strong {
+  color: #f4d35e;
+}
+
+.invite-modal__warning p {
+  font-size: 0.75rem;
+  color: var(--cms-text-light);
+  line-height: 1.45;
+}
+
+.invite-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .invite-modal {
+    width: calc(100vw - 24px);
+    padding: 1.5rem 1.25rem;
+  }
+  .invite-modal__link-row {
+    flex-direction: column;
+  }
+  .invite-modal__copy {
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
    EmptyState — Estado vacio amistoso
    ========================================================================== */
 

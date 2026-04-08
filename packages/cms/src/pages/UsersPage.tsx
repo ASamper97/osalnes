@@ -3,6 +3,7 @@ import { api, type UserItem } from '@/lib/api';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { useNotifications } from '@/lib/notifications';
+import { InviteLinkModal } from '@/components/InviteLinkModal';
 
 /**
  * UsersPage — Gestion de usuarios con selector de rol explicativo
@@ -108,6 +109,13 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Invite link modal state
+  const [inviteModal, setInviteModal] = useState<{ open: boolean; link: string | null; email: string; userName?: string }>({
+    open: false,
+    link: null,
+    email: '',
+  });
+
   function loadUsers() {
     api.getUsers().then(setUsers).catch((e) => setError(e.message));
   }
@@ -155,16 +163,28 @@ export function UsersPage() {
           title: 'Usuario actualizado',
           message: `Cambios guardados para "${nombre}".`,
         });
+        resetForm();
+        loadUsers();
       } else {
-        await api.createUser({ email, nombre, rol });
+        // Create user — receives back the invitation link to share manually
+        const result = await api.createUser({ email, nombre, rol });
+        const userEmail = email;
+        const userNombre = nombre;
+        resetForm();
+        loadUsers();
+        // Open modal with the invitation link
+        setInviteModal({
+          open: true,
+          link: result.invitation_link,
+          email: userEmail,
+          userName: userNombre,
+        });
         notify({
           type: 'success',
-          title: 'Invitacion enviada',
-          message: `Se ha enviado un email a ${email} para que configure su contrasena.`,
+          title: 'Usuario creado',
+          message: `Comparte el enlace con ${userEmail} para que active su cuenta.`,
         });
       }
-      resetForm();
-      loadUsers();
     } catch (err: unknown) {
       const msg = (err as Error).message;
       setError(msg);
@@ -243,24 +263,31 @@ export function UsersPage() {
 
   async function handleResendInvite(id: string, name: string, userEmail: string) {
     const ok = await confirm({
-      title: `Reenviar invitacion a "${name}"?`,
-      message: `Se enviara un nuevo email de invitacion a ${userEmail} con un enlace para configurar su contrasena.`,
-      confirmLabel: 'Reenviar invitacion',
+      title: `Generar nuevo enlace para "${name}"?`,
+      message: `Se generara un enlace de invitacion nuevo (caduca en 24h). Despues podras copiarlo y enviarselo a ${userEmail} por el medio que prefieras.`,
+      confirmLabel: 'Generar enlace',
       variant: 'default',
     });
     if (!ok) return;
     setBusyId(id);
     try {
-      await api.resendInvite(id);
+      const result = await api.resendInvite(id);
+      // Open modal with the new invitation link
+      setInviteModal({
+        open: true,
+        link: result.invitation_link,
+        email: userEmail,
+        userName: name,
+      });
       notify({
         type: 'success',
-        title: 'Invitacion reenviada',
-        message: `Email enviado a ${userEmail}.`,
+        title: 'Enlace generado',
+        message: `Comparte el nuevo enlace con ${userEmail}.`,
       });
     } catch (err: unknown) {
       const msg = (err as Error).message;
       setError(msg);
-      notify({ type: 'error', title: 'Error al reenviar', message: msg });
+      notify({ type: 'error', title: 'Error al generar enlace', message: msg });
     } finally {
       setBusyId(null);
     }
@@ -296,12 +323,13 @@ export function UsersPage() {
 
           {!editingId && (
             <div className="users-form__info">
-              <span className="users-form__info-icon">📧</span>
+              <span className="users-form__info-icon">🔗</span>
               <div>
-                <strong>El usuario configurara su propia contrasena</strong>
+                <strong>Se generara un enlace de invitacion para que copies y compartas</strong>
                 <p>
-                  Al crear el usuario se enviara automaticamente un email de invitacion con un enlace seguro
-                  para que el destinatario elija su contrasena. Tu nunca veras ni gestionaras contrasenas.
+                  Al crear el usuario se generara un enlace seguro (caduca en 24h). Te lo mostrare en una ventana
+                  para que lo copies y se lo envies al destinatario por el medio que prefieras (WhatsApp, email, etc.).
+                  El usuario configurara su propia contrasena al abrir el enlace. Tu nunca veras contrasenas.
                 </p>
               </div>
             </div>
@@ -365,7 +393,7 @@ export function UsersPage() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear usuario y enviar invitacion'}
+              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear usuario y generar enlace'}
             </button>
             <button type="button" className="btn" onClick={resetForm}>Cancelar</button>
           </div>
@@ -420,9 +448,9 @@ export function UsersPage() {
                     className="btn btn-sm btn-outline"
                     onClick={() => handleResendInvite(u.id, u.nombre, u.email)}
                     disabled={busyId === u.id}
-                    title="Reenviar email de invitacion para configurar contrasena"
+                    title="Generar enlace de invitacion para copiar y compartir"
                   >
-                    📧 Invitar
+                    🔗 Generar enlace
                   </button>
                   {u.activo ? (
                     <button
@@ -458,6 +486,15 @@ export function UsersPage() {
         </tbody>
       </table>
       )}
+
+      {/* Invite link modal — shown after creating a user or resending invite */}
+      <InviteLinkModal
+        open={inviteModal.open}
+        link={inviteModal.link}
+        email={inviteModal.email}
+        userName={inviteModal.userName}
+        onClose={() => setInviteModal({ ...inviteModal, open: false })}
+      />
     </div>
   );
 }

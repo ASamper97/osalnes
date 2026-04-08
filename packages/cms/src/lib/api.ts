@@ -495,9 +495,13 @@ export const api = {
 
   getUser: (id: string) => adminFetch<UserItem>(`/users/${id}`),
 
-  /** Creates user via Supabase Auth invitation flow. The admin never sees a password. */
+  /**
+   * Creates user via Supabase Auth (NO email mode).
+   * Returns the invitation link so the admin can copy & share it manually
+   * (WhatsApp, email, etc.). The admin never sees a password.
+   */
   createUser: (data: { email: string; nombre: string; rol: string; redirectTo?: string }) =>
-    adminFetch<UserItem & { invitation_sent: boolean }>('/users', { method: 'POST', body: JSON.stringify(data) }),
+    adminFetch<UserItem & { invitation_link: string | null }>('/users', { method: 'POST', body: JSON.stringify(data) }),
 
   updateUser: (id: string, data: Partial<{ nombre: string; rol: string }>) =>
     adminFetch<UserItem>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -514,9 +518,12 @@ export const api = {
   deleteUser: (id: string) =>
     adminFetch<DeleteResult>(`/users/${id}`, { method: 'DELETE' }),
 
-  /** Resend the invitation email to a user that hasn't completed setup. */
+  /**
+   * Generate a fresh invitation link for an existing user (NO email).
+   * The admin copies & shares it manually.
+   */
   resendInvite: (id: string) =>
-    adminFetch<{ resent: boolean; email: string }>(`/users/${id}/resend-invite`, { method: 'POST' }),
+    adminFetch<{ invitation_link: string; email: string }>(`/users/${id}/resend-invite`, { method: 'POST' }),
 
   // ---------------------------------------------------------------------------
   // Admin — Products
