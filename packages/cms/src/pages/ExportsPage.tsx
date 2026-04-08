@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, type ExportJob, type MunicipalityItem } from '../lib/api';
+import { useNotifications } from '../lib/notifications';
 
 /**
  * ExportsPage — Catalogo visual de presets de exportacion
@@ -39,6 +40,7 @@ interface PresetDef {
 }
 
 export function ExportsPage() {
+  const { notify } = useNotifications();
   const [jobs, setJobs] = useState<ExportJob[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,9 +73,21 @@ export function ExportsPage() {
       await fn();
       setSuccess('Exportacion iniciada correctamente. Revisa el historial mas abajo.');
       setTimeout(() => setSuccess(''), 5000);
+      notify({
+        type: 'success',
+        title: 'Exportacion iniciada',
+        message: `La exportacion "${presetId}" ha comenzado.`,
+        link: '/exports',
+      });
       await fetchJobs();
     } catch (e: unknown) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(msg);
+      notify({
+        type: 'error',
+        title: 'Error en exportacion',
+        message: msg,
+      });
     } finally {
       setTriggering(null);
     }

@@ -5,6 +5,7 @@ import { useDarkMode } from '../lib/dark-mode';
 import { CmsAssistant } from './CmsAssistant';
 import { OnboardingTour, shouldShowTour, resetTour } from './OnboardingTour';
 import { GlobalSearch } from './GlobalSearch';
+import { NotificationsBell } from './NotificationsBell';
 
 type Role = 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
 
@@ -115,6 +116,7 @@ export function Layout() {
             <button type="button" className="cms-tour-btn" onClick={handleReplayTour} title="Ver tour de bienvenida">
               ✨ Ver tour
             </button>
+            <NotificationsBell />
             <button
               type="button"
               className="cms-theme-btn"

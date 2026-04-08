@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { ConfirmProvider } from './components/ConfirmDialog';
+import { NotificationsProvider } from './lib/notifications';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
@@ -26,6 +27,7 @@ import { ExportsPage } from './pages/ExportsPage';
 export function App() {
   return (
     <AuthProvider>
+      <NotificationsProvider>
       <ConfirmProvider>
       <BrowserRouter>
         <Routes>
@@ -64,6 +66,7 @@ export function App() {
         </Routes>
       </BrowserRouter>
       </ConfirmProvider>
+      </NotificationsProvider>
     </AuthProvider>
   );
 }

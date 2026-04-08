@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { aiBatch, BATCH_MAX_SIZE, type BatchAction, type BatchResponse } from '@/lib/ai';
+import { useNotifications } from '@/lib/notifications';
 
 /**
  * BulkAiActions — Modal con acciones de IA en lote
@@ -67,6 +68,7 @@ const LANG_OPTIONS = [
 type Phase = 'select' | 'running' | 'done';
 
 export function BulkAiActions({ selectedIds, onClose, onComplete }: BulkAiActionsProps) {
+  const { notify } = useNotifications();
   const [phase, setPhase] = useState<Phase>('select');
   const [action, setAction] = useState<BatchAction | null>(null);
   const [targetLang, setTargetLang] = useState('gl');
@@ -102,9 +104,22 @@ export function BulkAiActions({ selectedIds, onClose, onComplete }: BulkAiAction
         setResults([...allResults]);
       }
       setPhase('done');
+      // Aggregated stats for notification
+      const completed = allResults.reduce((acc, r) => acc + r.completed, 0);
+      const errors = allResults.reduce((acc, r) => acc + r.errors, 0);
+      notify({
+        type: errors > 0 ? 'warning' : 'success',
+        title: 'Operacion IA en lote completada',
+        message: `${completed} recursos completados${errors > 0 ? `, ${errors} con errores` : ''}.`,
+      });
     } catch (err: any) {
       setError(err.message || 'Error al procesar el lote');
       setPhase('done');
+      notify({
+        type: 'error',
+        title: 'Error en operacion IA',
+        message: err.message || 'Error al procesar el lote',
+      });
     }
   }
 

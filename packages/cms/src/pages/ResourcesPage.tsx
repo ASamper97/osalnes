@@ -13,6 +13,7 @@ import {
   RESOURCE_BUILTIN_VIEWS,
   type SavedView,
 } from '@/lib/saved-views';
+import { useNotifications } from '@/lib/notifications';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -52,6 +53,7 @@ const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?:
 export function ResourcesPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const { notify } = useNotifications();
   const [resources, setResources] = useState<PaginatedResult<ResourceSummary> | null>(null);
   const [typologies, setTypologies] = useState<TypologyItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
@@ -176,12 +178,43 @@ export function ResourcesPage() {
       variant: newStatus === 'publicado' ? 'default' : newStatus === 'archivado' ? 'warning' : 'default',
     });
     if (!ok) return;
+    const resource = resources?.items.find((r) => r.id === id);
+    const resourceName = resource?.name?.es || resource?.slug || 'Recurso';
     setBusyId(id);
     try {
       await api.updateResourceStatus(id, newStatus);
+      // Notify on successful status change
+      if (newStatus === 'publicado') {
+        notify({
+          type: 'success',
+          title: 'Recurso publicado',
+          message: `"${resourceName}" ya esta visible en el portal publico.`,
+          link: `/resources/${id}`,
+        });
+      } else if (newStatus === 'archivado') {
+        notify({
+          type: 'warning',
+          title: 'Recurso archivado',
+          message: `"${resourceName}" ya no aparece en el portal.`,
+          link: `/resources/${id}`,
+        });
+      } else if (newStatus === 'revision') {
+        notify({
+          type: 'info',
+          title: 'Enviado a revision',
+          message: `"${resourceName}" pendiente de aprobacion.`,
+          link: `/resources/${id}`,
+        });
+      }
       loadResources();
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      notify({
+        type: 'error',
+        title: 'Error al cambiar estado',
+        message: msg,
+      });
     } finally {
       setBusyId(null);
     }
