@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * EditorialStatusBar — Barra visual del flujo editorial de un recurso.
@@ -52,12 +53,21 @@ interface EditorialStatusBarProps {
 }
 
 export function EditorialStatusBar({ currentStatus, publishedAt, onTransition, disabled }: EditorialStatusBarProps) {
+  const confirm = useConfirm();
   const [transitioning, setTransitioning] = useState<string | null>(null);
   const transitions = STATE_TRANSITIONS[currentStatus] || [];
 
   async function handleClick(target: EditorialState, label: string) {
     if (disabled || transitioning) return;
-    if (!confirm(`${label}?`)) return;
+    const ok = await confirm({
+      title: `${label}?`,
+      message: target === 'publicado'
+        ? 'El recurso sera visible para todos los visitantes del portal publico.'
+        : `El estado del recurso pasara a "${target}".`,
+      confirmLabel: label,
+      variant: target === 'publicado' ? 'default' : target === 'archivado' ? 'warning' : 'default',
+    });
+    if (!ok) return;
     setTransitioning(target);
     try {
       await onTransition(target);

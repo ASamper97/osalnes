@@ -3,6 +3,7 @@ import { AuthProvider } from './lib/auth-context';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
+import { ConfirmProvider } from './components/ConfirmDialog';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
@@ -25,6 +26,7 @@ import { ExportsPage } from './pages/ExportsPage';
 export function App() {
   return (
     <AuthProvider>
+      <ConfirmProvider>
       <BrowserRouter>
         <Routes>
           {/* Public */}
@@ -61,6 +63,7 @@ export function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ConfirmProvider>
     </AuthProvider>
   );
 }

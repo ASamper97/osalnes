@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@/lib/api';
+import { useConfirm } from './ConfirmDialog';
 
 interface Document {
   id: string;
@@ -22,6 +23,7 @@ function formatSize(bytes: number): string {
 }
 
 export function DocumentUploader({ entidadTipo, entidadId }: DocumentUploaderProps) {
+  const confirm = useConfirm();
   const [docs, setDocs] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,13 @@ export function DocumentUploader({ entidadTipo, entidadId }: DocumentUploaderPro
   }
 
   async function handleDelete(docId: string) {
-    if (!confirm('Eliminar este documento?')) return;
+    const ok = await confirm({
+      title: 'Eliminar este documento?',
+      message: 'El documento se eliminara permanentemente del recurso.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.deleteDocument(docId);
       await loadDocs();

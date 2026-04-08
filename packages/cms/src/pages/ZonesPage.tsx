@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 export function ZonesPage() {
+  const confirm = useConfirm();
   const [zones, setZones] = useState<ZoneItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,13 @@ export function ZonesPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar zona "${name}"? Los recursos vinculados perderan su zona.`)) return;
+    const ok = await confirm({
+      title: `Eliminar zona "${name}"?`,
+      message: 'Los recursos turisticos asociados a esta zona perderan la asociacion. Esta accion no se puede deshacer.',
+      confirmLabel: 'Eliminar zona',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteZone(id);

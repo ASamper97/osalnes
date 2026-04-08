@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type ResourceSummary } from '@/lib/api';
+import { useConfirm } from './ConfirmDialog';
 
 /** UNE 178503 — relation types between tourist resources */
 export const RELATION_TYPES = [
@@ -25,6 +26,7 @@ interface RelationsManagerProps {
 }
 
 export function RelationsManager({ recursoId }: RelationsManagerProps) {
+  const confirm = useConfirm();
   const [relations, setRelations] = useState<Relation[]>([]);
   const [allResources, setAllResources] = useState<ResourceSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,13 @@ export function RelationsManager({ recursoId }: RelationsManagerProps) {
   }
 
   async function handleDelete(relationId: string) {
-    if (!confirm('Eliminar esta relacion?')) return;
+    const ok = await confirm({
+      title: 'Eliminar esta relacion?',
+      message: 'La relacion entre los dos recursos se eliminara. Los recursos en si no se ven afectados.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.deleteRelation(relationId);
       await loadRelations();

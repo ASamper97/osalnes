@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type UserItem } from '@/lib/api';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 /**
  * UsersPage — Gestion de usuarios con selector de rol explicativo
@@ -91,6 +93,7 @@ const ROLES: RoleDef[] = [
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function UsersPage() {
+  const confirm = useConfirm();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -161,7 +164,13 @@ export function UsersPage() {
   }
 
   async function handleDeactivate(id: string, name: string) {
-    if (!confirm(`Desactivar usuario "${name}"? No podra acceder al CMS.`)) return;
+    const ok = await confirm({
+      title: `Desactivar usuario "${name}"?`,
+      message: 'El usuario no podra volver a acceder al CMS hasta que sea reactivado. La cuenta no se elimina, solo se desactiva.',
+      confirmLabel: 'Desactivar',
+      variant: 'warning',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteUser(id);
@@ -279,7 +288,15 @@ export function UsersPage() {
         </form>
       )}
 
-      {/* Table */}
+      {/* Table or empty state */}
+      {users.length === 0 && !showForm ? (
+        <EmptyState
+          icon="👥"
+          title="Aun no hay usuarios"
+          description="Anade usuarios para que tu equipo pueda colaborar en el CMS. Cada usuario tiene un rol con permisos especificos."
+          action={{ label: '+ Crear el primer usuario', onClick: startCreate }}
+        />
+      ) : users.length > 0 && (
       <table className="data-table">
         <thead>
           <tr>
@@ -291,9 +308,6 @@ export function UsersPage() {
           </tr>
         </thead>
         <tbody>
-          {users.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin usuarios</td></tr>
-          )}
           {users.map((u) => (
             <tr key={u.id}>
               <td><strong>{u.nombre}</strong></td>
@@ -322,6 +336,7 @@ export function UsersPage() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }

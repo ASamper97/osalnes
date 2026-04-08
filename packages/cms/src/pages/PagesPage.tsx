@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type PageItem } from '@/lib/api';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -29,6 +31,7 @@ const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 
 export function PagesPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [pages, setPages] = useState<PageItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,7 +125,13 @@ export function PagesPage() {
   }
 
   async function handleDelete(id: string, title: string) {
-    if (!confirm(`Eliminar pagina "${title}"? Esta accion no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: `Eliminar pagina "${title}"?`,
+      message: 'Esta accion no se puede deshacer. La pagina dejara de estar disponible en el portal.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deletePage(id);
@@ -137,7 +146,15 @@ export function PagesPage() {
 
   async function handleStatusChange(id: string, newStatus: string) {
     const label = STATUS_LABELS[newStatus] || newStatus;
-    if (!confirm(`Cambiar estado a "${label}"?`)) return;
+    const ok = await confirm({
+      title: `Cambiar estado a "${label}"?`,
+      message: newStatus === 'publicado'
+        ? 'La pagina sera visible para todos los visitantes del portal publico.'
+        : `El estado de la pagina pasara a "${label}".`,
+      confirmLabel: 'Cambiar estado',
+      variant: newStatus === 'publicado' ? 'default' : 'warning',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.updatePageStatus(id, newStatus);
@@ -248,7 +265,15 @@ export function PagesPage() {
         </fieldset>
       </form>
 
-      {/* Table */}
+      {/* Table or empty state */}
+      {pages.length === 0 ? (
+        <EmptyState
+          icon="📄"
+          title="Aun no hay paginas editoriales"
+          description="Las paginas editoriales son contenido fijo del portal: informacion practica, sobre nosotros, politica de privacidad, etc."
+          action={{ label: '+ Crear la primera pagina', onClick: () => navigate('/pages/new') }}
+        />
+      ) : (
       <table className="data-table">
         <thead>
           <tr>
@@ -260,9 +285,6 @@ export function PagesPage() {
           </tr>
         </thead>
         <tbody>
-          {pages.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin paginas</td></tr>
-          )}
           {pages.map((p) => (
             <tr key={p.id}>
               <td><strong>{p.title?.es || p.slug}</strong></td>
@@ -294,6 +316,7 @@ export function PagesPage() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }

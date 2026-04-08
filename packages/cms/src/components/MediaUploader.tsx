@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { api, type AssetItem } from '@/lib/api';
+import { useConfirm } from './ConfirmDialog';
 
 interface MediaUploaderProps {
   recursoId: string;
 }
 
 export function MediaUploader({ recursoId }: MediaUploaderProps) {
+  const confirm = useConfirm();
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,13 @@ export function MediaUploader({ recursoId }: MediaUploaderProps) {
   }
 
   async function handleDelete(assetId: string) {
-    if (!confirm('Eliminar este archivo?')) return;
+    const ok = await confirm({
+      title: 'Eliminar este archivo?',
+      message: 'El archivo se eliminara permanentemente del recurso.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.deleteAsset(assetId);
       await loadAssets();

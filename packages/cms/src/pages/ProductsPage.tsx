@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type ProductItem } from '@/lib/api';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 export function ProductsPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +86,13 @@ export function ProductsPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar producto "${name}"? Esta accion no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: `Eliminar producto "${name}"?`,
+      message: 'Esta accion no se puede deshacer. Los recursos asociados a este producto perderan su asociacion.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteProduct(id);
@@ -173,7 +182,15 @@ export function ProductsPage() {
         </fieldset>
       </form>
 
-      {/* Table */}
+      {/* Table or empty state */}
+      {products.length === 0 ? (
+        <EmptyState
+          icon="🎯"
+          title="Aun no hay productos turisticos"
+          description="Los productos turisticos son agrupaciones tematicas como rutas, experiencias o paquetes (Ruta do Vino, Camino dos Faros...)."
+          action={{ label: '+ Crear el primer producto', onClick: () => navigate('/products/new') }}
+        />
+      ) : (
       <table className="data-table">
         <thead>
           <tr>
@@ -185,9 +202,6 @@ export function ProductsPage() {
           </tr>
         </thead>
         <tbody>
-          {products.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin productos</td></tr>
-          )}
           {products.map((p) => (
             <tr key={p.id}>
               <td><strong>{p.name?.es || p.slug}</strong></td>
@@ -211,6 +225,7 @@ export function ProductsPage() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }

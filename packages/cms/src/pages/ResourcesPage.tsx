@@ -4,6 +4,8 @@ import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, typ
 import { SkeletonTable } from '@/components/Skeleton';
 import { QrModal } from '@/components/QrModal';
 import { BulkAiActions } from '@/components/BulkAiActions';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -42,6 +44,7 @@ const STATE_TRANSITIONS: Record<string, { target: string; label: string; style?:
 
 export function ResourcesPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [resources, setResources] = useState<PaginatedResult<ResourceSummary> | null>(null);
   const [typologies, setTypologies] = useState<TypologyItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
@@ -89,7 +92,13 @@ export function ResourcesPage() {
   }, []);
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar "${name}"? Esta accion no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: `Eliminar "${name}"?`,
+      message: 'Esta accion no se puede deshacer. Se eliminaran tambien todas las imagenes, documentos y traducciones asociadas.',
+      confirmLabel: 'Eliminar recurso',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteResource(id);
@@ -103,7 +112,15 @@ export function ResourcesPage() {
 
   async function handleStatusChange(id: string, newStatus: string) {
     const label = STATUS_LABELS[newStatus] || newStatus;
-    if (!confirm(`Cambiar estado a "${label}"?`)) return;
+    const ok = await confirm({
+      title: `Cambiar estado a "${label}"?`,
+      message: newStatus === 'publicado'
+        ? 'El recurso sera visible para todos los visitantes del portal publico.'
+        : `El estado del recurso pasara a "${label}".`,
+      confirmLabel: 'Cambiar estado',
+      variant: newStatus === 'publicado' ? 'default' : newStatus === 'archivado' ? 'warning' : 'default',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.updateResourceStatus(id, newStatus);
@@ -209,7 +226,19 @@ export function ResourcesPage() {
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin recursos</td></tr>
+                <tr><td colSpan={6}>
+                  <EmptyState
+                    variant="inline"
+                    icon="🏖️"
+                    title={searchName || filterType || filterStatus ? 'Sin resultados' : 'Aun no hay recursos turisticos'}
+                    description={searchName || filterType || filterStatus
+                      ? 'Prueba a quitar algun filtro o cambiar la busqueda.'
+                      : 'Crea tu primer recurso con el asistente paso a paso. Te guiamos para que sea perfecto.'}
+                    action={!searchName && !filterType && !filterStatus
+                      ? { label: '+ Crear el primer recurso', onClick: () => navigate('/resources/new') }
+                      : undefined}
+                  />
+                </td></tr>
               )}
               {filtered.map((r) => (
                 <tr key={r.id} className={selectedIds.has(r.id) ? 'data-table__row--selected' : ''}>

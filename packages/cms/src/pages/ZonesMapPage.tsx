@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 /**
  * ZonesMapPage — Gestion visual de zonas geograficas
@@ -46,6 +47,7 @@ function FlyToMunicipio({ lat, lng }: { lat: number | null; lng: number | null }
 }
 
 export function ZonesMapPage() {
+  const confirm = useConfirm();
   const [zones, setZones] = useState<ZoneItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +126,13 @@ export function ZonesMapPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Eliminar zona "${name}"? Los recursos vinculados perderan su zona.`)) return;
+    const ok = await confirm({
+      title: `Eliminar zona "${name}"?`,
+      message: 'Los recursos turisticos asociados a esta zona perderan la asociacion. Esta accion no se puede deshacer.',
+      confirmLabel: 'Eliminar zona',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteZone(id);

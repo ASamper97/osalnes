@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type NavItem } from '@/lib/api';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 const MENUS = ['header', 'footer', 'sidebar'];
 const TIPOS = ['pagina', 'recurso', 'url_externa', 'categoria', 'tipologia'];
 
 export function NavigationPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [items, setItems] = useState<NavItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +109,13 @@ export function NavigationPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Eliminar este elemento de navegacion? Esta accion no se puede deshacer.')) return;
+    const ok = await confirm({
+      title: 'Eliminar elemento de navegacion?',
+      message: 'Esta accion no se puede deshacer. El enlace dejara de aparecer en el menu del portal.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteNavItem(id);
@@ -240,7 +249,15 @@ export function NavigationPage() {
         </thead>
         <tbody>
           {items.length === 0 ? (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: '#999' }}>Sin elementos en este menu</td></tr>
+            <tr><td colSpan={6}>
+              <EmptyState
+                variant="inline"
+                icon="🧭"
+                title={`Sin elementos en el menu "${activeMenu}"`}
+                description="Anade enlaces al menu del portal: paginas editoriales, recursos turisticos, categorias o URLs externas. El asistente te guia paso a paso."
+                action={{ label: '+ Anadir primer enlace', onClick: () => navigate(`/navigation/new?menu=${activeMenu}`) }}
+              />
+            </td></tr>
           ) : (
             items.map((item) => (
               <tr key={item.id}>

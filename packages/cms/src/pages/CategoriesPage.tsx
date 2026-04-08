@@ -1,9 +1,12 @@
 import { useEffect, useState, Fragment, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type CategoryItem } from '@/lib/api';
+import { EmptyState } from '@/components/EmptyState';
+import { useConfirm } from '@/components/ConfirmDialog';
 
 export function CategoriesPage() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +102,13 @@ export function CategoriesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function handleDelete(id: string) {
-    if (!confirm('Eliminar esta categoria? Esta accion no se puede deshacer.')) return;
+    const ok = await confirm({
+      title: 'Eliminar categoria?',
+      message: 'Esta accion no se puede deshacer. Los recursos asociados perderan esta categoria.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusyId(id);
     try {
       await api.deleteCategory(id);
@@ -200,7 +209,15 @@ export function CategoriesPage() {
         </form>
       )}
 
-      {/* Categories tree */}
+      {/* Categories tree or empty state */}
+      {categories.length === 0 ? (
+        <EmptyState
+          icon="🌳"
+          title="Aun no hay categorias"
+          description="Las categorias organizan los recursos turisticos en grupos (Alojamientos, Restauracion, Naturaleza...). El asistente te guia paso a paso para crear la primera."
+          action={{ label: '+ Crear la primera categoria', onClick: () => navigate('/categories/new') }}
+        />
+      ) : (
       <table className="data-table">
         <thead>
           <tr>
@@ -249,6 +266,7 @@ export function CategoriesPage() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
