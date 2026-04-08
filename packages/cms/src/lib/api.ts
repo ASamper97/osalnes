@@ -363,10 +363,10 @@ export const api = {
 
   getAdminCategories: () => adminFetch<CategoryItem[]>('/categories'),
 
-  createCategory: (data: { slug: string; parent_id?: string | null; orden?: number; name: LocalizedValue }) =>
+  createCategory: (data: { slug: string; parent_id?: string | null; orden?: number; activo?: boolean; name: LocalizedValue }) =>
     adminFetch<CategoryItem>('/categories', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateCategory: (id: string, data: { slug?: string; parent_id?: string | null; orden?: number; name?: LocalizedValue }) =>
+  updateCategory: (id: string, data: { slug?: string; parent_id?: string | null; orden?: number; activo?: boolean; name?: LocalizedValue }) =>
     adminFetch<CategoryItem>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   deleteCategory: (id: string) =>

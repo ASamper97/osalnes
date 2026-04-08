@@ -1,7 +1,9 @@
 import { useEffect, useState, Fragment, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type CategoryItem } from '@/lib/api';
 
 export function CategoriesPage() {
+  const navigate = useNavigate();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function CategoriesPage() {
     setActivo(true);
   }
 
-  function startEdit(cat: Category) {
+  function startEdit(cat: CategoryItem) {
     setEditing(cat.id);
     setSlug(cat.slug);
     setNameEs(cat.name?.es || '');
@@ -118,11 +120,11 @@ export function CategoriesPage() {
     <div>
       <div className="page-header">
         <h1>Categorias</h1>
-        {!editing && (
-          <button className="btn btn-primary" onClick={() => setEditing('new')}>
-            Nueva categoria
+        <div className="page-header__actions">
+          <button className="btn btn-primary" onClick={() => navigate('/categories/new')}>
+            + Nueva categoria (asistente)
           </button>
-        )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
@@ -221,7 +223,8 @@ export function CategoriesPage() {
                 <td>{root.activo ? 'Si' : 'No'}</td>
                 <td>
                   <div className="action-btns">
-                    <button className="btn btn-sm" onClick={() => startEdit(root)} disabled={busyId === root.id}>Editar</button>
+                    <button className="btn btn-sm" onClick={() => navigate(`/categories/${root.id}/edit`)} disabled={busyId === root.id}>Editar</button>
+                    <button className="btn btn-sm btn-outline" onClick={() => startEdit(root)} disabled={busyId === root.id}>Edicion rapida</button>
                     <button className="btn btn-sm btn-danger" onClick={() => handleDelete(root.id)} disabled={busyId === root.id}>{busyId === root.id ? '...' : 'Eliminar'}</button>
                   </div>
                 </td>
@@ -235,7 +238,8 @@ export function CategoriesPage() {
                   <td>{sub.activo ? 'Si' : 'No'}</td>
                   <td>
                     <div className="action-btns">
-                      <button className="btn btn-sm" onClick={() => startEdit(sub)} disabled={busyId === sub.id}>Editar</button>
+                      <button className="btn btn-sm" onClick={() => navigate(`/categories/${sub.id}/edit`)} disabled={busyId === sub.id}>Editar</button>
+                      <button className="btn btn-sm btn-outline" onClick={() => startEdit(sub)} disabled={busyId === sub.id}>Edicion rapida</button>
                       <button className="btn btn-sm btn-danger" onClick={() => handleDelete(sub.id)} disabled={busyId === sub.id}>{busyId === sub.id ? '...' : 'Eliminar'}</button>
                     </div>
                   </td>

@@ -9,6 +9,7 @@ import { ResourcesPage } from './pages/ResourcesPage';
 import { ResourceFormPage } from './pages/ResourceFormPage';
 import { ResourceWizardPage } from './pages/ResourceWizardPage';
 import { CategoriesPage } from './pages/CategoriesPage';
+import { CategoryWizardPage } from './pages/CategoryWizardPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { ZonesPage } from './pages/ZonesPage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -37,6 +38,8 @@ export function App() {
               {/* Formulario clasico disponible como fallback */}
               <Route path="/resources/:id/classic" element={<ErrorBoundary><ResourceFormPage /></ErrorBoundary>} />
               <Route path="/categories" element={<ErrorBoundary><CategoriesPage /></ErrorBoundary>} />
+              <Route path="/categories/new" element={<ErrorBoundary><CategoryWizardPage /></ErrorBoundary>} />
+              <Route path="/categories/:id/edit" element={<ErrorBoundary><CategoryWizardPage /></ErrorBoundary>} />
               <Route path="/products" element={<ErrorBoundary><ProductsPage /></ErrorBoundary>} />
               <Route path="/zones" element={<ErrorBoundary><ZonesPage /></ErrorBoundary>} />
               <Route path="/pages" element={<ErrorBoundary><PagesPage /></ErrorBoundary>} />
