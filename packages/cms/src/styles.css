@@ -1270,6 +1270,201 @@ body {
   color: #fff;
   border-radius: 20px;
 }
+
+/* ==========================================================================
+   OnboardingTour — Tour interactivo de bienvenida
+   ========================================================================== */
+
+@keyframes tour-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tour-tooltip-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes tour-tooltip-in-center {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(26, 188, 156, 0.5), 0 0 0 9999px rgba(15, 28, 46, 0.7); }
+  50%      { box-shadow: 0 0 0 12px rgba(26, 188, 156, 0), 0 0 0 9999px rgba(15, 28, 46, 0.7); }
+}
+
+.onboarding-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.onboarding-tour__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 28, 46, 0.7);
+  pointer-events: auto;
+  cursor: pointer;
+  animation: tour-fade-in 0.3s ease;
+}
+
+/* Spotlight: a transparent rectangle with a huge box-shadow that creates the dim around it */
+.onboarding-tour__spotlight {
+  position: fixed;
+  background: transparent;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(15, 28, 46, 0.7);
+  border: 2px solid #1abc9c;
+  pointer-events: none;
+  transition: top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tour-pulse 2s ease-in-out infinite;
+}
+
+/* Tooltip card */
+.onboarding-tour__tooltip {
+  position: fixed;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  background: var(--cms-card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.6rem 1.25rem;
+  box-shadow: 0 24px 60px rgba(15, 28, 46, 0.4);
+  pointer-events: auto;
+  animation: tour-tooltip-in 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.onboarding-tour__tooltip--center {
+  animation: tour-tooltip-in-center 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Progress dots */
+.onboarding-tour__progress {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.onboarding-tour__progress-dot {
+  flex: 1;
+  height: 4px;
+  background: var(--cms-border);
+  border-radius: 2px;
+  transition: background 0.3s ease;
+}
+
+.onboarding-tour__progress-dot--active {
+  background: linear-gradient(90deg, var(--cms-primary), #1abc9c);
+}
+
+.onboarding-tour__progress-dot--done {
+  background: #1abc9c;
+}
+
+.onboarding-tour__icon {
+  font-size: 2.2rem;
+  line-height: 1;
+  margin-bottom: 0.6rem;
+}
+
+.onboarding-tour__title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  letter-spacing: -0.01em;
+  margin-bottom: 0.5rem;
+  line-height: 1.25;
+}
+
+.onboarding-tour__desc {
+  font-size: 0.88rem;
+  color: var(--cms-text-light);
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+/* Navigation */
+
+.onboarding-tour__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--cms-border);
+}
+
+.onboarding-tour__skip {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.onboarding-tour__skip:hover {
+  background: var(--cms-border);
+  color: var(--cms-text);
+}
+
+.onboarding-tour__nav-right {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.onboarding-tour__step-counter {
+  position: absolute;
+  top: 0.85rem;
+  right: 1rem;
+  font-size: 0.7rem;
+  color: var(--cms-text-light);
+  font-weight: 600;
+  background: var(--cms-bg);
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+}
+
+/* Sidebar tour trigger button */
+
+.cms-tour-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  background: rgba(26, 188, 156, 0.12);
+  color: #1abc9c;
+  border: 1px solid rgba(26, 188, 156, 0.3);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  transition: all var(--transition);
+}
+
+.cms-tour-btn:hover {
+  background: rgba(26, 188, 156, 0.2);
+  border-color: #1abc9c;
+}
+
+@media (max-width: 700px) {
+  .onboarding-tour__tooltip {
+    width: calc(100vw - 24px);
+    max-width: 380px;
+  }
+}
 .dashboard-section h2 {
   font-size: 1rem;
   font-weight: 700;

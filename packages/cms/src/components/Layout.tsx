@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 import { CmsAssistant } from './CmsAssistant';
+import { OnboardingTour, shouldShowTour, resetTour } from './OnboardingTour';
 
 type Role = 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
 
@@ -37,17 +39,32 @@ const ROLE_LABELS: Record<Role, string> = {
 export function Layout() {
   const { user, role, signOut } = useAuth();
   const navigate = useNavigate();
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // Auto-show tour the first time the user lands on the CMS
+  useEffect(() => {
+    if (user && shouldShowTour()) {
+      // Small delay so the layout has time to render before opening
+      const t = setTimeout(() => setTourOpen(true), 600);
+      return () => clearTimeout(t);
+    }
+  }, [user]);
 
   async function handleLogout() {
     await signOut();
     navigate('/login');
   }
 
+  function handleReplayTour() {
+    resetTour();
+    setTourOpen(true);
+  }
+
   const visibleItems = navItems.filter((item) => role && item.roles.includes(role));
 
   return (
     <div className="cms-layout">
-      <aside className="cms-sidebar">
+      <aside className="cms-sidebar" data-tour="sidebar">
         <div className="cms-sidebar-brand">
           <img src="/logo-osalnes.png" alt="O Salnes" className="cms-sidebar-logo-img" />
           <div className="cms-sidebar-subtitle">DTI CMS</div>
@@ -59,6 +76,7 @@ export function Layout() {
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) => `cms-nav-link ${isActive ? 'active' : ''}`}
+              data-tour={item.path === '/resources' ? 'nav-resources' : undefined}
             >
               <span className="cms-nav-icon">{item.icon}</span>
               {item.label}
@@ -67,6 +85,9 @@ export function Layout() {
         </nav>
 
         <div className="cms-sidebar-footer">
+          <button type="button" className="cms-tour-btn" onClick={handleReplayTour} title="Ver tour de bienvenida">
+            ✨ Ver tour de bienvenida
+          </button>
           <div className="cms-user-info">
             <div className="cms-user-avatar">{user?.email?.charAt(0).toUpperCase()}</div>
             <div>
@@ -83,6 +104,7 @@ export function Layout() {
         <Outlet />
       </div>
       <CmsAssistant />
+      <OnboardingTour open={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   );
 }

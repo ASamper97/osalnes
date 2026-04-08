@@ -99,6 +99,7 @@ export function CmsAssistant() {
         className="cms-ai-fab"
         onClick={() => setOpen(!open)}
         title="ARIA"
+        data-tour="ai-fab"
       >
         {open ? '✕' : '✦'}
       </button>
