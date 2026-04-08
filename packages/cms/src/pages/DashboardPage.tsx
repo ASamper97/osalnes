@@ -43,39 +43,47 @@ export function DashboardPage() {
         Panel de control operativo — UNE 178502
       </p>
 
-      {/* KPI cards (UNE 178502 sec. 6.3) */}
-      <div className="dashboard-grid">
-        <StatCard label="Recursos totales" value={r.total} />
-        <StatCard label="Publicados" value={r.published} color="var(--status-publicado)" />
-        <StatCard label="En revision" value={r.review} color="var(--status-revision)" />
-        <StatCard label="Borradores" value={r.draft} color="var(--status-borrador)" />
-        <StatCard label="Archivados" value={r.archived} color="var(--status-archivado)" />
-        <StatCard label="Municipios" value={stats.municipalities} />
-        <StatCard label="Categorias" value={stats.categories} />
-      </div>
-
-      {/* Content alerts */}
+      {/* Content alerts — top priority */}
       {stats.alerts.length > 0 && (
-        <div className="dashboard-section">
-          <div className="dashboard-alerts">
-            {stats.alerts.map((a, i) => (
-              <div key={i} className={`alert alert-${a.level}`}>
-                {a.level === 'error' ? '!!' : '!'} {a.message}
-              </div>
-            ))}
-          </div>
+        <div className="dashboard-alerts" style={{ marginBottom: '1.25rem' }}>
+          {stats.alerts.map((a, i) => (
+            <div key={i} className={`alert alert-${a.level}`}>
+              {a.level === 'error' ? '!!' : '!'} {a.message}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Quick search + actions */}
-      <div className="dashboard-section">
+      {/* Quick search + actions — moved up for accessibility */}
+      <div className="dashboard-section dashboard-section--first">
         <h2>Acciones rapidas</h2>
         <div className="dashboard-actions">
           <QuickSearch />
-          <Link to="/resources?new=1" className="btn btn-primary">Nuevo recurso</Link>
+          <Link to="/resources?new=1" className="btn btn-primary">+ Nuevo recurso</Link>
           <Link to="/resources?status=revision" className="btn btn-outline">
             Pendientes de revision ({r.review})
           </Link>
+        </div>
+      </div>
+
+      {/* KPI cards group 1 — Estado del trabajo (UNE 178502 sec. 6.3) */}
+      <div className="dashboard-section">
+        <h2>Estado del trabajo</h2>
+        <div className="dashboard-grid dashboard-grid--editorial">
+          <StatCard icon="📊" label="Recursos totales" value={r.total} />
+          <StatCard icon="🌐" label="Publicados" value={r.published} color="var(--status-publicado)" />
+          <StatCard icon="👀" label="En revision" value={r.review} color="var(--status-revision)" />
+          <StatCard icon="✏️" label="Borradores" value={r.draft} color="var(--status-borrador)" />
+          <StatCard icon="📦" label="Archivados" value={r.archived} color="var(--status-archivado)" />
+        </div>
+      </div>
+
+      {/* KPI cards group 2 — Catalogo del destino */}
+      <div className="dashboard-section">
+        <h2>Catalogo del destino</h2>
+        <div className="dashboard-grid dashboard-grid--catalog">
+          <StatCard icon="📍" label="Municipios" value={stats.municipalities} />
+          <StatCard icon="🏷️" label="Categorias" value={stats.categories} />
         </div>
       </div>
 
@@ -226,11 +234,14 @@ function actionColor(accion: string) {
   }
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
+function StatCard({ icon, label, value, color }: { icon?: string; label: string; value: number; color?: string }) {
   return (
     <div className="stat-card">
-      <div className="stat-card__label">{label}</div>
-      <div className="stat-card__value" style={color ? { color } : undefined}>{value}</div>
+      {icon && <div className="stat-card__icon">{icon}</div>}
+      <div className="stat-card__body">
+        <div className="stat-card__label">{label}</div>
+        <div className="stat-card__value" style={color ? { color } : undefined}>{value}</div>
+      </div>
     </div>
   );
 }
