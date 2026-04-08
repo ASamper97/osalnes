@@ -81,6 +81,7 @@ export function Layout() {
 
   return (
     <div className="cms-layout">
+      <a href="#main-content" className="skip-to-main">Saltar al contenido principal</a>
       <aside className="cms-sidebar" data-tour="sidebar">
         <div className="cms-sidebar-brand">
           <img src="/logo-osalnes.png" alt="O Salnes" className="cms-sidebar-logo-img" />
@@ -139,9 +140,9 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <div className="cms-content">
+      <main id="main-content" className="cms-content" tabIndex={-1}>
         <Outlet />
-      </div>
+      </main>
       <CmsAssistant />
       <OnboardingTour open={tourOpen} onClose={() => setTourOpen(false)} />
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
