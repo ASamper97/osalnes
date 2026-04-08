@@ -1,5 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api, type ExportJob } from '../lib/api';
+import { api, type ExportJob, type MunicipalityItem } from '../lib/api';
+
+/**
+ * ExportsPage — Catalogo visual de presets de exportacion
+ *
+ * Reemplaza los botones planos por cards de "1 click" que cubren los
+ * casos de uso tipicos: exportacion mensual a PID, snapshots a Data Lake,
+ * descargas JSON-LD para integracion externa.
+ */
 
 const STATUS_LABELS: Record<string, string> = {
   pendiente: 'Pendiente',
@@ -15,31 +23,54 @@ const STATUS_CLASS: Record<string, string> = {
   error: 'borrador',
 };
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+interface PresetDef {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  badge?: string;
+  badgeColor?: 'pid' | 'data' | 'json' | 'csv';
+  /** Returns null if no API call (link), otherwise calls the API */
+  action: () => Promise<void> | void;
+  isLink?: boolean;
+  href?: string;
+}
+
 export function ExportsPage() {
   const [jobs, setJobs] = useState<ExportJob[]>([]);
+  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [filterTipo, setFilterTipo] = useState('');
+  const [success, setSuccess] = useState('');
+  const [selectedMunicipio, setSelectedMunicipio] = useState('');
 
   const fetchJobs = useCallback(async () => {
     try {
-      const data = await api.getExports(filterTipo || undefined);
+      const data = await api.getExports();
       setJobs(data);
     } catch (e: unknown) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [filterTipo]);
+  }, []);
 
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useEffect(() => {
+    fetchJobs();
+    api.getMunicipalities().then(setMunicipalities).catch(() => {});
+  }, [fetchJobs]);
 
-  async function triggerExport(tipo: 'pid' | 'datalake') {
-    setTriggering(tipo);
+  async function runPreset(presetId: string, fn: () => Promise<unknown>) {
+    setTriggering(presetId);
     setError('');
+    setSuccess('');
     try {
-      await (tipo === 'pid' ? api.createExportPid() : api.createExportDatalake());
+      await fn();
+      setSuccess('Exportacion iniciada correctamente. Revisa el historial mas abajo.');
+      setTimeout(() => setSuccess(''), 5000);
       await fetchJobs();
     } catch (e: unknown) {
       setError((e as Error).message);
@@ -48,78 +79,159 @@ export function ExportsPage() {
     }
   }
 
+  const presets: PresetDef[] = [
+    {
+      id: 'pid-full',
+      icon: '🚀',
+      title: 'Exportacion completa a PID',
+      description: 'Envia todos los recursos publicados al PID de SEGITTUR. Es la exportacion principal y la que cumple los requisitos del DTI.',
+      badge: 'PID · Completa',
+      badgeColor: 'pid',
+      action: () => runPreset('pid-full', () => api.createExportPid()),
+    },
+    {
+      id: 'pid-recent',
+      icon: '📅',
+      title: 'Novedades del ultimo mes a PID',
+      description: 'Solo los recursos creados o modificados en los ultimos 30 dias. Util para mantener el PID actualizado sin reenviar todo.',
+      badge: 'PID · Mensual',
+      badgeColor: 'pid',
+      action: () => runPreset('pid-recent', () => api.createExportPid({ since_days: 30 })),
+    },
+    {
+      id: 'datalake',
+      icon: '💧',
+      title: 'Snapshot a Data Lake',
+      description: 'Volcado completo del catalogo para analisis interno. Ideal para reportes mensuales y BI.',
+      badge: 'Data Lake',
+      badgeColor: 'data',
+      action: () => runPreset('datalake', () => api.createExportDatalake()),
+    },
+    {
+      id: 'jsonld',
+      icon: '🔗',
+      title: 'JSON-LD publico (schema.org)',
+      description: 'Descarga el catalogo en formato JSON-LD compatible con Google, Bing y motores de IA. Sin proceso, descarga inmediata.',
+      badge: 'JSON-LD · Publico',
+      badgeColor: 'json',
+      isLink: true,
+      href: `${API_BASE}/export/jsonld`,
+      action: () => {},
+    },
+    {
+      id: 'jsonld-municipio',
+      icon: '📍',
+      title: 'JSON-LD filtrado por municipio',
+      description: 'Descarga solo los recursos de un municipio especifico. Util para integraciones con webs municipales independientes.',
+      badge: 'JSON-LD · Por municipio',
+      badgeColor: 'json',
+      isLink: true,
+      href: selectedMunicipio
+        ? `${API_BASE}/export/jsonld?municipio=${selectedMunicipio}`
+        : `${API_BASE}/export/jsonld`,
+      action: () => {},
+    },
+  ];
+
+  // Last successful PID export — useful as a stat
+  const lastPid = jobs.find((j) => j.tipo === 'pid' && j.estado === 'completado');
+  const lastDatalake = jobs.find((j) => j.tipo === 'datalake' && j.estado === 'completado');
+
   return (
     <div>
-      <h1>Exportaciones PID / Data Lake</h1>
-      <p style={{ color: 'var(--cms-text-light)', marginBottom: '1.5rem' }}>
-        Interoperabilidad con Plataforma Inteligente de Destinos (SEGITTUR)
-      </p>
-
-      {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
-
-      {/* Trigger buttons */}
-      <div className="exports-actions">
-        <button
-          className="btn btn-primary"
-          onClick={() => triggerExport('pid')}
-          disabled={triggering !== null}
-        >
-          {triggering === 'pid' ? 'Exportando...' : 'Exportar a PID'}
-        </button>
-        <button
-          className="btn btn-outline"
-          onClick={() => triggerExport('datalake')}
-          disabled={triggering !== null}
-        >
-          {triggering === 'datalake' ? 'Exportando...' : 'Exportar a Data Lake'}
-        </button>
-        <a
-          href={`${import.meta.env.VITE_API_URL || '/api/v1'}/export/jsonld`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn"
-        >
-          Ver JSON-LD publico
-        </a>
-
-        <select
-          value={filterTipo}
-          onChange={(e) => setFilterTipo(e.target.value)}
-          className="exports-filter"
-        >
-          <option value="">Todos los tipos</option>
-          <option value="pid">PID</option>
-          <option value="datalake">Data Lake</option>
-          <option value="csv">CSV</option>
-          <option value="json">JSON</option>
-        </select>
+      <div className="page-header">
+        <h1>Exportaciones</h1>
+        <span className="exports-page__hint">Interoperabilidad con SEGITTUR / Data Lake / Schema.org</span>
       </div>
 
-      {/* Summary cards */}
-      {jobs.length > 0 && (
-        <div className="exports-summary">
-          <SummaryCard
-            label="Ultimo exitoso"
-            job={jobs.find((j) => j.estado === 'completado') || null}
-          />
-          <SummaryCard
-            label="Ultimo error"
-            job={jobs.find((j) => j.estado === 'error') || null}
-          />
-          <div className="stat-card">
-            <div className="stat-card__label">Total exportaciones</div>
-            <div className="stat-card__value">{jobs.length}</div>
-          </div>
+      {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {success && <div className="alert" style={{ background: '#d5f5e3', color: '#1e8449', borderLeft: '3px solid #1e8449', marginBottom: '1rem' }}>{success}</div>}
+
+      {/* Quick stats */}
+      <div className="exports-stats">
+        <div className="exports-stat">
+          <span className="exports-stat__label">Ultima exportacion PID</span>
+          <strong>{lastPid ? formatDate(lastPid.created_at) : 'Nunca'}</strong>
+          {lastPid && <span className="exports-stat__sub">{lastPid.registros_ok} registros</span>}
         </div>
-      )}
+        <div className="exports-stat">
+          <span className="exports-stat__label">Ultimo Data Lake</span>
+          <strong>{lastDatalake ? formatDate(lastDatalake.created_at) : 'Nunca'}</strong>
+          {lastDatalake && <span className="exports-stat__sub">{lastDatalake.registros_ok} registros</span>}
+        </div>
+        <div className="exports-stat">
+          <span className="exports-stat__label">Total exportaciones</span>
+          <strong>{jobs.length}</strong>
+          <span className="exports-stat__sub">{jobs.filter((j) => j.estado === 'completado').length} exitosas</span>
+        </div>
+      </div>
+
+      {/* Preset catalog */}
+      <h2 className="exports-section-title">Acciones rapidas</h2>
+      <p className="exports-section-desc">
+        Cada accion ejecuta una exportacion preconfigurada con un solo click. Perfecta para tareas rutinarias mensuales.
+      </p>
+
+      <div className="exports-preset-grid">
+        {presets.map((preset) => {
+          const isLoading = triggering === preset.id;
+          const needsMunicipio = preset.id === 'jsonld-municipio' && !selectedMunicipio;
+          return (
+            <div key={preset.id} className={`exports-preset exports-preset--${preset.badgeColor || 'default'}`}>
+              <div className="exports-preset__icon">{preset.icon}</div>
+              {preset.badge && (
+                <span className={`exports-preset__badge exports-preset__badge--${preset.badgeColor || 'default'}`}>
+                  {preset.badge}
+                </span>
+              )}
+              <h3 className="exports-preset__title">{preset.title}</h3>
+              <p className="exports-preset__desc">{preset.description}</p>
+
+              {preset.id === 'jsonld-municipio' && (
+                <select
+                  value={selectedMunicipio}
+                  onChange={(e) => setSelectedMunicipio(e.target.value)}
+                  className="exports-preset__select"
+                >
+                  <option value="">Elige un municipio...</option>
+                  {municipalities.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+                  ))}
+                </select>
+              )}
+
+              {preset.isLink ? (
+                <a
+                  href={preset.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`btn btn-primary btn-sm exports-preset__action ${needsMunicipio ? 'is-disabled' : ''}`}
+                  onClick={(e) => { if (needsMunicipio) e.preventDefault(); }}
+                >
+                  Descargar →
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm exports-preset__action"
+                  onClick={() => preset.action()}
+                  disabled={isLoading || triggering !== null}
+                >
+                  {isLoading ? 'Ejecutando...' : 'Ejecutar →'}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Job history */}
-      <h2 style={{ marginTop: '2rem', marginBottom: '0.75rem' }}>Historial</h2>
+      <h2 className="exports-section-title">Historial reciente</h2>
 
       {loading ? (
         <p style={{ color: 'var(--cms-text-light)' }}>Cargando...</p>
       ) : jobs.length === 0 ? (
-        <p className="dashboard-empty">Sin exportaciones registradas</p>
+        <p className="dashboard-empty">Sin exportaciones registradas todavia</p>
       ) : (
         <table className="data-table">
           <thead>
@@ -133,7 +245,7 @@ export function ExportsPage() {
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => (
+            {jobs.slice(0, 20).map((job) => (
               <tr key={job.id}>
                 <td>
                   <span className={`status-badge status-badge--${STATUS_CLASS[job.estado] || 'revision'}`}>
@@ -154,31 +266,6 @@ export function ExportsPage() {
           </tbody>
         </table>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, job }: { label: string; job: ExportJob | null }) {
-  if (!job) {
-    return (
-      <div className="stat-card">
-        <div className="stat-card__label">{label}</div>
-        <div style={{ color: 'var(--cms-text-light)', fontSize: '0.85rem' }}>Ninguno</div>
-      </div>
-    );
-  }
-  return (
-    <div className="stat-card">
-      <div className="stat-card__label">{label}</div>
-      <div style={{ fontSize: '0.85rem' }}>
-        <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{job.tipo}</span>
-        {' — '}
-        {job.registros_ok} registros
-        {job.registros_err > 0 && <span style={{ color: '#e74c3c' }}> ({job.registros_err} err)</span>}
-      </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--cms-text-light)', marginTop: '0.25rem' }}>
-        {formatDate(job.created_at)}
-      </div>
     </div>
   );
 }
