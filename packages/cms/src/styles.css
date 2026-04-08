@@ -1153,6 +1153,78 @@ textarea:focus-visible {
 .dashboard-section { margin-top: 1.75rem; }
 .dashboard-section--first { margin-top: 0; }
 
+.dashboard-hint {
+  font-size: 0.78rem;
+  color: var(--cms-text-light);
+  background: var(--cms-primary-subtle);
+  border-left: 3px solid var(--cms-primary);
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+}
+
+/* Reorderable widget */
+
+.dashboard-widget {
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  background: var(--cms-card-bg);
+  box-shadow: var(--cms-card-shadow);
+  margin-top: 0.85rem;
+  transition: all var(--transition);
+}
+
+.dashboard-widget:first-of-type {
+  margin-top: 0.85rem;
+}
+
+.dashboard-widget--dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+  border-color: var(--cms-primary);
+}
+
+.dashboard-widget--over {
+  border-color: #1abc9c;
+  background: rgba(26, 188, 156, 0.04);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(26, 188, 156, 0.15);
+}
+
+.dashboard-widget__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  cursor: grab;
+  user-select: none;
+}
+
+.dashboard-widget__header:active {
+  cursor: grabbing;
+}
+
+.dashboard-widget__handle {
+  font-size: 1rem;
+  color: var(--cms-text-light);
+  opacity: 0.5;
+  letter-spacing: -2px;
+  transition: opacity var(--transition);
+  flex-shrink: 0;
+}
+
+.dashboard-widget:hover .dashboard-widget__handle {
+  opacity: 1;
+}
+
+.dashboard-widget__header h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin: 0;
+}
+
 /* ==========================================================================
    NavigationWizard — Selectores visuales de menu y tipo
    ========================================================================== */
