@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
@@ -69,11 +70,17 @@ export function ZonesMapPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMunicipioId, setSelectedMunicipioId] = useState<string>('');
 
-  // Form state for inline create/edit
+  // Form state for inline create/edit. Five name fields cover the languages
+  // supported by the schema. ES + GL are required for institutional content
+  // (Lei 5/1988 — gallego cooficial). EN/FR/PT are optional for international
+  // tourism reach (UNE 178502 §5.3 multilinguismo).
   const [editing, setEditing] = useState<string | null>(null);
   const [slug, setSlug] = useState('');
   const [nameEs, setNameEs] = useState('');
   const [nameGl, setNameGl] = useState('');
+  const [nameEn, setNameEn] = useState('');
+  const [nameFr, setNameFr] = useState('');
+  const [namePt, setNamePt] = useState('');
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -96,6 +103,9 @@ export function ZonesMapPage() {
     setSlug('');
     setNameEs('');
     setNameGl('');
+    setNameEn('');
+    setNameFr('');
+    setNamePt('');
   }
 
   function startEdit(z: ZoneItem) {
@@ -104,6 +114,9 @@ export function ZonesMapPage() {
     setSlug(z.slug);
     setNameEs(z.name?.es || '');
     setNameGl(z.name?.gl || '');
+    setNameEn(z.name?.en || '');
+    setNameFr(z.name?.fr || '');
+    setNamePt(z.name?.pt || '');
   }
 
   function startCreate() {
@@ -113,11 +126,17 @@ export function ZonesMapPage() {
     setSlug('');
     setNameEs('');
     setNameGl('');
+    setNameEn('');
+    setNameFr('');
+    setNamePt('');
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!slug || !selectedMunicipioId || !nameEs) return;
+    if (!slug || !selectedMunicipioId || !nameEs.trim() || !nameGl.trim()) {
+      setError('Los nombres en castellano y gallego son obligatorios (Lei 5/1988).');
+      return;
+    }
     if (!SLUG_RE.test(slug)) {
       setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
       return;
@@ -126,10 +145,19 @@ export function ZonesMapPage() {
     setError(null);
 
     try {
+      // Send all five languages. saveTranslations() on the backend handles
+      // empty values by deleting any prior translation, so blanking EN/FR/PT
+      // explicitly clears them (no zombie data — see Tanda 3 C6).
       const data = {
         slug,
         municipio_id: selectedMunicipioId,
-        name: { es: nameEs, ...(nameGl && { gl: nameGl }) },
+        name: {
+          es: nameEs.trim(),
+          gl: nameGl.trim(),
+          en: nameEn.trim(),
+          fr: nameFr.trim(),
+          pt: namePt.trim(),
+        },
       };
 
       if (editing && editing !== 'new') {
@@ -188,19 +216,33 @@ export function ZonesMapPage() {
   return (
     <div className="zones-map-page">
       <div className="page-header">
-        <h1>Zonas geograficas</h1>
-        <span className="zones-map__hint">{zones.length} zonas en {municipalitiesWithCoords.length} municipios</span>
+        <div>
+          <h1>Zonas geograficas</h1>
+          <span className="zones-map__hint">{zones.length} zonas en {municipalitiesWithCoords.length} municipios</span>
+        </div>
+        {/* WCAG 2.1.1 Keyboard — provide an accessible alternative for users
+            who cannot interact with the Leaflet map via mouse. The classic
+            page is fully keyboard- and screen-reader-navigable. */}
+        <Link to="/zones/classic" className="btn btn-sm" aria-label="Abrir vista accesible en lista de zonas">
+          📋 Vista lista (accesible)
+        </Link>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="zones-map__layout">
         {/* MAP */}
-        <div className="zones-map__map">
+        <div
+          className="zones-map__map"
+          role="application"
+          aria-label="Mapa interactivo de los municipios de O Salnes. Pulsa en un marcador para gestionar sus zonas. Si necesitas una alternativa accesible, usa el enlace 'Vista lista'."
+        >
           <MapContainer
             center={DEFAULT_CENTER}
             zoom={DEFAULT_ZOOM}
             scrollWheelZoom
+            keyboard
+            keyboardPanDelta={80}
             style={{ width: '100%', height: '100%' }}
           >
             <TileLayer
@@ -215,15 +257,29 @@ export function ZonesMapPage() {
             {municipalitiesWithCoords.map((m) => {
               const isActive = m.id === selectedMunicipioId;
               const count = zoneCountByMunicipio[m.id] || 0;
+              const muniName = m.name?.es || m.slug;
               return (
                 <Marker
                   key={m.id}
                   position={[m.latitude!, m.longitude!]}
                   icon={isActive ? activeIcon : defaultIcon}
+                  // `title` becomes the accessible name announced by screen
+                  // readers and shown as native browser tooltip on hover.
+                  title={`${muniName}: ${count} ${count === 1 ? 'zona' : 'zonas'}`}
+                  alt={`Municipio ${muniName}`}
+                  keyboard
                   eventHandlers={{
                     click: () => {
                       setSelectedMunicipioId(m.id);
                       resetForm();
+                    },
+                    keypress: (e) => {
+                      // Keyboard activation (Enter / Space) — Leaflet only
+                      // wires Enter by default; we add Space too.
+                      if (e.originalEvent.key === ' ' || e.originalEvent.key === 'Enter') {
+                        setSelectedMunicipioId(m.id);
+                        resetForm();
+                      }
                     },
                   }}
                 >
@@ -303,9 +359,47 @@ export function ZonesMapPage() {
                     )}
                   </div>
                   <div className="form-field">
-                    <label>Nombre (GL)</label>
-                    <input value={nameGl} onChange={(e) => setNameGl(e.target.value)} placeholder="Centro historico" />
+                    <label>Nombre (GL) *</label>
+                    <input
+                      value={nameGl}
+                      onChange={(e) => setNameGl(e.target.value)}
+                      placeholder="Centro historico"
+                      required
+                    />
+                    <span className="field-hint">Obligatorio (Lei 5/1988 — gallego cooficial)</span>
                   </div>
+
+                  <details className="zones-map__form-details">
+                    <summary>Anadir traducciones (opcional)</summary>
+                    <div className="form-field">
+                      <label htmlFor="zone-name-en">Nombre (EN)</label>
+                      <input
+                        id="zone-name-en"
+                        value={nameEn}
+                        onChange={(e) => setNameEn(e.target.value)}
+                        placeholder="Historic center"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="zone-name-fr">Nombre (FR)</label>
+                      <input
+                        id="zone-name-fr"
+                        value={nameFr}
+                        onChange={(e) => setNameFr(e.target.value)}
+                        placeholder="Centre historique"
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label htmlFor="zone-name-pt">Nombre (PT)</label>
+                      <input
+                        id="zone-name-pt"
+                        value={namePt}
+                        onChange={(e) => setNamePt(e.target.value)}
+                        placeholder="Centro historico"
+                      />
+                    </div>
+                  </details>
+
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
                       {saving ? 'Guardando...' : editing === 'new' ? 'Crear zona' : 'Guardar'}

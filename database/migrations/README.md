@@ -20,6 +20,7 @@
 | 009 | Document RDF types array | No |
 | 010 | Enable Row Level Security baseline (defense-in-depth, anon key) | Yes |
 | 011 | Link usuario.auth_user_id to auth.users.id (stable lookup) | Yes |
+| 012 | GDPR retention function for log_cambios (anonymize old actor refs) | Yes |
 
 ## Execution
 

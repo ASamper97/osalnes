@@ -589,6 +589,12 @@ Deno.serve(async (req: Request) => {
       if (!SLUG_RE.test(body.slug)) {
         return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
       }
+      // ES + GL are mandatory at the institutional level (Lei 5/1988 — gallego
+      // cooficial). The frontend enforces this too, but we double-check here
+      // because anyone can call the API directly with a valid token.
+      if (!body.name?.es?.trim() || !body.name?.gl?.trim()) {
+        return json({ error: 'Los nombres en castellano (es) y gallego (gl) son obligatorios.' }, 400, req);
+      }
       const { data, error: err } = await sb.from('zona').insert({
         slug: body.slug,
         municipio_id: body.municipio_id,

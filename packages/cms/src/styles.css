@@ -2228,12 +2228,31 @@ textarea:focus-visible {
   width: 28px;
   height: 38px;
   background: var(--cms-primary);
+  /* Double border (white inner + dark outer ring) keeps WCAG 1.4.3 contrast
+     compliance over any OSM tile background — water, forest, urban, etc. */
   border: 3px solid #fff;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.3);
+  box-shadow:
+    0 0 0 1.5px rgba(15, 28, 46, 0.85),  /* dark contrast ring around white border */
+    0 4px 12px rgba(15, 28, 46, 0.4);
   position: relative;
   transition: all var(--transition);
+}
+
+/* Visible keyboard focus on the marker — Leaflet wraps each divIcon in
+   .leaflet-marker-icon. Without this, keyboard users have no idea which
+   marker is currently focused (WCAG 2.4.7 Focus Visible). */
+.leaflet-marker-icon:focus,
+.leaflet-marker-icon:focus-visible {
+  outline: none;
+}
+.leaflet-marker-icon:focus .zone-marker__pin,
+.leaflet-marker-icon:focus-visible .zone-marker__pin {
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 6px #1a5276,
+    0 4px 14px rgba(15, 28, 46, 0.5);
 }
 
 .zone-marker__pin::after {

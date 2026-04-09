@@ -24,8 +24,12 @@ export function ZonesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [slug, setSlug] = useState('');
   const [municipioId, setMunicipioId] = useState('');
+  // ES + GL required (Lei 5/1988 cooficialidad), EN/FR/PT optional for tourism.
   const [nameEs, setNameEs] = useState('');
   const [nameGl, setNameGl] = useState('');
+  const [nameEn, setNameEn] = useState('');
+  const [nameFr, setNameFr] = useState('');
+  const [namePt, setNamePt] = useState('');
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filterMunicipio, setFilterMunicipio] = useState('');
@@ -50,6 +54,9 @@ export function ZonesPage() {
     setMunicipioId('');
     setNameEs('');
     setNameGl('');
+    setNameEn('');
+    setNameFr('');
+    setNamePt('');
   }
 
   function startEdit(z: ZoneItem) {
@@ -59,11 +66,17 @@ export function ZonesPage() {
     setMunicipioId(z.municipioId);
     setNameEs(z.name?.es || '');
     setNameGl(z.name?.gl || '');
+    setNameEn(z.name?.en || '');
+    setNameFr(z.name?.fr || '');
+    setNamePt(z.name?.pt || '');
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!slug || !municipioId || !nameEs) return;
+    if (!slug || !municipioId || !nameEs.trim() || !nameGl.trim()) {
+      setError('Los nombres en castellano y gallego son obligatorios (Lei 5/1988).');
+      return;
+    }
     if (!SLUG_RE.test(slug)) {
       setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
       return;
@@ -75,7 +88,13 @@ export function ZonesPage() {
       const data = {
         slug,
         municipio_id: municipioId,
-        name: { es: nameEs, ...(nameGl && { gl: nameGl }) },
+        name: {
+          es: nameEs.trim(),
+          gl: nameGl.trim(),
+          en: nameEn.trim(),
+          fr: nameFr.trim(),
+          pt: namePt.trim(),
+        },
       };
 
       if (editing && editing !== 'new') {
@@ -188,10 +207,51 @@ export function ZonesPage() {
               )}
             </div>
             <div className="form-field">
-              <label>Nombre (GL)</label>
-              <input value={nameGl} onChange={(e) => setNameGl(e.target.value)} placeholder="Centro historico" />
+              <label>Nombre (GL) *</label>
+              <input
+                value={nameGl}
+                onChange={(e) => setNameGl(e.target.value)}
+                placeholder="Centro historico"
+                required
+              />
+              <span className="field-hint">Obligatorio (Lei 5/1988)</span>
             </div>
           </div>
+
+          <details className="zones-form-details" style={{ marginBottom: '1rem' }}>
+            <summary style={{ cursor: 'pointer', padding: '0.5rem 0', fontSize: '0.9rem' }}>
+              Anadir traducciones (opcional) — EN / FR / PT
+            </summary>
+            <div className="form-row" style={{ marginTop: '0.5rem' }}>
+              <div className="form-field">
+                <label htmlFor="zone-cls-name-en">Nombre (EN)</label>
+                <input
+                  id="zone-cls-name-en"
+                  value={nameEn}
+                  onChange={(e) => setNameEn(e.target.value)}
+                  placeholder="Historic center"
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="zone-cls-name-fr">Nombre (FR)</label>
+                <input
+                  id="zone-cls-name-fr"
+                  value={nameFr}
+                  onChange={(e) => setNameFr(e.target.value)}
+                  placeholder="Centre historique"
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="zone-cls-name-pt">Nombre (PT)</label>
+                <input
+                  id="zone-cls-name-pt"
+                  value={namePt}
+                  onChange={(e) => setNamePt(e.target.value)}
+                  placeholder="Centro historico"
+                />
+              </div>
+            </div>
+          </details>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Guardando...' : editing === 'new' ? 'Crear' : 'Guardar'}
@@ -208,19 +268,25 @@ export function ZonesPage() {
             <th>Slug</th>
             <th>Nombre (ES)</th>
             <th>Nombre (GL)</th>
+            <th>Idiomas</th>
             <th>Municipio</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {filtered.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin zonas{filterMunicipio ? ' en este municipio' : ''}</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin zonas{filterMunicipio ? ' en este municipio' : ''}</td></tr>
           )}
-          {filtered.map((z) => (
+          {filtered.map((z) => {
+            const langs = ['es', 'gl', 'en', 'fr', 'pt'].filter((l) => z.name?.[l]);
+            return (
             <tr key={z.id}>
               <td><code style={{ fontSize: '0.8rem' }}>{z.slug}</code></td>
               <td>{z.name?.es || '-'}</td>
               <td>{z.name?.gl || '-'}</td>
+              <td title={`Idiomas con traduccion: ${langs.join(', ').toUpperCase()}`} style={{ fontSize: '0.78rem', color: 'var(--cms-text-light)' }}>
+                {langs.length}/5
+              </td>
               <td>{getMunicipioName(z.municipioId)}</td>
               <td>
                 <div className="action-btns">
@@ -231,7 +297,8 @@ export function ZonesPage() {
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
