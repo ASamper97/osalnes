@@ -25,16 +25,47 @@ export function SetupPasswordPage() {
   const [hasSession, setHasSession] = useState<boolean | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // Check if there's a valid session from the email link
+  // Check if there's a valid session from the magic link.
+  // Supabase processes the URL hash automatically and creates the session
+  // via onAuthStateChange. We listen to that instead of just calling
+  // getSession() once, which can race with the URL parsing.
   useEffect(() => {
+    let cancelled = false;
+
+    // Initial check (covers cases where the session is already set)
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
       if (session) {
         setHasSession(true);
         setUserEmail(session.user?.email || null);
-      } else {
+      }
+    });
+
+    // Listener for the async session creation from the magic link URL
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      if (session) {
+        setHasSession(true);
+        setUserEmail(session.user?.email || null);
+      } else if (hasSession === null) {
+        // Only mark as "no session" if we never had one (avoid flicker after password update)
         setHasSession(false);
       }
     });
+
+    // Fallback timeout: if no session appears in 3s, declare invalid link
+    const timeout = setTimeout(() => {
+      if (!cancelled && hasSession === null) {
+        setHasSession(false);
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function validate(): string | null {
@@ -43,6 +74,24 @@ export function SetupPasswordPage() {
     if (!/[0-9]/.test(password)) return 'La contraseña debe incluir al menos un numero';
     if (password !== confirm) return 'Las contraseñas no coinciden';
     return null;
+  }
+
+  /** Map Supabase auth errors to friendly Spanish messages */
+  function friendlyError(message: string): string {
+    const m = message.toLowerCase();
+    if (m.includes('expired') || m.includes('invalid') && m.includes('token')) {
+      return 'El enlace de invitacion ha caducado o ya fue utilizado. Pide a tu administrador uno nuevo.';
+    }
+    if (m.includes('password') && (m.includes('weak') || m.includes('short'))) {
+      return 'La contrasena no cumple los requisitos minimos de seguridad.';
+    }
+    if (m.includes('same') && m.includes('password')) {
+      return 'La nueva contrasena no puede ser igual a una anterior.';
+    }
+    if (m.includes('network') || m.includes('fetch')) {
+      return 'Error de conexion. Comprueba tu red e intentalo de nuevo.';
+    }
+    return `Error al guardar la contrasena: ${message}`;
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -59,15 +108,16 @@ export function SetupPasswordPage() {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
-        setError(updateError.message);
+        setError(friendlyError(updateError.message));
+        setSaving(false);
         return;
       }
       setSuccess(true);
-      // Wait briefly so the user sees the success message, then redirect
-      setTimeout(() => navigate('/'), 1500);
+      // Navigate immediately — the session is already valid, no need to wait
+      // The success animation will play during the React unmount transition
+      setTimeout(() => navigate('/', { replace: true }), 800);
     } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
+      setError(friendlyError((err as Error).message));
       setSaving(false);
     }
   }

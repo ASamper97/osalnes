@@ -20,11 +20,15 @@ interface InviteLinkModalProps {
 
 export function InviteLinkModal({ open, link, email, userName, onClose }: InviteLinkModalProps) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset copied state when modal opens
   useEffect(() => {
-    if (open) setCopied(false);
+    if (open) {
+      setCopied(false);
+      setCopyError(null);
+    }
   }, [open]);
 
   // Auto-select link text on open for easy manual copy
@@ -54,16 +58,16 @@ export function InviteLinkModal({ open, link, email, userName, onClose }: Invite
 
   async function handleCopy() {
     if (!link) return;
+    setCopyError(null);
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      // Fallback: manual select
+      // Clipboard API blocked (insecure context, permissions, etc.)
+      // Select the input so the user can copy manually with Ctrl+C
       inputRef.current?.select();
-      document.execCommand('copy');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+      setCopyError('Tu navegador bloqueo la copia automatica. El enlace ya esta seleccionado: pulsa Ctrl+C para copiarlo.');
     }
   }
 
@@ -79,7 +83,16 @@ export function InviteLinkModal({ open, link, email, userName, onClose }: Invite
     const subject = 'Invitacion al CMS de O Salnes';
     const body = `Hola ${userName || ''},\n\nHas sido invitado al CMS de O Salnes. Para activar tu cuenta y configurar tu contraseña, abre este enlace en tu navegador (caduca en 24h):\n\n${link}\n\nUn saludo.`;
     const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = url;
+    // Open in a hidden iframe-like trigger so the modal stays open and the
+    // mail client opens in a separate window/tab. window.open with mailto: is
+    // blocked by some browsers, so we use a transient anchor click instead.
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   if (!open) return null;
@@ -116,6 +129,12 @@ export function InviteLinkModal({ open, link, email, userName, onClose }: Invite
                 {copied ? '✓ Copiado' : '📋 Copiar'}
               </button>
             </div>
+
+            {copyError && (
+              <div className="alert alert-warning" style={{ marginBottom: '0.85rem', fontSize: '0.78rem' }}>
+                {copyError}
+              </div>
+            )}
 
             <div className="invite-modal__shortcuts">
               <span className="invite-modal__shortcuts-label">Compartir directamente:</span>

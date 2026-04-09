@@ -63,18 +63,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    if (error) {
+      // Map common Supabase auth errors to friendly Spanish messages
+      const m = error.message.toLowerCase();
+      if (m.includes('invalid login credentials')) return { error: 'Email o contrasena incorrectos.' };
+      if (m.includes('email not confirmed')) return { error: 'Tu cuenta aun no esta confirmada. Pide a tu administrador un nuevo enlace de invitacion.' };
+      if (m.includes('user not found')) return { error: 'No existe ningun usuario con ese email.' };
+      if (m.includes('rate')) return { error: 'Demasiados intentos. Espera unos minutos.' };
+      return { error: error.message };
+    }
 
     // Fetch profile right after successful login
     try {
       const p = await api.getProfile();
       setProfile(p);
     } catch (e) {
+      // Log the actual error so transient failures (network, 5xx) can be diagnosed
+      console.error('[auth] Profile fetch failed after sign-in:', e);
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);
       setProfile(null);
-      return { error: 'Usuario no registrado en el sistema DTI' };
+      const errMsg = (e as Error).message || '';
+      if (errMsg.toLowerCase().includes('network') || errMsg.toLowerCase().includes('fetch')) {
+        return { error: 'Error de conexion al cargar tu perfil. Intentalo de nuevo en unos segundos.' };
+      }
+      if (errMsg.includes('404') || errMsg.toLowerCase().includes('not found')) {
+        return { error: 'Tu email no esta registrado en el CMS de O Salnes. Pide acceso a tu administrador.' };
+      }
+      if (errMsg.includes('403') || errMsg.toLowerCase().includes('forbidden') || errMsg.toLowerCase().includes('inactive')) {
+        return { error: 'Tu cuenta ha sido desactivada. Contacta con tu administrador.' };
+      }
+      return { error: `No se pudo cargar tu perfil: ${errMsg || 'error desconocido'}` };
     }
 
     return { error: null };
