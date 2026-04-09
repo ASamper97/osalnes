@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 /**
  * useDarkMode — Hook para gestionar el modo oscuro del CMS
  *
- * - Persiste la preferencia en localStorage
- * - Si no hay preferencia, usa prefers-color-scheme del SO
+ * - Tema claro por defecto (acuerdo con la Mancomunidad de O Salnes)
+ * - Persiste la preferencia en localStorage solo si el usuario la activa
+ * - El SO no influye: aunque tenga modo oscuro, el CMS arranca en claro
  * - Aplica data-theme="dark" en <html>
  */
 
@@ -18,9 +19,9 @@ function getInitialTheme(): Theme {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
     if (stored === 'light' || stored === 'dark') return stored;
   } catch { /* ignore */ }
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
+  // Default: light. Ignoramos prefers-color-scheme a proposito para que el
+  // CMS sea consistente entre dispositivos y no sorprenda a usuarios cuyo
+  // SO esta en oscuro pero esperan ver la marca institucional en claro.
   return 'light';
 }
 

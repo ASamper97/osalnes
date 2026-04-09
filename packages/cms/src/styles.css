@@ -2016,17 +2016,17 @@ textarea:focus-visible {
 }
 
 .notif-panel {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: -8px;
+  position: fixed;
+  left: 272px; /* 260px sidebar width + 12px gap */
+  bottom: 16px;
   width: 360px;
-  max-width: calc(100vw - 32px);
-  max-height: 480px;
+  max-width: calc(100vw - 292px);
+  max-height: min(520px, calc(100vh - 32px));
   background: var(--cms-card-bg);
   border: 1px solid var(--cms-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 12px 36px rgba(15, 28, 46, 0.25);
-  z-index: 500;
+  box-shadow: 0 18px 48px rgba(15, 28, 46, 0.32);
+  z-index: 1500;
   display: flex;
   flex-direction: column;
   overflow: hidden;
