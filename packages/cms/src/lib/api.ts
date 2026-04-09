@@ -24,8 +24,70 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-/** Call on sign-out to clear cached credentials */
-export function clearAuthCache() { _authCache = null; }
+// ---------------------------------------------------------------------------
+// Reference-data cache (in-memory, TTL)
+// ---------------------------------------------------------------------------
+//
+// Static lists like typologies, municipalities and categories are fetched on
+// almost every page that touches a resource (wizard, form, list, dashboard).
+// They change very rarely. We cache them in memory for 5 minutes so navigating
+// between those pages does not refetch on every mount.
+//
+// Cache is invalidated:
+//   - on sign-out (clearAuthCache)
+//   - whenever a mutation happens (createCategory, updateCategory, etc.)
+//   - automatically after the TTL expires
+//
+// We also dedupe in-flight requests: if two components mount at once and both
+// call getCategories(), only one HTTP request is made and both await the same
+// promise.
+
+const REF_CACHE_TTL = 5 * 60_000; // 5 minutes
+
+type CacheEntry<T> = { data: T; ts: number };
+const _refCache = new Map<string, CacheEntry<unknown>>();
+const _inFlight = new Map<string, Promise<unknown>>();
+
+function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const hit = _refCache.get(key) as CacheEntry<T> | undefined;
+  if (hit && Date.now() - hit.ts < REF_CACHE_TTL) {
+    return Promise.resolve(hit.data);
+  }
+  const flying = _inFlight.get(key) as Promise<T> | undefined;
+  if (flying) return flying;
+  const p = fetcher()
+    .then((data) => {
+      _refCache.set(key, { data, ts: Date.now() });
+      _inFlight.delete(key);
+      return data;
+    })
+    .catch((err) => {
+      _inFlight.delete(key);
+      throw err;
+    });
+  _inFlight.set(key, p);
+  return p;
+}
+
+/** Invalidate one or all reference-data cache entries. */
+export function invalidateRefCache(key?: string) {
+  if (key) _refCache.delete(key);
+  else _refCache.clear();
+}
+
+/** Invalidate every zones:* cache entry (after a zone mutation). */
+function invalidateZonesCache() {
+  for (const k of _refCache.keys()) {
+    if (k.startsWith('zones:')) _refCache.delete(k);
+  }
+}
+
+/** Call on sign-out to clear cached credentials AND reference data. */
+export function clearAuthCache() {
+  _authCache = null;
+  _refCache.clear();
+  _inFlight.clear();
+}
 
 async function apiFetch<T>(base: string, path: string, init?: RequestInit): Promise<T> {
   const authHeaders = await getAuthHeaders();
@@ -329,14 +391,14 @@ export const api = {
   },
   getResource: (id: string) => publicFetch<ResourceSummary>(`/resources/${id}`),
 
-  // Categories
-  getCategories: () => publicFetch<CategoryItem[]>('/categories'),
+  // Categories (cached 5 min — see invalidateRefCache)
+  getCategories: () => cached('categories', () => publicFetch<CategoryItem[]>('/categories')),
 
-  // Municipalities
-  getMunicipalities: () => publicFetch<MunicipalityItem[]>('/municipalities'),
+  // Municipalities (cached 5 min — practically static)
+  getMunicipalities: () => cached('municipalities', () => publicFetch<MunicipalityItem[]>('/municipalities')),
 
-  // Typologies
-  getTypologies: () => publicFetch<TypologyItem[]>('/typologies'),
+  // Typologies (cached 5 min — practically static)
+  getTypologies: () => cached('typologies', () => publicFetch<TypologyItem[]>('/typologies')),
 
   // Navigation
   getNavigation: (slug: string) => publicFetch<NavItem[]>(`/navigation/${slug}`),
@@ -363,14 +425,19 @@ export const api = {
 
   getAdminCategories: () => adminFetch<CategoryItem[]>('/categories'),
 
+  // Mutations invalidate the public categories cache so the next read picks
+  // up the change immediately instead of waiting up to 5 minutes for TTL.
   createCategory: (data: { slug: string; parent_id?: string | null; orden?: number; activo?: boolean; name: LocalizedValue }) =>
-    adminFetch<CategoryItem>('/categories', { method: 'POST', body: JSON.stringify(data) }),
+    adminFetch<CategoryItem>('/categories', { method: 'POST', body: JSON.stringify(data) })
+      .then((r) => { invalidateRefCache('categories'); return r; }),
 
   updateCategory: (id: string, data: { slug?: string; parent_id?: string | null; orden?: number; activo?: boolean; name?: LocalizedValue }) =>
-    adminFetch<CategoryItem>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    adminFetch<CategoryItem>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+      .then((r) => { invalidateRefCache('categories'); return r; }),
 
   deleteCategory: (id: string) =>
-    adminFetch<DeleteResult>(`/categories/${id}`, { method: 'DELETE' }),
+    adminFetch<DeleteResult>(`/categories/${id}`, { method: 'DELETE' })
+      .then((r) => { invalidateRefCache('categories'); return r; }),
 
   // ---------------------------------------------------------------------------
   // Admin — Navigation
@@ -539,11 +606,22 @@ export const api = {
     return adminFetch<PaginatedResult<AuditLogEntry>>(`/audit${q ? `?${q}` : ''}`);
   },
 
-  // Zones
-  getZones: (municipio?: string) => adminFetch<ZoneItem[]>(`/zones${municipio ? `?municipio=${municipio}` : ''}`),
-  createZone: (data: { slug: string; municipio_id: string; name: LocalizedValue }) => adminFetch<{ id: string }>('/zones', { method: 'POST', body: JSON.stringify(data) }),
-  updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue }>) => adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteZone: (id: string) => adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'DELETE' }),
+  // Zones — cached per municipio (or 'all' when no filter). Mutations
+  // invalidate every zones entry because the change might affect a list
+  // grouped by a different municipio.
+  getZones: (municipio?: string) =>
+    cached(`zones:${municipio || 'all'}`, () =>
+      adminFetch<ZoneItem[]>(`/zones${municipio ? `?municipio=${municipio}` : ''}`),
+    ),
+  createZone: (data: { slug: string; municipio_id: string; name: LocalizedValue }) =>
+    adminFetch<{ id: string }>('/zones', { method: 'POST', body: JSON.stringify(data) })
+      .then((r) => { invalidateZonesCache(); return r; }),
+  updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue }>) =>
+    adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+      .then((r) => { invalidateZonesCache(); return r; }),
+  deleteZone: (id: string) =>
+    adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'DELETE' })
+      .then((r) => { invalidateZonesCache(); return r; }),
 
   // Products
   getProducts: () => adminFetch<ProductItem[]>('/products'),

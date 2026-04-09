@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { api, clearAuthCache, type UserProfile } from './api';
@@ -61,7 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function signIn(email: string, password: string) {
+  // signIn / signOut are wrapped in useCallback so the AuthContext value
+  // identity stays stable across renders. Without this, every consumer of
+  // useAuth() would re-render on any state change in this provider.
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       // Map common Supabase auth errors to friendly Spanish messages
@@ -98,21 +101,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return { error: null };
-  }
+  }, []);
 
-  async function signOut() {
+  const signOut = useCallback(async () => {
     clearAuthCache();
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setProfile(null);
-  }
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, session, profile, role: profile?.role ?? null, loading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
+  // Memoize the context value so its identity only changes when the actual
+  // auth state changes (not on every render of AuthProvider). All useAuth()
+  // consumers will skip re-renders when none of these fields changed.
+  const value = useMemo(
+    () => ({ user, session, profile, role: profile?.role ?? null, loading, signIn, signOut }),
+    [user, session, profile, loading, signIn, signOut],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

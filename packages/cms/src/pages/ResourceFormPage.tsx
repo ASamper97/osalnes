@@ -149,6 +149,22 @@ export function ResourceFormPage() {
     api.getCategories().then(setCategories).catch(() => {});
   }, []);
 
+  // Load zones whenever the selected municipio changes (with race protection
+  // via cancelled flag). Also fixes a pre-existing bug where editing an
+  // existing resource left the zones dropdown empty until the user manually
+  // re-selected the municipio.
+  useEffect(() => {
+    if (!municipioId) {
+      setZones([]);
+      return;
+    }
+    let cancelled = false;
+    api.getZones(municipioId)
+      .then((z) => { if (!cancelled) setZones(z); })
+      .catch(() => { if (!cancelled) setZones([]); });
+    return () => { cancelled = true; };
+  }, [municipioId]);
+
   // Load existing resource
   useEffect(() => {
     if (isNew) return;
@@ -375,7 +391,7 @@ export function ResourceFormPage() {
           <div className="form-row">
             <div className="form-field">
               <label>Municipio</label>
-              <select value={municipioId} onChange={(e) => { setMunicipioId(e.target.value); setZonaId(''); if (e.target.value) { api.getZones(e.target.value).then(setZones).catch(() => setZones([])); } else { setZones([]); } }}>
+              <select value={municipioId} onChange={(e) => { setMunicipioId(e.target.value); setZonaId(''); }}>
                 <option value="">-- Sin municipio --</option>
                 {municipalities.map((m) => (
                   <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, type FormEvent, type ReactNode, type DragEvent } from 'react';
+import { memo, useEffect, useState, useMemo, type FormEvent, type ReactNode, type DragEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type DashboardStats } from '../lib/api';
 import { SkeletonDashboard } from '../components/Skeleton';
@@ -98,179 +98,184 @@ export function DashboardPage() {
     );
   }
 
+  // Build widget JSX once per stats change. The .node values are stable JSX
+  // references, so React reconciliation bails out for widget contents on
+  // re-renders triggered by drag state — only the wrapper div className
+  // (drag styling) actually changes.
+  const widgets = useMemo<Record<string, { title: string; node: ReactNode }>>(() => {
+    if (!stats) return {};
+    const r = stats.resources;
+    return {
+      actions: {
+        title: 'Acciones rapidas',
+        node: (
+          <div className="dashboard-actions">
+            <QuickSearch />
+            <Link to="/resources?new=1" className="btn btn-primary">+ Nuevo recurso</Link>
+            <Link to="/resources?status=revision" className="btn btn-outline">
+              Pendientes de revision ({r.review})
+            </Link>
+          </div>
+        ),
+      },
+      editorial: {
+        title: 'Estado del trabajo',
+        node: (
+          <div className="dashboard-grid dashboard-grid--editorial">
+            <StatCard icon="📊" label="Recursos totales" value={r.total} />
+            <StatCard icon="🌐" label="Publicados" value={r.published} color="var(--status-publicado)" />
+            <StatCard icon="👀" label="En revision" value={r.review} color="var(--status-revision)" />
+            <StatCard icon="✏️" label="Borradores" value={r.draft} color="var(--status-borrador)" />
+            <StatCard icon="📦" label="Archivados" value={r.archived} color="var(--status-archivado)" />
+          </div>
+        ),
+      },
+      catalog: {
+        title: 'Catalogo del destino',
+        node: (
+          <div className="dashboard-grid dashboard-grid--catalog">
+            <StatCard icon="📍" label="Municipios" value={stats.municipalities} />
+            <StatCard icon="🏷️" label="Categorias" value={stats.categories} />
+          </div>
+        ),
+      },
+      une: {
+        title: 'Indicadores UNE 178502',
+        node: stats.une178502 ? (
+          <>
+            <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-light)', marginBottom: '1rem' }}>
+              Indicadores de madurez del Destino Turistico Intelixente
+            </p>
+            <div className="une-indicators">
+              <UneIndicator label="Indice de digitalizacion" value={stats.une178502.digitalizacion} desc="Recursos con coordenadas + descripcion + imagen" />
+              <UneIndicator label="Indice de multilinguismo" value={stats.une178502.multilinguismo} desc="Media de traducciones en 5 idiomas" />
+              <UneIndicator label="Indice de geolocalizacion" value={stats.une178502.geolocalizacion} desc="Recursos con coordenadas GPS" />
+              <UneIndicator label="Actualizacion (30 dias)" value={stats.une178502.actualizacion30d} desc="Recursos modificados ultimo mes" />
+              <UneIndicator label="Actualizacion (90 dias)" value={stats.une178502.actualizacion90d} desc="Recursos modificados ultimo trimestre" />
+              <UneIndicator label="Interoperabilidad PID" value={stats.une178502.interoperabilidad} desc="Exportaciones exitosas a SEGITTUR" />
+            </div>
+          </>
+        ) : null,
+      },
+      quality: {
+        title: 'Calidad del dato',
+        node: (
+          <>
+            <div className="dashboard-grid dashboard-grid--2">
+              <QualityBar label="Con coordenadas" percent={stats.quality.withCoordinates} />
+              <QualityBar label="Con imagenes" percent={stats.quality.withImages} />
+              <QualityBar label="Con descripcion" percent={stats.quality.withDescription} />
+            </div>
+            <h3 style={{ fontSize: '0.95rem', margin: '1rem 0 0.5rem', color: 'var(--cms-text)' }}>
+              Completitud de traducciones
+            </h3>
+            <div className="dashboard-grid dashboard-grid--2">
+              {Object.entries(stats.quality.translations).map(([lang, pct]) => (
+                <QualityBar key={lang} label={LANG_LABELS[lang] || lang} percent={pct as number} />
+              ))}
+            </div>
+          </>
+        ),
+      },
+      distribution: {
+        title: 'Distribucion del catalogo',
+        node: (
+          <div className="dashboard-columns">
+            <div>
+              <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem', color: 'var(--cms-text)' }}>Por municipio</h3>
+              {stats.resourcesByMunicipio.length > 0 ? (
+                <table className="data-table data-table--compact">
+                  <thead><tr><th>Municipio</th><th style={{ textAlign: 'right' }}>Recursos</th></tr></thead>
+                  <tbody>
+                    {stats.resourcesByMunicipio.map((m) => (
+                      <tr key={m.id}>
+                        <td>{m.slug}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{m.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="dashboard-empty">Sin datos</p>
+              )}
+            </div>
+            <div>
+              <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem', color: 'var(--cms-text)' }}>Por tipologia</h3>
+              {stats.resourcesByGroup.length > 0 ? (
+                <div className="dashboard-bars">
+                  {stats.resourcesByGroup.map(({ grupo, count }) => (
+                    <div key={grupo} className="bar-row">
+                      <span className="bar-row__label">
+                        <span className="bar-row__dot" style={{ background: GROUP_COLORS[grupo] || '#999' }} />
+                        {GROUP_LABELS[grupo] || grupo}
+                      </span>
+                      <div className="bar-row__track">
+                        <div
+                          className="bar-row__fill"
+                          style={{
+                            width: `${r.total > 0 ? Math.round((count / r.total) * 100) : 0}%`,
+                            background: GROUP_COLORS[grupo] || '#999',
+                          }}
+                        />
+                      </div>
+                      <span className="bar-row__count">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="dashboard-empty">Sin datos</p>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      export: {
+        title: 'Ultima exportacion PID',
+        node: stats.lastExport ? (
+          <div className="dashboard-export">
+            <span className={`status-badge status-badge--${stats.lastExport.estado === 'completado' ? 'publicado' : stats.lastExport.estado === 'error' ? 'borrador' : 'revision'}`}>
+              {stats.lastExport.estado}
+            </span>
+            <span>{stats.lastExport.tipo.toUpperCase()}</span>
+            <span>{stats.lastExport.registros_ok} registros OK</span>
+            {stats.lastExport.registros_err > 0 && (
+              <span style={{ color: '#e74c3c' }}>{stats.lastExport.registros_err} errores</span>
+            )}
+            <span style={{ color: 'var(--cms-text-light)' }}>
+              {new Date(stats.lastExport.created_at).toLocaleString('es-ES')}
+            </span>
+          </div>
+        ) : <p className="dashboard-empty">Sin exportaciones registradas</p>,
+      },
+      activity: {
+        title: 'Actividad reciente',
+        node: stats.recentChanges.length > 0 ? (
+          <table className="data-table data-table--compact">
+            <thead>
+              <tr><th>Accion</th><th>Entidad</th><th>Fecha</th></tr>
+            </thead>
+            <tbody>
+              {stats.recentChanges.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <span className={`status-badge status-badge--${actionColor(c.accion)}`}>
+                      {c.accion}
+                    </span>
+                  </td>
+                  <td>{c.entidad_tipo}</td>
+                  <td>{new Date(c.created_at).toLocaleString('es-ES')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p className="dashboard-empty">Sin actividad registrada aun</p>,
+      },
+    };
+  }, [stats]);
+
   if (!stats) {
     return <SkeletonDashboard />;
   }
-
-  const r = stats.resources;
-
-  // Map of widget id → { title, render }
-  const widgets: Record<string, { title: string; render: () => ReactNode }> = {
-    actions: {
-      title: 'Acciones rapidas',
-      render: () => (
-        <div className="dashboard-actions">
-          <QuickSearch />
-          <Link to="/resources?new=1" className="btn btn-primary">+ Nuevo recurso</Link>
-          <Link to="/resources?status=revision" className="btn btn-outline">
-            Pendientes de revision ({r.review})
-          </Link>
-        </div>
-      ),
-    },
-    editorial: {
-      title: 'Estado del trabajo',
-      render: () => (
-        <div className="dashboard-grid dashboard-grid--editorial">
-          <StatCard icon="📊" label="Recursos totales" value={r.total} />
-          <StatCard icon="🌐" label="Publicados" value={r.published} color="var(--status-publicado)" />
-          <StatCard icon="👀" label="En revision" value={r.review} color="var(--status-revision)" />
-          <StatCard icon="✏️" label="Borradores" value={r.draft} color="var(--status-borrador)" />
-          <StatCard icon="📦" label="Archivados" value={r.archived} color="var(--status-archivado)" />
-        </div>
-      ),
-    },
-    catalog: {
-      title: 'Catalogo del destino',
-      render: () => (
-        <div className="dashboard-grid dashboard-grid--catalog">
-          <StatCard icon="📍" label="Municipios" value={stats.municipalities} />
-          <StatCard icon="🏷️" label="Categorias" value={stats.categories} />
-        </div>
-      ),
-    },
-    une: {
-      title: 'Indicadores UNE 178502',
-      render: () => stats.une178502 ? (
-        <>
-          <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-light)', marginBottom: '1rem' }}>
-            Indicadores de madurez del Destino Turistico Intelixente
-          </p>
-          <div className="une-indicators">
-            <UneIndicator label="Indice de digitalizacion" value={stats.une178502.digitalizacion} desc="Recursos con coordenadas + descripcion + imagen" />
-            <UneIndicator label="Indice de multilinguismo" value={stats.une178502.multilinguismo} desc="Media de traducciones en 5 idiomas" />
-            <UneIndicator label="Indice de geolocalizacion" value={stats.une178502.geolocalizacion} desc="Recursos con coordenadas GPS" />
-            <UneIndicator label="Actualizacion (30 dias)" value={stats.une178502.actualizacion30d} desc="Recursos modificados ultimo mes" />
-            <UneIndicator label="Actualizacion (90 dias)" value={stats.une178502.actualizacion90d} desc="Recursos modificados ultimo trimestre" />
-            <UneIndicator label="Interoperabilidad PID" value={stats.une178502.interoperabilidad} desc="Exportaciones exitosas a SEGITTUR" />
-          </div>
-        </>
-      ) : null,
-    },
-    quality: {
-      title: 'Calidad del dato',
-      render: () => (
-        <>
-          <div className="dashboard-grid dashboard-grid--2">
-            <QualityBar label="Con coordenadas" percent={stats.quality.withCoordinates} />
-            <QualityBar label="Con imagenes" percent={stats.quality.withImages} />
-            <QualityBar label="Con descripcion" percent={stats.quality.withDescription} />
-          </div>
-          <h3 style={{ fontSize: '0.95rem', margin: '1rem 0 0.5rem', color: 'var(--cms-text)' }}>
-            Completitud de traducciones
-          </h3>
-          <div className="dashboard-grid dashboard-grid--2">
-            {Object.entries(stats.quality.translations).map(([lang, pct]) => (
-              <QualityBar key={lang} label={LANG_LABELS[lang] || lang} percent={pct as number} />
-            ))}
-          </div>
-        </>
-      ),
-    },
-    distribution: {
-      title: 'Distribucion del catalogo',
-      render: () => (
-        <div className="dashboard-columns">
-          <div>
-            <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem', color: 'var(--cms-text)' }}>Por municipio</h3>
-            {stats.resourcesByMunicipio.length > 0 ? (
-              <table className="data-table data-table--compact">
-                <thead><tr><th>Municipio</th><th style={{ textAlign: 'right' }}>Recursos</th></tr></thead>
-                <tbody>
-                  {stats.resourcesByMunicipio.map((m) => (
-                    <tr key={m.id}>
-                      <td>{m.slug}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{m.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="dashboard-empty">Sin datos</p>
-            )}
-          </div>
-          <div>
-            <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem', color: 'var(--cms-text)' }}>Por tipologia</h3>
-            {stats.resourcesByGroup.length > 0 ? (
-              <div className="dashboard-bars">
-                {stats.resourcesByGroup.map(({ grupo, count }) => (
-                  <div key={grupo} className="bar-row">
-                    <span className="bar-row__label">
-                      <span className="bar-row__dot" style={{ background: GROUP_COLORS[grupo] || '#999' }} />
-                      {GROUP_LABELS[grupo] || grupo}
-                    </span>
-                    <div className="bar-row__track">
-                      <div
-                        className="bar-row__fill"
-                        style={{
-                          width: `${r.total > 0 ? Math.round((count / r.total) * 100) : 0}%`,
-                          background: GROUP_COLORS[grupo] || '#999',
-                        }}
-                      />
-                    </div>
-                    <span className="bar-row__count">{count}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="dashboard-empty">Sin datos</p>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    export: {
-      title: 'Ultima exportacion PID',
-      render: () => stats.lastExport ? (
-        <div className="dashboard-export">
-          <span className={`status-badge status-badge--${stats.lastExport.estado === 'completado' ? 'publicado' : stats.lastExport.estado === 'error' ? 'borrador' : 'revision'}`}>
-            {stats.lastExport.estado}
-          </span>
-          <span>{stats.lastExport.tipo.toUpperCase()}</span>
-          <span>{stats.lastExport.registros_ok} registros OK</span>
-          {stats.lastExport.registros_err > 0 && (
-            <span style={{ color: '#e74c3c' }}>{stats.lastExport.registros_err} errores</span>
-          )}
-          <span style={{ color: 'var(--cms-text-light)' }}>
-            {new Date(stats.lastExport.created_at).toLocaleString('es-ES')}
-          </span>
-        </div>
-      ) : <p className="dashboard-empty">Sin exportaciones registradas</p>,
-    },
-    activity: {
-      title: 'Actividad reciente',
-      render: () => stats.recentChanges.length > 0 ? (
-        <table className="data-table data-table--compact">
-          <thead>
-            <tr><th>Accion</th><th>Entidad</th><th>Fecha</th></tr>
-          </thead>
-          <tbody>
-            {stats.recentChanges.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <span className={`status-badge status-badge--${actionColor(c.accion)}`}>
-                    {c.accion}
-                  </span>
-                </td>
-                <td>{c.entidad_tipo}</td>
-                <td>{new Date(c.created_at).toLocaleString('es-ES')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <p className="dashboard-empty">Sin actividad registrada aun</p>,
-    },
-  };
 
   // Filter out widgets that don't apply (e.g. UNE if no data)
   const orderedWidgets = widgetOrder.filter((id) => widgets[id]);
@@ -331,7 +336,7 @@ export function DashboardPage() {
               <span className="dashboard-widget__handle" aria-hidden="true">⋮⋮</span>
               <h2>{widget.title}</h2>
             </div>
-            {widget.render()}
+            {widget.node}
           </div>
         );
       })}
@@ -347,7 +352,11 @@ function actionColor(accion: string) {
   }
 }
 
-function StatCard({ icon, label, value, color }: { icon?: string; label: string; value: number; color?: string }) {
+// Leaf components are memoized so React skips re-rendering them when props
+// are reference-equal. Combined with the useMemo'd `widgets` dict above, the
+// dashboard content does no work during drag operations — only the wrapper
+// div className updates.
+const StatCard = memo(function StatCard({ icon, label, value, color }: { icon?: string; label: string; value: number; color?: string }) {
   return (
     <div className="stat-card">
       {icon && <div className="stat-card__icon">{icon}</div>}
@@ -357,9 +366,9 @@ function StatCard({ icon, label, value, color }: { icon?: string; label: string;
       </div>
     </div>
   );
-}
+});
 
-function QualityBar({ label, percent }: { label: string; percent: number }) {
+const QualityBar = memo(function QualityBar({ label, percent }: { label: string; percent: number }) {
   const barColor = percent >= 80 ? '#27ae60' : percent >= 50 ? '#f39c12' : '#e74c3c';
   return (
     <div className="quality-bar">
@@ -372,9 +381,9 @@ function QualityBar({ label, percent }: { label: string; percent: number }) {
       </div>
     </div>
   );
-}
+});
 
-function UneIndicator({ label, value, desc }: { label: string; value: number; desc: string }) {
+const UneIndicator = memo(function UneIndicator({ label, value, desc }: { label: string; value: number; desc: string }) {
   const color = value >= 80 ? '#27ae60' : value >= 50 ? '#f39c12' : '#e74c3c';
   const grade = value >= 80 ? 'A' : value >= 60 ? 'B' : value >= 40 ? 'C' : 'D';
   return (
@@ -401,7 +410,7 @@ function UneIndicator({ label, value, desc }: { label: string; value: number; de
       </div>
     </div>
   );
-}
+});
 
 function QuickSearch() {
   const [q, setQ] = useState('');

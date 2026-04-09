@@ -240,6 +240,23 @@ export function ResourceWizardPage() {
     api.getCategories().then(setCategories).catch(() => {});
   }, []);
 
+  // Load zones whenever the selected municipio changes. Using useEffect with
+  // a cancelled flag protects against stale responses if the user clicks a
+  // different municipio while the previous fetch is still in flight, AND
+  // makes the dropdown populate correctly when editing an existing resource
+  // (the previous imperative onChange-only fetch left zones empty on load).
+  useEffect(() => {
+    if (!municipioId) {
+      setZones([]);
+      return;
+    }
+    let cancelled = false;
+    api.getZones(municipioId)
+      .then((z) => { if (!cancelled) setZones(z); })
+      .catch(() => { if (!cancelled) setZones([]); });
+    return () => { cancelled = true; };
+  }, [municipioId]);
+
   useEffect(() => {
     if (isNew) return;
     api.getResource(id!)
@@ -630,11 +647,6 @@ export function ResourceWizardPage() {
                     setMunicipioId(e.target.value);
                     setZonaId('');
                     markDirty();
-                    if (e.target.value) {
-                      api.getZones(e.target.value).then(setZones).catch(() => setZones([]));
-                    } else {
-                      setZones([]);
-                    }
                   }}
                 >
                   <option value="">-- Sin municipio --</option>
