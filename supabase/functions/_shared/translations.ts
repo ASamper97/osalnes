@@ -50,7 +50,15 @@ export async function getTranslatedField(
   return result;
 }
 
-/** Upsert translations for a field: { lang: value } */
+/**
+ * Upsert translations for a field: { lang: value }
+ *
+ * - Non-empty values are batch-upserted in a single round trip.
+ * - Empty values are explicitly DELETED so a previously stored translation
+ *   gets cleared when the user blanks the field. Without this, the old
+ *   value would silently linger in the database forever — a real bug,
+ *   since the form would re-display the stale value on the next edit.
+ */
 export async function saveTranslations(
   entidadTipo: string,
   entidadId: string,
@@ -58,13 +66,41 @@ export async function saveTranslations(
   values: Record<string, string>,
 ): Promise<void> {
   const sb = getAdminClient();
+
+  const upserts: Array<{
+    entidad_tipo: string;
+    entidad_id: string;
+    campo: string;
+    idioma: string;
+    valor: string;
+  }> = [];
+  const langsToDelete: string[] = [];
+
   for (const [idioma, valor] of Object.entries(values)) {
-    if (!valor) continue;
-    await sb
+    if (valor && valor.trim().length > 0) {
+      upserts.push({ entidad_tipo: entidadTipo, entidad_id: entidadId, campo, idioma, valor });
+    } else {
+      langsToDelete.push(idioma);
+    }
+  }
+
+  // Single batched upsert for non-empty translations
+  if (upserts.length > 0) {
+    const { error } = await sb
       .from('traduccion')
-      .upsert(
-        { entidad_tipo: entidadTipo, entidad_id: entidadId, campo, idioma, valor },
-        { onConflict: 'entidad_tipo,entidad_id,campo,idioma' },
-      );
+      .upsert(upserts, { onConflict: 'entidad_tipo,entidad_id,campo,idioma' });
+    if (error) throw error;
+  }
+
+  // Single batched delete for translations the user explicitly cleared
+  if (langsToDelete.length > 0) {
+    const { error } = await sb
+      .from('traduccion')
+      .delete()
+      .eq('entidad_tipo', entidadTipo)
+      .eq('entidad_id', entidadId)
+      .eq('campo', campo)
+      .in('idioma', langsToDelete);
+    if (error) throw error;
   }
 }

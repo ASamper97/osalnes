@@ -18,6 +18,35 @@ import { routePath, matchRoute } from '../_shared/router.ts';
 const FN = 'admin';
 const BUCKET = 'media';
 
+// Slug validation: lowercase letters, digits and hyphens only.
+// Used by entities whose slug is part of public URLs (zonas, categorias…).
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Insert an audit row into log_cambios. Fire-and-forget so a logging
+ * failure never blocks the main mutation. UNE 178502 §6.4 (trazabilidad)
+ * requires that EVERY mutation records the actor (usuario_id), the
+ * affected entity, the action and a structured diff.
+ */
+function logAudit(
+  sb: ReturnType<typeof getAdminClient>,
+  entidadTipo: string,
+  entidadId: string,
+  accion: string,
+  usuarioId: string,
+  cambios: Record<string, unknown>,
+): void {
+  sb.from('log_cambios').insert({
+    entidad_tipo: entidadTipo,
+    entidad_id: entidadId,
+    accion,
+    usuario_id: usuarioId,
+    cambios,
+  }).then(() => {}, (err) => {
+    console.error('[audit] log_cambios insert failed:', err);
+  });
+}
+
 Deno.serve(async (req: Request) => {
   // CORS preflight
   const cors = handleCors(req);
@@ -244,7 +273,7 @@ Deno.serve(async (req: Request) => {
     if (method === 'PATCH' && resStatus) {
       requireRole(user, 'admin', 'editor', 'validador');
       const { status } = await req.json();
-      return await updateResourceStatus(sb, resStatus.id, status, req);
+      return await updateResourceStatus(sb, resStatus.id, status, user.id, req);
     }
 
     if (method === 'DELETE' && resId) {
@@ -547,40 +576,77 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'POST' && path === '/zones') {
+      requireRole(user, 'admin', 'editor');
       const body = await req.json();
       if (!body.slug || !body.municipio_id) return json({ error: 'slug and municipio_id required' }, 400, req);
+      // Validate slug format (kebab-case) — prevents URLs like "Centro Histórico!"
+      if (!SLUG_RE.test(body.slug)) {
+        return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
+      }
       const { data, error: err } = await sb.from('zona').insert({
         slug: body.slug,
         municipio_id: body.municipio_id,
       }).select('id').single();
-      if (err) throw err;
+      if (err) {
+        // Friendly message for duplicate slug (Postgres unique violation)
+        if ((err as { code?: string }).code === '23505') {
+          return json({ error: `Ya existe una zona con el slug "${body.slug}". Elige otro.` }, 409, req);
+        }
+        throw err;
+      }
       if (body.name) {
         await saveTranslations('zona', data.id, 'name', body.name);
       }
+      logAudit(sb, 'zona', data.id, 'crear', user.id, { slug: body.slug, municipio_id: body.municipio_id, name: body.name });
       return json({ id: data.id }, 201, req);
     }
 
     const zoneId = matchRoute('/zones/:id', path);
 
     if (method === 'PUT' && zoneId) {
+      requireRole(user, 'admin', 'editor');
       const body = await req.json();
+      if (body.slug && !SLUG_RE.test(body.slug)) {
+        return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
+      }
       const updates: Record<string, unknown> = {};
       if (body.slug) updates.slug = body.slug;
       if (body.municipio_id) updates.municipio_id = body.municipio_id;
       if (Object.keys(updates).length > 0) {
         const { error: err } = await sb.from('zona').update(updates).eq('id', zoneId.id);
-        if (err) throw err;
+        if (err) {
+          if ((err as { code?: string }).code === '23505') {
+            return json({ error: `Ya existe una zona con el slug "${body.slug}". Elige otro.` }, 409, req);
+          }
+          throw err;
+        }
       }
       if (body.name) {
         await saveTranslations('zona', zoneId.id, 'name', body.name);
       }
+      logAudit(sb, 'zona', zoneId.id, 'modificar', user.id, { updates, name: body.name });
       return json({ ok: true }, 200, req);
     }
 
     if (method === 'DELETE' && zoneId) {
+      requireRole(user, 'admin', 'editor');
+      // Disociar recursos antes de borrar — la UI promete que "los recursos
+      // perderán la asociación", pero el FK no es ON DELETE SET NULL, así
+      // que sin esto Postgres rechazaría el borrado con FK violation.
+      const { count: affectedResources } = await sb
+        .from('recurso_turistico')
+        .update({ zona_id: null }, { count: 'exact' })
+        .eq('zona_id', zoneId.id);
+      // Borrar traducciones huérfanas
+      await sb.from('traduccion')
+        .delete()
+        .eq('entidad_tipo', 'zona')
+        .eq('entidad_id', zoneId.id);
+      // Borrar la zona
       const { error: err } = await sb.from('zona').delete().eq('id', zoneId.id);
       if (err) throw err;
-      return json({ ok: true }, 200, req);
+      logAudit(sb, 'zona', zoneId.id, 'eliminar', user.id, { affectedResources: affectedResources || 0 });
+      return json({ ok: true, affectedResources: affectedResources || 0 }, 200, req);
     }
 
     // ==================================================================
@@ -730,7 +796,7 @@ const STATE_TRANSITIONS: Record<string, string[]> = {
 };
 
 // deno-lint-ignore no-explicit-any
-async function updateResourceStatus(sb: any, id: string, newStatus: string, req: Request) {
+async function updateResourceStatus(sb: any, id: string, newStatus: string, usuarioId: string, req: Request) {
   const validStates = ['borrador', 'revision', 'publicado', 'archivado'];
   if (!validStates.includes(newStatus)) {
     throw { status: 400, message: `Estado invalido: ${newStatus}` };
@@ -769,12 +835,14 @@ async function updateResourceStatus(sb: any, id: string, newStatus: string, req:
   if (error) throw { status: 400, message: error.message };
 
   // Audit log (UNE 178502 trazabilidad)
-  sb.from('log_cambios').insert({
-    entidad_tipo: 'recurso_turistico',
-    entidad_id: id,
-    accion: newStatus === 'publicado' ? 'publicar' : newStatus === 'archivado' ? 'archivar' : 'modificar',
-    cambios: { from: current.estado_editorial, to: newStatus },
-  }).then(() => {}, () => {}); // fire and forget
+  logAudit(
+    sb,
+    'recurso_turistico',
+    id,
+    newStatus === 'publicado' ? 'publicar' : newStatus === 'archivado' ? 'archivar' : 'modificar',
+    usuarioId,
+    { from: current.estado_editorial, to: newStatus },
+  );
 
   // Optional webhook notification
   const webhookUrl = Deno.env.get('WEBHOOK_STATUS_CHANGE');

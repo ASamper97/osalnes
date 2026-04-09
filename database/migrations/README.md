@@ -17,6 +17,8 @@
 | 006 | Add assistant_log table | Yes |
 | 007 | Add translation_job table | Yes |
 | 008 | Add translation campo index | Yes |
+| 009 | Document RDF types array | No |
+| 010 | Enable Row Level Security baseline (defense-in-depth, anon key) | Yes |
 
 ## Execution
 

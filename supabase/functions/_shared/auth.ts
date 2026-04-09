@@ -33,21 +33,33 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
     throw { status: 401, message: 'Invalid or expired token' };
   }
 
-  // Fetch DTI role
+  // Fetch DTI role from the local `usuario` table.
+  // No fallback: if a Supabase auth user exists but has no entry in `usuario`,
+  // the request is rejected. Defaulting to 'editor' (the previous behaviour)
+  // would silently grant content-edit privileges to anyone holding a valid
+  // Supabase JWT — including orphaned accounts and any user invited but not
+  // yet provisioned in the DTI catalogue.
+  if (!user.email) {
+    throw { status: 401, message: 'Token sin email asociado' };
+  }
   const { data: dtiUser } = await sb
     .from('usuario')
     .select('id, rol, activo')
     .eq('email', user.email)
     .single();
 
-  const role = dtiUser?.rol || 'editor';
-  const active = dtiUser?.activo ?? true;
-
-  if (!active) {
-    throw { status: 403, message: 'User account is deactivated' };
+  if (!dtiUser) {
+    throw {
+      status: 403,
+      message: 'Tu email no esta registrado en el CMS de O Salnes. Pide acceso a un administrador.',
+    };
   }
 
-  return { id: user.id, email: user.email!, role, active };
+  if (!dtiUser.activo) {
+    throw { status: 403, message: 'Tu cuenta esta desactivada. Contacta con un administrador.' };
+  }
+
+  return { id: user.id, email: user.email, role: dtiUser.rol, active: dtiUser.activo };
 }
 
 /** Throw 403 if the user does not have one of the required roles. */
