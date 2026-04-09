@@ -4,6 +4,9 @@
  * Helps write descriptions, translate, optimize SEO, audit content quality.
  */
 import { handleCors, json } from '../_shared/cors.ts';
+import { verifyAuth, requireRole } from '../_shared/auth.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
+import { formatError } from '../_shared/errors.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -37,12 +40,17 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Method not allowed' }, 405, req);
   }
 
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) {
-    return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
-  }
-
   try {
+    // Audit C4 — gate the chat assistant behind auth + role + rate limit.
+    rateLimit(req);
+    const user = await verifyAuth(req);
+    requireRole(user, 'admin', 'editor', 'tecnico', 'validador', 'analitica');
+
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
+    }
+
     const { message, context, history = [] } = await req.json();
 
     if (!message?.trim()) {
@@ -106,6 +114,7 @@ Deno.serve(async (req: Request) => {
 
   } catch (err) {
     console.error('[cms-assistant] Error:', err);
-    return json({ error: 'Error interno del asistente' }, 500, req);
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });

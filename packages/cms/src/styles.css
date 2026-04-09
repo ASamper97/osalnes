@@ -6301,4 +6301,32 @@ textarea:focus-visible {
   letter-spacing: 0.02em;
 }
 
+/* ==========================================================================
+   Wizard auto-save toast (audit C6)
+   ==========================================================================
+   Pequeño chip flotante que aparece la primera vez que el wizard crea el
+   borrador silencioso tras completar el paso 0. Confirma al usuario que
+   su trabajo ya está a salvo en BBDD y que puede cerrar la pestaña sin
+   perderlo. Se oculta automáticamente a los 4 segundos. */
+.wizard-autosave-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  padding: 0.75rem 1.25rem;
+  background: var(--cms-primary, #1a5276);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(15, 28, 46, 0.25);
+  animation: wizard-autosave-toast-in 0.3s ease-out;
+}
+
+@keyframes wizard-autosave-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 

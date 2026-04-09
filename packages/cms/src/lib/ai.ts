@@ -1,6 +1,14 @@
 /**
  * AI Client — Utilities for calling the ai-writer Edge Function
+ *
+ * Audit C4 — All AI endpoints now require a valid Supabase JWT (the
+ * functions were configured with verify_jwt = false, which made them
+ * an open Gemini proxy for anyone with the public anon key). We add
+ * the bearer token via getAuthHeaders() from api.ts so the cached
+ * session token is reused (no extra round trip per call).
  */
+
+import { getAuthHeaders } from './api';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -28,13 +36,20 @@ interface AiResponse<T = string> {
   error?: string;
 }
 
+/** Build auth headers with bearer + apikey (Supabase Edge Functions need both). */
+async function aiHeaders(): Promise<Record<string, string>> {
+  const auth = await getAuthHeaders();
+  return {
+    'Content-Type': 'application/json',
+    apikey: SUPABASE_ANON_KEY,
+    ...auth, // Authorization: Bearer ... when logged in
+  };
+}
+
 async function callAi<T = string>(body: AiRequestBase): Promise<AiResponse<T>> {
   const res = await fetch(AI_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON_KEY,
-    },
+    headers: await aiHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -172,10 +187,7 @@ export interface ImportedResource {
 export async function aiImportFromUrl(url: string): Promise<ImportedResource> {
   const res = await fetch(IMPORT_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON_KEY,
-    },
+    headers: await aiHeaders(),
     body: JSON.stringify({ url }),
   });
 
@@ -218,10 +230,7 @@ export async function aiBatch(
 ): Promise<BatchResponse> {
   const res = await fetch(BATCH_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON_KEY,
-    },
+    headers: await aiHeaders(),
     body: JSON.stringify({
       action,
       resource_ids: resourceIds,

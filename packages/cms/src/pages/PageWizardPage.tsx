@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type PageItem } from '@/lib/api';
+import { api, getAuthHeaders, type PageItem } from '@/lib/api';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
 import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 import { RichTextEditor } from '@/components/RichTextEditor';
@@ -18,9 +18,15 @@ const TEMPLATES = [
 
 async function translateText(text: string, from: string, to: string): Promise<string> {
   if (!text.trim()) return '';
+  // Audit C4 — auto-translate now requires bearer auth.
+  const auth = await getAuthHeaders();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/auto-translate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      ...auth,
+    },
     body: JSON.stringify({ texto: text, from, to }),
   });
   if (!res.ok) throw new Error('Translation failed');

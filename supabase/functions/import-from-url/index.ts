@@ -6,8 +6,35 @@
  * relevantes para crear un recurso turistico.
  */
 import { handleCors, json } from '../_shared/cors.ts';
+import { verifyAuth, requireRole } from '../_shared/auth.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
+import { formatError } from '../_shared/errors.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+/**
+ * Block private/internal IPv4 ranges to prevent SSRF (audit S10).
+ * The user controls the URL, so we must refuse internal targets that
+ * could expose cloud metadata, internal services, or local databases.
+ */
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  // Localhost variants
+  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1') return true;
+  // Cloud metadata service (AWS, GCP, Azure all use this address)
+  if (lower === '169.254.169.254') return true;
+  // Generic link-local
+  if (lower.startsWith('169.254.')) return true;
+  // RFC1918 private ranges
+  if (lower.startsWith('10.')) return true;
+  if (lower.startsWith('192.168.')) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) return true;
+  // IPv6 ULA / link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80:')) return true;
+  // .internal / .local TLDs (corporate / mDNS)
+  if (lower.endsWith('.internal') || lower.endsWith('.local')) return true;
+  return false;
+}
 
 const SYSTEM_PROMPT = `Eres un extractor experto de informacion turistica. Tu tarea es analizar el HTML de una pagina web y extraer datos estructurados sobre el recurso turistico que describe (hotel, restaurante, playa, museo, etc.).
 
@@ -50,16 +77,33 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Method not allowed' }, 405, req);
   }
 
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) {
-    return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
-  }
-
   try {
+    // Audit C4 + S10 — gate behind auth/role/rate-limit AND validate that the
+    // requested URL is not a private/internal IP (SSRF defence).
+    rateLimit(req);
+    const user = await verifyAuth(req);
+    requireRole(user, 'admin', 'editor', 'tecnico');
+
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
+    }
+
     const { url } = await req.json();
 
     if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
       return json({ error: 'URL invalida. Debe empezar por http:// o https://' }, 400, req);
+    }
+
+    // SSRF defence: parse the URL and reject private/internal hosts
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return json({ error: 'URL malformada' }, 400, req);
+    }
+    if (isPrivateOrLocalHost(parsed.hostname)) {
+      return json({ error: 'URL no permitida (host interno o privado)' }, 400, req);
     }
 
     // 1. Fetch HTML from the URL
@@ -149,6 +193,7 @@ Deno.serve(async (req: Request) => {
 
   } catch (err) {
     console.error('[import-from-url] Error:', err);
-    return json({ error: 'Error interno del importador' }, 500, req);
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });

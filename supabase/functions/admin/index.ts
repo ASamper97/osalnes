@@ -265,15 +265,17 @@ Deno.serve(async (req: Request) => {
     // ==================================================================
 
     if (method === 'POST' && path === '/resources') {
+      requireRole(user, 'admin', 'editor');
       const body = await req.json();
-      return await createResource(sb, body, req);
+      return await createResource(sb, body, user.id, req);
     }
 
     const resId = matchRoute('/resources/:id', path);
 
     if (method === 'PUT' && resId) {
+      requireRole(user, 'admin', 'editor');
       const body = await req.json();
-      return await updateResource(sb, resId.id, body, req);
+      return await updateResource(sb, resId.id, body, user.id, req);
     }
 
     const resStatus = matchRoute('/resources/:id/status', path);
@@ -284,7 +286,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'DELETE' && resId) {
-      return await deleteResource(sb, resId.id, req);
+      requireRole(user, 'admin');  // borrar es operación destructiva: solo admin
+      return await deleteResource(sb, resId.id, user.id, req);
     }
 
     // ==================================================================
@@ -292,7 +295,8 @@ Deno.serve(async (req: Request) => {
     // ==================================================================
 
     if (method === 'POST' && path === '/assets') {
-      return await uploadAsset(sb, req);
+      requireRole(user, 'admin', 'editor', 'tecnico');
+      return await uploadAsset(sb, user.id, req);
     }
 
     if (method === 'GET' && path === '/assets') {
@@ -304,10 +308,12 @@ Deno.serve(async (req: Request) => {
 
     const assetId = matchRoute('/assets/:id', path);
     if (method === 'DELETE' && assetId) {
+      requireRole(user, 'admin', 'editor');
       return await deleteAsset(sb, assetId.id, req);
     }
 
     if (method === 'PATCH' && path === '/assets/reorder') {
+      requireRole(user, 'admin', 'editor');
       const { items } = await req.json();
       if (!Array.isArray(items)) return json({ error: 'items array required' }, 400, req);
       await Promise.all(items.map((item: { id: string; orden: number }) =>
@@ -706,7 +712,7 @@ Deno.serve(async (req: Request) => {
 // ========================================================================
 
 // deno-lint-ignore no-explicit-any
-async function createResource(sb: any, input: any, req: Request) {
+async function createResource(sb: any, input: any, usuarioId: string, req: Request) {
   const uri = `osalnes:recurso:${input.slug}`;
 
   const { data, error } = await sb
@@ -736,16 +742,21 @@ async function createResource(sb: any, input: any, req: Request) {
       extras: input.extras || {},
       visible_en_mapa: input.visible_en_mapa ?? true,
       estado_editorial: 'borrador',
+      created_by: usuarioId,
+      updated_by: usuarioId,
     })
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;  // formatError lo procesa con SQLSTATE → mensaje friendly
 
-  if (input.name) await saveTranslations('recurso_turistico', data.id, 'name', input.name);
-  if (input.description) await saveTranslations('recurso_turistico', data.id, 'description', input.description);
-  if (input.seo_title) await saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title);
-  if (input.seo_description) await saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description);
+  // Sync translations in parallel (4 fields, ~4× faster than secuencial)
+  await Promise.all([
+    input.name ? saveTranslations('recurso_turistico', data.id, 'name', input.name) : Promise.resolve(),
+    input.description ? saveTranslations('recurso_turistico', data.id, 'description', input.description) : Promise.resolve(),
+    input.seo_title ? saveTranslations('recurso_turistico', data.id, 'seo_title', input.seo_title) : Promise.resolve(),
+    input.seo_description ? saveTranslations('recurso_turistico', data.id, 'seo_description', input.seo_description) : Promise.resolve(),
+  ]);
 
   if (input.category_ids?.length) {
     await sb.from('recurso_categoria').insert(
@@ -753,13 +764,24 @@ async function createResource(sb: any, input: any, req: Request) {
     );
   }
 
+  // C2: audit log (UNE 178502 §6.4 trazabilidad de la entidad central)
+  logAudit(sb, 'recurso_turistico', data.id, 'crear', usuarioId, {
+    slug: input.slug,
+    rdf_type: input.rdf_type,
+    municipio_id: input.municipio_id || null,
+    name: input.name || null,
+  });
+
   return json(await mapResourceRow(sb, data), 201, req);
 }
 
 // deno-lint-ignore no-explicit-any
-async function updateResource(sb: any, id: string, input: any, req: Request) {
+async function updateResource(sb: any, id: string, input: any, usuarioId: string, req: Request) {
   // deno-lint-ignore no-explicit-any
-  const update: Record<string, any> = { updated_at: new Date().toISOString() };
+  const update: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+    updated_by: usuarioId,
+  };
 
   const fields = [
     'rdf_type', 'rdf_types', 'municipio_id', 'zona_id', 'latitude', 'longitude',
@@ -785,13 +807,16 @@ async function updateResource(sb: any, id: string, input: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
-  if (!data) throw { status: 404, message: 'Resource not found' };
+  if (error) throw error;  // formatError lo procesa
+  if (!data) throw { status: 404, message: 'Recurso no encontrado' };
 
-  if (input.name) await saveTranslations('recurso_turistico', id, 'name', input.name);
-  if (input.description) await saveTranslations('recurso_turistico', id, 'description', input.description);
-  if (input.seo_title) await saveTranslations('recurso_turistico', id, 'seo_title', input.seo_title);
-  if (input.seo_description) await saveTranslations('recurso_turistico', id, 'seo_description', input.seo_description);
+  // Translations en paralelo (mismo rationale que createResource)
+  await Promise.all([
+    input.name ? saveTranslations('recurso_turistico', id, 'name', input.name) : Promise.resolve(),
+    input.description ? saveTranslations('recurso_turistico', id, 'description', input.description) : Promise.resolve(),
+    input.seo_title ? saveTranslations('recurso_turistico', id, 'seo_title', input.seo_title) : Promise.resolve(),
+    input.seo_description ? saveTranslations('recurso_turistico', id, 'seo_description', input.seo_description) : Promise.resolve(),
+  ]);
 
   if (input.category_ids !== undefined) {
     await sb.from('recurso_categoria').delete().eq('recurso_id', id);
@@ -801,6 +826,17 @@ async function updateResource(sb: any, id: string, input: any, req: Request) {
       );
     }
   }
+
+  // C2: audit log con la lista de campos modificados
+  const changedFields = Object.keys(update).filter((k) => k !== 'updated_at' && k !== 'updated_by');
+  if (input.name) changedFields.push('name');
+  if (input.description) changedFields.push('description');
+  if (input.seo_title) changedFields.push('seo_title');
+  if (input.seo_description) changedFields.push('seo_description');
+  if (input.category_ids !== undefined) changedFields.push('category_ids');
+  logAudit(sb, 'recurso_turistico', id, 'modificar', usuarioId, {
+    changed_fields: changedFields,
+  });
 
   return json(await mapResourceRow(sb, data), 200, req);
 }
@@ -882,31 +918,176 @@ async function updateResourceStatus(sb: any, id: string, newStatus: string, usua
 }
 
 // deno-lint-ignore no-explicit-any
-async function deleteResource(sb: any, id: string, req: Request) {
+async function deleteResource(sb: any, id: string, usuarioId: string, req: Request) {
+  // C3 — cleanup completo antes de borrar la fila principal.
+  //
+  // El schema usa el patrón polimórfico (entidad_tipo + entidad_id) en
+  // asset_multimedia, documento_descargable, traduccion y log_cambios.
+  // Esas tablas NO tienen FK a recurso_turistico, así que el cascade
+  // del DELETE no las toca → quedan filas huérfanas y, peor, archivos
+  // huérfanos en Supabase Storage que cuestan dinero indefinidamente.
+  //
+  // Las tablas que SÍ tienen FK con ON DELETE CASCADE (recurso_categoria,
+  // recurso_producto, relacion_recurso) se limpian automáticamente.
+
+  // 1. Listar archivos físicos en Storage para borrarlos
+  const { data: assets } = await sb
+    .from('asset_multimedia')
+    .select('id, storage_path')
+    .eq('entidad_tipo', 'recurso_turistico')
+    .eq('entidad_id', id);
+  const { data: docs } = await sb
+    .from('documento_descargable')
+    .select('id, storage_path')
+    .eq('entidad_tipo', 'recurso_turistico')
+    .eq('entidad_id', id);
+
+  const assetPaths = (assets || []).map((a: { storage_path: string | null }) => a.storage_path).filter(Boolean) as string[];
+  const docPaths = (docs || []).map((d: { storage_path: string | null }) => d.storage_path).filter(Boolean) as string[];
+  const allPaths = [...assetPaths, ...docPaths];
+
+  // 2. Borrar archivos físicos del bucket (en una sola llamada batch)
+  if (allPaths.length > 0) {
+    const { error: storageErr } = await sb.storage.from(BUCKET).remove(allPaths);
+    if (storageErr) {
+      // No bloqueamos el delete si el bucket falla — registramos y seguimos
+      console.error('[deleteResource] Storage cleanup failed:', storageErr);
+    }
+  }
+
+  // 3. Borrar filas polimórficas huérfanas (no las cubre el FK cascade)
+  await Promise.all([
+    sb.from('asset_multimedia').delete().eq('entidad_tipo', 'recurso_turistico').eq('entidad_id', id),
+    sb.from('documento_descargable').delete().eq('entidad_tipo', 'recurso_turistico').eq('entidad_id', id),
+    sb.from('traduccion').delete().eq('entidad_tipo', 'recurso_turistico').eq('entidad_id', id),
+  ]);
+
+  // 4. Borrar el recurso. El FK cascade limpia recurso_categoria,
+  //    recurso_producto y relacion_recurso automáticamente.
   const { error } = await sb.from('recurso_turistico').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
-  return json({ deleted: true }, 200, req);
+  if (error) throw error;
+
+  // 5. C2 + C3: audit log con el detalle del cleanup
+  logAudit(sb, 'recurso_turistico', id, 'eliminar', usuarioId, {
+    assets_deleted: assets?.length || 0,
+    documents_deleted: docs?.length || 0,
+    storage_files_removed: allPaths.length,
+  });
+
+  return json({
+    deleted: true,
+    cleanup: {
+      assets: assets?.length || 0,
+      documents: docs?.length || 0,
+      storage_files: allPaths.length,
+    },
+  }, 200, req);
 }
 
 // ========================================================================
 // ─── Multimedia (assets) ───
 // ========================================================================
 
+// C5 — Whitelist of allowed entidad_tipo values for asset uploads.
+// Anything else is rejected so the storage path cannot be manipulated.
+const ALLOWED_ASSET_ENTIDAD_TIPOS = new Set([
+  'recurso_turistico',
+  'pagina',
+  'producto_turistico',
+  'categoria',
+]);
+
+// C5 — Whitelist of MIME types per asset kind. Hard rejection of anything
+// outside (e.g. image/svg+xml is BLOCKED because SVG can carry script).
+const ALLOWED_MIMES_BY_TIPO: Record<string, string[]> = {
+  imagen: ['image/jpeg', 'image/png', 'image/webp', 'image/avif'],
+  video:  ['video/mp4', 'video/webm'],
+  audio:  ['audio/mpeg', 'audio/ogg', 'audio/wav'],
+};
+
+// C5 — Per-kind size limits. Editorial team uploads phone photos (~5MB)
+// and occasional drone footage (~50MB).
+const MAX_BYTES_BY_TIPO: Record<string, number> = {
+  imagen: 10 * 1024 * 1024,    //  10 MB
+  video:  100 * 1024 * 1024,   // 100 MB
+  audio:  20 * 1024 * 1024,    //  20 MB
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Magic bytes sniffing for image MIME validation. Accepts only files
+ * whose first bytes match the declared MIME type. Defends against:
+ *   - HTML or executables disguised as .jpg
+ *   - SVG with embedded script (we don't accept SVG at all)
+ *   - polyglot files
+ */
+function isValidImageMagic(bytes: Uint8Array, mime: string): boolean {
+  if (mime === 'image/jpeg') return bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
+  if (mime === 'image/png')  return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+  if (mime === 'image/webp') return bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+                                  && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  // AVIF: ftyp box at offset 4
+  if (mime === 'image/avif') return bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+  return false;
+}
+
 // deno-lint-ignore no-explicit-any
-async function uploadAsset(sb: any, req: Request) {
+async function uploadAsset(sb: any, usuarioId: string, req: Request) {
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
   if (!file) return json({ error: 'No file uploaded' }, 400, req);
 
+  // C5 — sanitize entidad_tipo (must come from a fixed whitelist)
   const entidadTipo = (formData.get('entidad_tipo') as string) || 'recurso_turistico';
+  if (!ALLOWED_ASSET_ENTIDAD_TIPOS.has(entidadTipo)) {
+    return json({ error: `Tipo de entidad no permitido: ${entidadTipo}` }, 400, req);
+  }
+
+  // C5 — entidad_id MUST be a valid UUID (otherwise it's path injection)
   const entidadId = formData.get('entidad_id') as string;
+  if (!entidadId) return json({ error: 'entidad_id es obligatorio' }, 400, req);
+  if (!UUID_RE.test(entidadId)) {
+    return json({ error: 'entidad_id debe ser un UUID válido' }, 400, req);
+  }
+
+  // C5 — tipo must be one of the whitelisted kinds
   const tipo = (formData.get('tipo') as string) || 'imagen';
+  const allowedMimes = ALLOWED_MIMES_BY_TIPO[tipo];
+  if (!allowedMimes) {
+    return json({ error: `Tipo de asset desconocido: ${tipo}` }, 400, req);
+  }
 
-  if (!entidadId) return json({ error: 'entidad_id is required' }, 400, req);
+  // C5 — declared MIME must be in the whitelist
+  if (!allowedMimes.includes(file.type)) {
+    return json({
+      error: `Tipo MIME no permitido: ${file.type}. Permitidos para "${tipo}": ${allowedMimes.join(', ')}`,
+    }, 400, req);
+  }
 
-  const ext = file.name.split('.').pop() || 'bin';
-  const storagePath = `${entidadTipo}/${entidadId}/${Date.now()}.${ext}`;
+  // C5 — size limit per tipo
+  const maxBytes = MAX_BYTES_BY_TIPO[tipo];
+  if (file.size > maxBytes) {
+    return json({
+      error: `Archivo demasiado grande (${Math.round(file.size / 1024 / 1024)} MB). Máximo permitido para "${tipo}": ${Math.round(maxBytes / 1024 / 1024)} MB`,
+    }, 413, req);
+  }
+
+  // C5 — magic bytes verification for images. Cheap (12-byte slice) and
+  // catches the "disguised executable" attack.
   const buffer = new Uint8Array(await file.arrayBuffer());
+  if (tipo === 'imagen' && !isValidImageMagic(buffer.slice(0, 12), file.type)) {
+    return json({
+      error: 'El contenido del archivo no coincide con el tipo declarado. ¿Está corrupto o renombrado?',
+    }, 400, req);
+  }
+
+  // C5 — sanitize filename: only [a-z0-9] in the extension, random UUID
+  // for the basename so two uploads with the same name don't collide and
+  // path traversal via filename is impossible.
+  const declaredExt = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const safeExt = declaredExt.length > 0 && declaredExt.length <= 5 ? declaredExt : 'bin';
+  const storagePath = `${entidadTipo}/${entidadId}/${crypto.randomUUID()}.${safeExt}`;
 
   const { error: uploadError } = await sb.storage
     .from(BUCKET)
@@ -941,7 +1122,13 @@ async function uploadAsset(sb: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
+
+  // Audit log: who uploaded what to which entity
+  logAudit(sb, entidadTipo, entidadId, 'modificar', usuarioId, {
+    asset_uploaded: { id: data.id, tipo, mime: file.type, size_bytes: file.size },
+  });
+
   return json(data, 201, req);
 }
 

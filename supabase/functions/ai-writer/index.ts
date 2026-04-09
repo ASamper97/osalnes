@@ -11,6 +11,9 @@
  *   alt_text   — Generate alt text for an image description
  */
 import { handleCors, json } from '../_shared/cors.ts';
+import { verifyAuth, requireRole } from '../_shared/auth.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
+import { formatError } from '../_shared/errors.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -124,12 +127,20 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Method not allowed' }, 405, req);
   }
 
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) {
-    return json({ error: 'GEMINI_API_KEY not configured', mock: true, result: getMockResult(req) }, 200, req);
-  }
-
   try {
+    // Audit C4 — gate the AI proxy behind auth + role + rate limit.
+    // Without this, anyone with the public anon key (which is in every
+    // CMS bundle) could use this endpoint as a free Gemini proxy and
+    // burn the project's API budget.
+    rateLimit(req);
+    const user = await verifyAuth(req);
+    requireRole(user, 'admin', 'editor', 'tecnico');
+
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured', mock: true, result: getMockResult(req) }, 200, req);
+    }
+
     const body = await req.json();
     const { action, text, from, to, context, lang } = body;
 
@@ -236,7 +247,8 @@ Descripción: ${desc}`;
 
   } catch (err) {
     console.error('[ai-writer] Error:', err);
-    return json({ error: 'Error interno del asistente IA' }, 500, req);
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });
 

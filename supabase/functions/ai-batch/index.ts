@@ -16,6 +16,9 @@
 import { handleCors, json } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabase.ts';
 import { getTranslations, saveTranslations } from '../_shared/translations.ts';
+import { verifyAuth, requireRole } from '../_shared/auth.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
+import { formatError } from '../_shared/errors.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -45,12 +48,17 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Method not allowed' }, 405, req);
   }
 
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) {
-    return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
-  }
-
   try {
+    // Audit C4 — gate the bulk AI operations behind auth + role + rate limit.
+    rateLimit(req);
+    const user = await verifyAuth(req);
+    requireRole(user, 'admin', 'editor', 'tecnico');
+
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured' }, 500, req);
+    }
+
     const { action, resource_ids, target_lang } = await req.json();
 
     if (!action || !['translate', 'improve', 'seo', 'validate', 'categorize'].includes(action)) {
@@ -112,7 +120,8 @@ Deno.serve(async (req: Request) => {
 
   } catch (err) {
     console.error('[ai-batch] Error:', err);
-    return json({ error: err instanceof Error ? err.message : 'Internal error' }, 500, req);
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });
 

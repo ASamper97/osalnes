@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { getAuthHeaders } from '@/lib/api';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -69,11 +70,14 @@ export function CmsAssistant() {
     setLoading(true);
 
     try {
+      // Audit C4 — cms-assistant requires bearer auth (was an open Gemini proxy)
+      const auth = await getAuthHeaders();
       const res = await fetch(`${SUPABASE_URL}/functions/v1/cms-assistant`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
+          apikey: SUPABASE_ANON_KEY,
+          ...auth,
         },
         body: JSON.stringify({
           message: msg,

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
+import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
 import { MediaUploader } from '@/components/MediaUploader';
 import { DocumentUploader } from '@/components/DocumentUploader';
@@ -22,9 +22,17 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 async function translateText(text: string, from: string, to: string): Promise<string> {
   if (!text.trim()) return '';
+  // Audit C4 — auto-translate now requires a valid Supabase JWT (the
+  // edge function had verify_jwt=false). We add the bearer via the
+  // shared getAuthHeaders helper so the cached token is reused.
+  const auth = await getAuthHeaders();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/auto-translate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      ...auth,
+    },
     body: JSON.stringify({ texto: text, from, to }),
   });
   if (!res.ok) throw new Error('Translation failed');
@@ -77,6 +85,10 @@ export function ResourceWizardPage() {
   const [savedId, setSavedId] = useState<string | null>(id || null);
   const dirty = useRef(false);
   const [translating, setTranslating] = useState<string | null>(null);
+  // C6 — auto-save state. Once true, we avoid spawning multiple parallel
+  // create requests if the user clicks "Siguiente" twice quickly.
+  const autoSavingRef = useRef(false);
+  const [autoSavedToast, setAutoSavedToast] = useState(false);
   // Template selector — only shown for new resources before the wizard starts
   const [templateApplied, setTemplateApplied] = useState(!isNew);
   const [activeTemplate, setActiveTemplate] = useState<ResourceTemplate | null>(null);
@@ -313,6 +325,55 @@ export function ResourceWizardPage() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
+
+  // ── C6 — Auto-save tras step 0 ─────────────────────────────────
+  //
+  // El paso 4 (Multimedia) necesita un savedId real para asociar las subidas.
+  // Antes de este fix, el usuario tenía que terminar TODO el wizard, guardar
+  // y volver a entrar para añadir fotos — doble pase forzoso.
+  //
+  // Ahora: en cuanto el usuario completa válidamente el paso 0 y avanza al 1,
+  // creamos un borrador silencioso con los campos mínimos. A partir de ese
+  // momento `savedId` está poblado y MediaUploader funciona en cuanto el
+  // usuario llegue al paso 4. El "Crear recurso" final del paso 6 simplemente
+  // se convierte en un updateResource.
+  //
+  // Idempotencia: `autoSavingRef` evita disparar dos creates si el usuario
+  // hace doble click. `savedId` evita reentrar si ya existe el borrador.
+  useEffect(() => {
+    if (!isNew) return;
+    if (savedId) return;
+    if (autoSavingRef.current) return;
+    if (currentStep === 0) return;             // todavía en step 0
+    if (!nameEs.trim() || !rdfType || !slug) return;  // datos mínimos faltan
+
+    autoSavingRef.current = true;
+    api.createResource({
+      rdf_type: rdfType,
+      rdf_types: [],
+      slug,
+      municipio_id: municipioId || null,
+      zona_id: zonaId || null,
+      name: { es: nameEs, gl: nameGl || nameEs },  // GL fallback al ES por defecto
+    } as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .then((created) => {
+        setSavedId(created.id);
+        setAutoSavedToast(true);
+        // Sustituir la URL silenciosamente para que un refresh recupere el borrador
+        navigate(`/resources/${created.id}`, { replace: true });
+        // Ocultar toast tras unos segundos
+        setTimeout(() => setAutoSavedToast(false), 4000);
+      })
+      .catch((err) => {
+        // No molestamos al usuario — seguirá sin savedId hasta que guarde manualmente.
+        // Pero loguear ayuda al debug en producción.
+        console.error('[wizard] auto-save de borrador falló:', err);
+        autoSavingRef.current = false;  // permitir reintentar en el siguiente cambio de step
+      });
+    // No incluimos `nameEs/rdfType/slug` en deps para evitar reintentos en cada keystroke.
+    // El effect se re-evalúa al cambiar currentStep, que es exactamente cuando queremos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, isNew, savedId]);
 
   // ── Validation per step ─────────────────────────────────────
 
@@ -1143,6 +1204,16 @@ export function ResourceWizardPage() {
         </>
       )}
     </Wizard>
+
+    {/* C6 — Toast del autosave: aparece la primera vez que el wizard
+        crea el borrador silencioso al pasar de step 0 a step 1, para
+        que el usuario sepa que su trabajo está a salvo y que ya puede
+        cerrar la pestaña sin perder lo escrito. */}
+    {autoSavedToast && (
+      <div className="wizard-autosave-toast" role="status" aria-live="polite">
+        💾 Borrador guardado automáticamente — puedes cerrar y continuar después
+      </div>
+    )}
 
     {/* Floating preview button */}
     <button

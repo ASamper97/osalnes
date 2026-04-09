@@ -17,6 +17,9 @@
  */
 import { handleCors, json } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabase.ts';
+import { verifyAuth, requireRole } from '../_shared/auth.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
+import { formatError } from '../_shared/errors.ts';
 
 const PROVIDER = Deno.env.get('TRANSLATE_PROVIDER') || 'mock';
 const API_URL = Deno.env.get('TRANSLATE_API_URL') || 'https://libretranslate.de/translate';
@@ -36,7 +39,7 @@ Deno.serve(async (req: Request) => {
 
   const sb = getAdminClient();
 
-  // Health check
+  // Health check (GET) — public endpoint, no auth needed.
   if (req.method === 'GET') {
     const { count } = await sb
       .from('translation_job')
@@ -56,6 +59,13 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // Audit C4 — POST is gated. Direct translation calls cost the
+    // external API budget; the batch worker mode would also be abusable
+    // for free translation if left open.
+    rateLimit(req);
+    const user = await verifyAuth(req);
+    requireRole(user, 'admin', 'editor', 'tecnico');
+
     // Direct translation mode: { texto, from, to }
     const contentType = req.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -158,7 +168,8 @@ Deno.serve(async (req: Request) => {
 
   } catch (err) {
     console.error('[auto-translate] Error:', err);
-    return json({ error: 'Internal error' }, 500, req);
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });
 

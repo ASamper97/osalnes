@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
+import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
 import { MediaUploader } from '@/components/MediaUploader';
 import { DocumentUploader } from '@/components/DocumentUploader';
 import { RelationsManager } from '@/components/RelationsManager';
@@ -9,12 +9,18 @@ const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-/** Simple ES→target translation via auto-translate Edge Function */
+/** Simple ES→target translation via auto-translate Edge Function.
+ *  Audit C4 — bearer auth required (was open Gemini proxy). */
 async function translateText(text: string, from: string, to: string): Promise<string> {
   if (!text.trim()) return '';
+  const auth = await getAuthHeaders();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/auto-translate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      ...auth,
+    },
     body: JSON.stringify({ texto: text, from, to }),
   });
   if (!res.ok) throw new Error('Translation failed');

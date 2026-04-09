@@ -4,11 +4,29 @@ verify_jwt = false
 [functions.admin]
 verify_jwt = false
 
+# Public chat endpoint for tourists (web público). Stays open by design —
+# anonymous visitors of osalnes.gal can chat with the recommendation bot.
 [functions.assistant]
 verify_jwt = false
 
+# CMS-side AI endpoints (audit C4): the gateway now rejects unauthenticated
+# calls BEFORE invoking the function, so DB lookups for auth verification
+# never run for an attacker probing with the public anon key. Each function
+# also calls verifyAuth() + requireRole() + rateLimit() internally as
+# defense in depth. Frontend callers were migrated to send the bearer token
+# via getAuthHeaders() in lib/api.ts (see ai.ts, CmsAssistant, ResourceWizardPage,
+# ResourceFormPage, PageWizardPage).
 [functions.auto-translate]
-verify_jwt = false
+verify_jwt = true
 
 [functions.cms-assistant]
-verify_jwt = false
+verify_jwt = true
+
+[functions.ai-writer]
+verify_jwt = true
+
+[functions.ai-batch]
+verify_jwt = true
+
+[functions.import-from-url]
+verify_jwt = true

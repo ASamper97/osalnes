@@ -13,7 +13,16 @@ const ADMIN_BASE = import.meta.env.VITE_ADMIN_URL || `${API_BASE}/admin`;
 let _authCache: { headers: Record<string, string>; ts: number } | null = null;
 const AUTH_CACHE_TTL = 30_000;
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+/**
+ * Returns the Authorization headers for the current Supabase session.
+ * Cached for AUTH_CACHE_TTL ms to avoid hitting `supabase.auth.getSession`
+ * (which is sync from local storage but still has overhead at scale).
+ *
+ * Exported so other helpers (e.g. lib/ai.ts) can build authenticated
+ * fetches against Edge Functions other than /admin without duplicating
+ * the cache logic.
+ */
+export async function getAuthHeaders(): Promise<Record<string, string>> {
   if (_authCache && Date.now() - _authCache.ts < AUTH_CACHE_TTL) {
     return _authCache.headers;
   }
