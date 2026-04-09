@@ -2,3 +2,20 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
+
+# Vite emits hashed filenames in /assets (e.g. index-Bl5fwiXO.js).
+# Hashed assets never change for a given URL, so we cache them aggressively.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html must NOT be cached: it references the latest hashed assets,
+# so a stale copy would point to deleted bundles after a redeploy.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Static favicons and logos can be revalidated daily — they rarely change
+# but are not hashed, so we don't want them stuck forever.
+/favicon.ico
+  Cache-Control: public, max-age=86400
+/logo-osalnes.png
+  Cache-Control: public, max-age=86400
