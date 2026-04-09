@@ -25,6 +25,7 @@
 | 014 | zona schema hardening: updated_at, created_by, updated_by, slug-per-municipio, NOT NULL, indexes | Yes |
 | 015 | Atomic create_zona / update_zona RPCs (fixes audit A6) | Yes |
 | 016 | Optimistic concurrency control for update_zona (fixes audit DF3) | Yes |
+| 017 | Seed parroquias of the 9 O Salnés concellos (audit F2) | Yes |
 
 ## Execution
 
