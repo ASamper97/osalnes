@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { type ZoneItem } from '@/lib/api';
 import { useZones } from '@/lib/use-zones';
 import { useConfirm } from '@/components/ConfirmDialog';
@@ -236,12 +237,13 @@ export function ZonesPage() {
             <th>Nombre (GL)</th>
             <th>Idiomas</th>
             <th>Municipio</th>
+            <th>Recursos</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {filtered.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin zonas{filterMunicipio ? ' en este municipio' : ''}</td></tr>
+            <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>Sin zonas{filterMunicipio ? ' en este municipio' : ''}</td></tr>
           )}
           {filtered.map((z) => {
             const langs = ['es', 'gl', 'en', 'fr', 'pt'].filter((l) => z.name?.[l]);
@@ -254,6 +256,20 @@ export function ZonesPage() {
                 {langs.length}/5
               </td>
               <td>{getMunicipioName(z.municipioId)}</td>
+              {/* F3: clickable resource count — links to filtered list */}
+              <td>
+                <Link
+                  to={`/resources?zona=${z.id}`}
+                  className="zones-table__count-link"
+                  title={
+                    z.resourceCount === 0
+                      ? 'Esta zona no tiene recursos asociados'
+                      : `Ver los ${z.resourceCount} recursos de esta zona`
+                  }
+                >
+                  {z.resourceCount}
+                </Link>
+              </td>
               <td>
                 <div className="action-btns">
                   <button className="btn btn-sm" onClick={() => startEdit(z)}>Editar</button>

@@ -2515,6 +2515,52 @@ textarea:focus-visible {
   font-style: italic;
 }
 
+/* F3: clickable resource-count badge inside the zone list (map page panel).
+   Subtle by default, highlighted on hover, and visually distinct from zero
+   so admins can spot empty zones at a glance. */
+.zones-map__zone-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--cms-border, #e2e8f0);
+  color: var(--cms-text-light, #6b7a8c);
+  font-size: 0.7rem;
+  text-decoration: none;
+  transition: all var(--transition);
+  width: fit-content;
+}
+.zones-map__zone-count:hover,
+.zones-map__zone-count:focus-visible {
+  background: var(--cms-primary, #1a5276);
+  color: #fff;
+  outline: none;
+}
+
+/* F3: classic ZonesPage table — same idea, narrower badge for tabular layout. */
+.zones-table__count-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--cms-border, #e2e8f0);
+  color: var(--cms-text, #1f2937);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all var(--transition);
+}
+.zones-table__count-link:hover,
+.zones-table__count-link:focus-visible {
+  background: var(--cms-primary, #1a5276);
+  color: #fff;
+  outline: none;
+}
+
 @media (max-width: 1100px) {
   .zones-map__layout {
     grid-template-columns: 1fr;

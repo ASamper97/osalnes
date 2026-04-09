@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem } from '@/lib/api';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { api, type PaginatedResult, type ResourceSummary, type TypologyItem, type MunicipalityItem, type ZoneItem } from '@/lib/api';
 import { SkeletonTable } from '@/components/Skeleton';
 import { QrModal } from '@/components/QrModal';
 import { BulkAiActions } from '@/components/BulkAiActions';
@@ -54,6 +54,15 @@ export function ResourcesPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { notify } = useNotifications();
+  // F3: read ?zona=<id> URL param so the "click a zone → see its recursos"
+  // flow from ZonesMapPage / ZonesPage works. We also keep a local cache of
+  // all zones (small dataset, see use-zones P3 trade-off) so we can render
+  // the zone NAME in the filter badge instead of an opaque UUID.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const zonaFilterId = searchParams.get('zona') || '';
+  const [zones, setZones] = useState<ZoneItem[]>([]);
+  const zonaFilterItem = zonaFilterId ? zones.find((z) => z.id === zonaFilterId) || null : null;
+
   const [resources, setResources] = useState<PaginatedResult<ResourceSummary> | null>(null);
   const [typologies, setTypologies] = useState<TypologyItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
@@ -62,6 +71,14 @@ export function ResourcesPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [searchName, setSearchName] = useState('');
   const [page, setPage] = useState(1);
+
+  /** F3: clear the zona URL param without reloading. */
+  function clearZonaFilter() {
+    const next = new URLSearchParams(searchParams);
+    next.delete('zona');
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  }
   const [busyId, setBusyId] = useState<string | null>(null);
   const [qrResource, setQrResource] = useState<{ slug: string; name: string } | null>(null);
   // Bulk selection
@@ -133,11 +150,14 @@ export function ResourcesPage() {
     const params: Record<string, string> = { page: String(page), limit: '20' };
     if (filterType) params.type = filterType;
     if (filterStatus) params.status = filterStatus;
+    // F3: include the zona filter when present so the public api restricts
+    // the result set server-side. Receives a zona UUID.
+    if (zonaFilterId) params.zona = zonaFilterId;
 
     api.getResources(params)
       .then(setResources)
       .catch((err) => setError(err.message));
-  }, [page, filterType, filterStatus]);
+  }, [page, filterType, filterStatus, zonaFilterId]);
 
   useEffect(() => {
     loadResources();
@@ -146,6 +166,10 @@ export function ResourcesPage() {
   useEffect(() => {
     api.getTypologies().then(setTypologies).catch(() => {});
     api.getMunicipalities().then(setMunicipalities).catch(() => {});
+    // F3: cached fetch — used to render the zone NAME in the active filter
+    // badge instead of an opaque UUID. Cheap because api.getZones() is in
+    // the 5-min in-memory cache (Tanda 2).
+    api.getZones().then(setZones).catch(() => {});
   }, []);
 
   async function handleDelete(id: string, name: string) {
@@ -287,6 +311,30 @@ export function ResourcesPage() {
           + Guardar vista
         </button>
       </div>
+
+      {/* F3: active zona filter banner — visible when navigating from
+          /zones, with the zone name and a clear button. */}
+      {zonaFilterId && (
+        <div
+          className="alert alert-info"
+          role="status"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}
+        >
+          <span>
+            🏷️ Filtrando por zona:{' '}
+            <strong>
+              {zonaFilterItem
+                ? (zonaFilterItem.name?.es || zonaFilterItem.name?.gl || zonaFilterItem.slug)
+                : 'cargando…'}
+            </strong>
+            {' · '}
+            <Link to="/zones" style={{ fontSize: '0.85rem' }}>← Volver a zonas</Link>
+          </span>
+          <button type="button" className="btn btn-sm" onClick={clearZonaFilter}>
+            Quitar filtro
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="filters-bar">

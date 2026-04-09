@@ -147,6 +147,9 @@ async function listResources(url: URL, req: Request) {
   const sb = getAdminClient();
   const type = url.searchParams.get('type') || undefined;
   const municipio = url.searchParams.get('municipio') || undefined;
+  // F3: filter by zona — used by the "click a zone → see its recursos" flow
+  // from ZonesMapPage and ZonesPage. Receives a zona UUID.
+  const zona = url.searchParams.get('zona') || undefined;
   const page = parseInt(url.searchParams.get('page') || '1', 10);
   const limit = parseInt(url.searchParams.get('limit') || '20', 10);
   const sort = url.searchParams.get('sort') || 'created_at';
@@ -177,6 +180,7 @@ async function listResources(url: URL, req: Request) {
 
   if (type) query = query.eq('rdf_type', type);
   if (municipio) query = query.eq('municipio_id', municipio);
+  if (zona) query = query.eq('zona_id', zona);
   if (matchingIds) query = query.in('id', matchingIds);
 
   const offset = (page - 1) * limit;

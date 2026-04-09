@@ -363,6 +363,9 @@ export interface ZoneItem {
   /** ISO 8601 timestamp of the last update. The frontend echoes this back
    *  on PUT so the backend can detect concurrent edits (DF3). */
   updatedAt: string;
+  /** Number of recurso_turistico linked to this zone (audit F3). Used to
+   *  render "(N recursos)" badges that link to /resources?zona=<id>. */
+  resourceCount: number;
 }
 
 export interface ProductItem {

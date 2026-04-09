@@ -27,6 +27,10 @@ export interface ZoneListItem {
   name: Record<string, string>;
   /** ISO 8601 timestamp. Used by the optimistic concurrency check (DF3). */
   updatedAt: string;
+  /** Number of recurso_turistico rows linked to this zona. Used by F3 to
+   *  render "(N recursos)" badges in the zone lists. Includes drafts and
+   *  archived — admins manage all states, not just published. */
+  resourceCount: number;
 }
 
 /**
@@ -65,6 +69,21 @@ export async function listZones(
 
   if (tErr) throw tErr;
 
+  // Step 3 (audit F3): resource count per zona — single batched query.
+  // We fetch all matching recurso rows projected to just zona_id and group
+  // in memory. For the realistic scale (~50 zones × ~200 resources max),
+  // this is faster than N separate count queries and avoids the
+  // "head/count" PostgREST quirks.
+  const { data: linked, error: rErr } = await sb
+    .from('recurso_turistico')
+    .select('zona_id')
+    .in('zona_id', ids);
+  if (rErr) throw rErr;
+  const countByZone: Record<string, number> = {};
+  for (const row of linked || []) {
+    if (row.zona_id) countByZone[row.zona_id] = (countByZone[row.zona_id] || 0) + 1;
+  }
+
   // Group translations by zone id
   const namesByZone: Record<string, Record<string, string>> = {};
   for (const t of trans || []) {
@@ -78,6 +97,7 @@ export async function listZones(
     municipioId: z.municipio_id,
     name: namesByZone[z.id] || {},
     updatedAt: z.updated_at,
+    resourceCount: countByZone[z.id] || 0,
   }));
 }
 
@@ -109,6 +129,14 @@ export async function getZoneById(
     .eq('campo', 'name');
   if (tErr) throw tErr;
 
+  // F3: count linked recursos for the single-row return path used after
+  // create/update mutations (admin POST/PUT handlers).
+  const { count: resourceCount, error: cErr } = await sb
+    .from('recurso_turistico')
+    .select('*', { count: 'exact', head: true })
+    .eq('zona_id', id);
+  if (cErr) throw cErr;
+
   const name: Record<string, string> = {};
   for (const t of trans || []) name[t.idioma] = t.valor;
 
@@ -118,5 +146,6 @@ export async function getZoneById(
     municipioId: row.municipio_id,
     name,
     updatedAt: row.updated_at,
+    resourceCount: resourceCount ?? 0,
   };
 }

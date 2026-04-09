@@ -467,6 +467,19 @@ export function ZonesMapPage() {
                         <strong>{z.name?.es || z.slug}</strong>
                         <code>{z.slug}</code>
                         {z.name?.gl && <span className="zones-map__zone-gl">GL: {z.name.gl}</span>}
+                        {/* F3: link to filtered resources list. Always visible
+                            so admins see at-a-glance which zones are populated. */}
+                        <Link
+                          to={`/resources?zona=${z.id}`}
+                          className="zones-map__zone-count"
+                          title={
+                            z.resourceCount === 0
+                              ? 'Esta zona no tiene recursos asociados'
+                              : `Ver los ${z.resourceCount} recursos de esta zona`
+                          }
+                        >
+                          🏷️ {z.resourceCount} {z.resourceCount === 1 ? 'recurso' : 'recursos'}
+                        </Link>
                       </div>
                       <div className="action-btns">
                         <button className="btn btn-sm" onClick={() => startEdit(z)} disabled={busyId === z.id}>Editar</button>
