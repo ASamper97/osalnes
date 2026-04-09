@@ -43,6 +43,13 @@ export interface UseZonesResult {
   busyId: string | null;
 }
 
+// Pure helper outside the hook so it isn't recreated on every render.
+function insertSorted(list: ZoneItem[], item: ZoneItem): ZoneItem[] {
+  const next = [...list, item];
+  next.sort((a, b) => a.slug.localeCompare(b.slug));
+  return next;
+}
+
 export function useZones(): UseZonesResult {
   const [zones, setZones] = useState<ZoneItem[]>([]);
   const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
@@ -52,6 +59,21 @@ export function useZones(): UseZonesResult {
 
   const refresh = useCallback(async () => {
     try {
+      // P3 (audit): we deliberately load ALL zones in a single call instead
+      // of paginating or lazy-loading per municipio. The reasoning:
+      //   * Realistic scale for O Salnes is 8 municipios * ~10 parroquias =
+      //     ~80 zones. Even importing the official Xunta dataset (audit F2)
+      //     yields under 200 rows total.
+      //   * listZones is now O(2) queries thanks to Tanda 6 A7 (the batched
+      //     translation join), so the cost is constant regardless of N.
+      //   * The map page needs the count per municipio to render the badge
+      //     in each marker popup; deriving that from the loaded list is
+      //     trivial. A separate counts endpoint would only pay off above
+      //     ~500 zones.
+      // If you ever cross 500 zones, switch this to a per-municipio fetch
+      // (api.getZones(municipioId)) and add a getZoneCounts() endpoint
+      // for the map badges. The migration is straightforward but should
+      // be motivated by real load, not speculation.
       const [z, m] = await Promise.all([api.getZones(), api.getMunicipalities()]);
       setZones(z);
       setMunicipalities(m);
@@ -89,42 +111,50 @@ export function useZones(): UseZonesResult {
   const create = useCallback(async (payload: ZoneFormPayload): Promise<boolean> => {
     setError(null);
     try {
-      await api.createZone(payload);
-      await refresh();
+      // P4: server returns the full ZoneItem, so we splice it into local
+      // state directly instead of refetching. Saves one round trip per
+      // create and gives the user immediate visual feedback.
+      const created = await api.createZone(payload);
+      setZones((prev) => insertSorted(prev, created));
       return true;
     } catch (err: unknown) {
       setError((err as Error).message);
       return false;
     }
-  }, [refresh]);
+  }, []);
 
   const update = useCallback(async (id: string, payload: ZoneFormPayload): Promise<boolean> => {
     setError(null);
     try {
       // Inject the optimistic concurrency token from the locally cached
-      // zones array. The page component does not need to track updatedAt
-      // itself — the hook owns it. If the row is missing locally (e.g. it
-      // was deleted by another admin), we send NULL and let the backend
-      // 404. If the local row is older than the DB row (because another
-      // admin saved between our load and our save), update_zona() will
-      // raise SQLSTATE 40001 → friendly 409 → caught below.
+      // zones array (DF3). The page component does not need to track
+      // updatedAt itself — the hook owns it. If the local row is older
+      // than the DB row, update_zona() raises SQLSTATE 40001 → friendly
+      // 409 → caught below.
       const local = zones.find((z) => z.id === id);
       const expected_updated_at = local?.updatedAt;
-      await api.updateZone(id, { ...payload, expected_updated_at });
-      await refresh();
+      const updated = await api.updateZone(id, { ...payload, expected_updated_at });
+      // P4: replace the row in local state with the server-returned data.
+      // If the slug changed, re-sort to keep order stable.
+      setZones((prev) => {
+        const slugChanged = local && local.slug !== updated.slug;
+        const replaced = prev.map((z) => (z.id === id ? updated : z));
+        return slugChanged ? [...replaced].sort((a, b) => a.slug.localeCompare(b.slug)) : replaced;
+      });
       return true;
     } catch (err: unknown) {
       setError((err as Error).message);
       return false;
     }
-  }, [refresh, zones]);
+  }, [zones]);
 
   const remove = useCallback(async (id: string): Promise<number | null> => {
     setError(null);
     setBusyId(id);
     try {
       const result = await api.deleteZone(id);
-      await refresh();
+      // P4: remove from local state. No refetch needed.
+      setZones((prev) => prev.filter((z) => z.id !== id));
       return result.affectedResources ?? 0;
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -132,7 +162,7 @@ export function useZones(): UseZonesResult {
     } finally {
       setBusyId(null);
     }
-  }, [refresh]);
+  }, []);
 
   return {
     zones,

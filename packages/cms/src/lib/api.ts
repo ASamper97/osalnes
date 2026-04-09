@@ -616,14 +616,16 @@ export const api = {
     cached(`zones:${municipio || 'all'}`, () =>
       adminFetch<ZoneItem[]>(`/zones${municipio ? `?municipio=${municipio}` : ''}`),
     ),
+  // POST and PUT now return the full ZoneItem (audit P4) so the frontend
+  // can update its local state without a follow-up GET /zones round trip.
   createZone: (data: { slug: string; municipio_id: string; name: LocalizedValue }) =>
-    adminFetch<{ id: string }>('/zones', { method: 'POST', body: JSON.stringify(data) })
+    adminFetch<ZoneItem>('/zones', { method: 'POST', body: JSON.stringify(data) })
       .then((r) => { invalidateZonesCache(); return r; }),
   // expected_updated_at — optimistic concurrency token (DF3). The frontend
   // hook injects it from the locally cached zone. The backend rejects with
   // 409 if the row has been modified by someone else in the meantime.
   updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue; expected_updated_at: string }>) =>
-    adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+    adminFetch<ZoneItem>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) })
       .then((r) => { invalidateZonesCache(); return r; }),
   deleteZone: (id: string) =>
     adminFetch<{ ok: boolean; affectedResources?: number }>(`/zones/${id}`, { method: 'DELETE' })

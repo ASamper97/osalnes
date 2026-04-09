@@ -80,3 +80,43 @@ export async function listZones(
     updatedAt: z.updated_at,
   }));
 }
+
+/**
+ * Fetch a single zone (with translations) by id. Used by the admin POST/PUT
+ * handlers to return the full ZoneItem after a mutation, so the frontend
+ * can update its local state without a follow-up listZones call (audit P4).
+ *
+ * Two queries: zona row + IN-batched traduccion. Returns null if the row
+ * does not exist.
+ */
+export async function getZoneById(
+  sb: SupabaseClient,
+  id: string,
+): Promise<ZoneListItem | null> {
+  const { data: row, error: zErr } = await sb
+    .from('zona')
+    .select('id, slug, municipio_id, updated_at')
+    .eq('id', id)
+    .maybeSingle();
+  if (zErr) throw zErr;
+  if (!row) return null;
+
+  const { data: trans, error: tErr } = await sb
+    .from('traduccion')
+    .select('idioma, valor')
+    .eq('entidad_tipo', 'zona')
+    .eq('entidad_id', id)
+    .eq('campo', 'name');
+  if (tErr) throw tErr;
+
+  const name: Record<string, string> = {};
+  for (const t of trans || []) name[t.idioma] = t.valor;
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    municipioId: row.municipio_id,
+    name,
+    updatedAt: row.updated_at,
+  };
+}

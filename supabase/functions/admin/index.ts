@@ -16,7 +16,7 @@ import { verifyAuth, requireRole, type AuthUser } from '../_shared/auth.ts';
 import { routePath, matchRoute } from '../_shared/router.ts';
 import { formatError } from '../_shared/errors.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
-import { listZones as listZonesShared } from '../_shared/zones.ts';
+import { listZones as listZonesShared, getZoneById } from '../_shared/zones.ts';
 
 const FN = 'admin';
 const BUCKET = 'media';
@@ -608,7 +608,11 @@ Deno.serve(async (req: Request) => {
         throw err;
       }
       logAudit(sb, 'zona', newId, 'crear', user.id, { slug: body.slug, municipio_id: body.municipio_id, name: body.name });
-      return json({ id: newId }, 201, req);
+      // Return the full ZoneItem so the frontend can update its local state
+      // without a follow-up listZones call (audit P4 — eliminates one round
+      // trip from the create flow as perceived by the user).
+      const created = await getZoneById(sb, newId);
+      return json(created, 201, req);
     }
 
     const zoneId = matchRoute('/zones/:id', path);
@@ -640,7 +644,9 @@ Deno.serve(async (req: Request) => {
         throw err;
       }
       logAudit(sb, 'zona', zoneId.id, 'modificar', user.id, { updates: body });
-      return json({ ok: true }, 200, req);
+      // Return the full updated ZoneItem (same reasoning as POST — audit P4).
+      const updated = await getZoneById(sb, zoneId.id);
+      return json(updated, 200, req);
     }
 
     if (method === 'DELETE' && zoneId) {

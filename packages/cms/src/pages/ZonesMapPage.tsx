@@ -52,12 +52,27 @@ const activeIcon = L.divIcon({
   iconAnchor: [17, 46],
 });
 
-/** Fly the map to the given coordinates when they change */
+/**
+ * Fly the map to the given coordinates when they change.
+ *
+ * P5: respects `prefers-reduced-motion` (instant pan) and uses a shorter
+ * 0.5s animation otherwise. The original 0.8s felt slow on low-end CPUs
+ * and the previous version had no escape hatch for users with vestibular
+ * disorders or motion sensitivity (also a WCAG 2.3.3 Animation from
+ * Interactions concern).
+ */
 function FlyToMunicipio({ lat, lng }: { lat: number | null; lng: number | null }) {
   const map = useMap();
   useEffect(() => {
-    if (lat !== null && lng !== null) {
-      map.flyTo([lat, lng], 13, { duration: 0.8 });
+    if (lat === null || lng === null) return;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      map.setView([lat, lng], 13, { animate: false });
+    } else {
+      map.flyTo([lat, lng], 13, { duration: 0.5 });
     }
   }, [lat, lng, map]);
   return null;
