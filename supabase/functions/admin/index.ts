@@ -885,7 +885,7 @@ async function updateResourceStatus(sb: any, id: string, newStatus: string, usua
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
 
   // Audit log (UNE 178502 trazabilidad)
   logAudit(
@@ -897,20 +897,51 @@ async function updateResourceStatus(sb: any, id: string, newStatus: string, usua
     { from: current.estado_editorial, to: newStatus },
   );
 
-  // Optional webhook notification
+  // Optional webhook notification (audit S8 — signed with HMAC-SHA256
+  // when WEBHOOK_SIGNING_SECRET is configured, so the receiver can verify
+  // the request actually came from this Edge Function and was not spoofed).
   const webhookUrl = Deno.env.get('WEBHOOK_STATUS_CHANGE');
   if (webhookUrl && (newStatus === 'publicado' || newStatus === 'revision')) {
+    const payload = JSON.stringify({
+      event: 'resource.status_changed',
+      resource_id: id,
+      slug: data.slug,
+      from_status: current.estado_editorial,
+      to_status: newStatus,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Compute HMAC signature when a secret is configured.
+    // The receiver verifies with the same secret + same payload string.
+    // Header format follows GitHub-style: "X-Webhook-Signature: sha256=<hex>"
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const secret = Deno.env.get('WEBHOOK_SIGNING_SECRET');
+    if (secret) {
+      try {
+        const key = await crypto.subtle.importKey(
+          'raw',
+          new TextEncoder().encode(secret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign'],
+        );
+        const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+        const sigHex = Array.from(new Uint8Array(sig))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+        headers['X-Webhook-Signature'] = `sha256=${sigHex}`;
+        headers['X-Webhook-Timestamp'] = String(Date.now());
+      } catch (err) {
+        console.error('[webhook] HMAC computation failed:', err);
+        // Fail open: send the webhook anyway, just without signature.
+        // The receiver SHOULD reject unsigned requests if it expects signing.
+      }
+    }
+
     fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'resource.status_changed',
-        resource_id: id,
-        slug: data.slug,
-        from_status: current.estado_editorial,
-        to_status: newStatus,
-        timestamp: new Date().toISOString(),
-      }),
+      headers,
+      body: payload,
     }).catch(() => {}); // fire and forget
   }
 
@@ -1160,7 +1191,7 @@ async function deleteAsset(sb: any, assetId: string, req: Request) {
   }
 
   const { error } = await sb.from('asset_multimedia').delete().eq('id', assetId);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1203,7 +1234,7 @@ async function createCategory(sb: any, input: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
 
   if (input.name) {
     for (const [lang, value] of Object.entries(input.name)) {
@@ -1228,7 +1259,7 @@ async function updateCategory(sb: any, id: string, input: any, req: Request) {
 
   if (Object.keys(updates).length > 0) {
     const { error } = await sb.from('categoria').update(updates).eq('id', id);
-    if (error) throw { status: 400, message: error.message };
+    if (error) throw error;
   }
 
   if (input.name) {
@@ -1252,7 +1283,7 @@ async function deleteCategory(sb: any, id: string, req: Request) {
   await sb.from('recurso_categoria').delete().eq('categoria_id', id);
 
   const { error } = await sb.from('categoria').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1304,7 +1335,7 @@ async function createNavItem(sb: any, input: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
 
   if (input.label) {
     for (const [lang, value] of Object.entries(input.label)) {
@@ -1333,7 +1364,7 @@ async function updateNavItem(sb: any, id: string, input: any, req: Request) {
 
   if (Object.keys(updates).length > 0) {
     const { error } = await sb.from('navegacion').update(updates).eq('id', id);
-    if (error) throw { status: 400, message: error.message };
+    if (error) throw error;
   }
 
   if (input.label) {
@@ -1356,7 +1387,7 @@ async function deleteNavItem(sb: any, id: string, req: Request) {
   await sb.from('traduccion').delete().eq('entidad_tipo', 'navegacion').eq('entidad_id', id);
 
   const { error } = await sb.from('navegacion').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1420,7 +1451,7 @@ async function createPage(sb: any, input: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   await savePageTranslations(data.id, input);
   return await getPageById(sb, data.id, req);
 }
@@ -1434,7 +1465,7 @@ async function updatePage(sb: any, id: string, input: any, req: Request) {
 
   if (Object.keys(update).length > 0) {
     const { error } = await sb.from('pagina').update(update).eq('id', id);
-    if (error) throw { status: 400, message: error.message };
+    if (error) throw error;
   }
 
   await savePageTranslations(id, input);
@@ -1468,7 +1499,7 @@ async function updatePageStatus(sb: any, id: string, newStatus: string, req: Req
   if (newStatus === 'publicado') update.published_at = new Date().toISOString();
 
   const { error } = await sb.from('pagina').update(update).eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return await getPageById(sb, id, req);
 }
 
@@ -1476,7 +1507,7 @@ async function updatePageStatus(sb: any, id: string, newStatus: string, req: Req
 async function deletePage(sb: any, id: string, req: Request) {
   await sb.from('traduccion').delete().eq('entidad_tipo', 'pagina').eq('entidad_id', id);
   const { error } = await sb.from('pagina').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1543,7 +1574,7 @@ async function createRelation(sb: any, input: any, req: Request) {
 
   if (error) {
     if (error.code === '23505') throw { status: 409, message: 'Esta relacion ya existe' };
-    throw { status: 400, message: error.message };
+    throw error;  // formatError mapea el SQLSTATE
   }
   return json(data, 201, req);
 }
@@ -1557,7 +1588,7 @@ async function updateRelation(sb: any, id: string, input: any, req: Request) {
   if (input.metadata !== undefined) update.metadata = input.metadata;
 
   const { data, error } = await sb.from('relacion_recurso').update(update).eq('id', id).select().single();
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   if (!data) throw { status: 404, message: 'Relation not found' };
   return json(data, 200, req);
 }
@@ -1565,7 +1596,7 @@ async function updateRelation(sb: any, id: string, input: any, req: Request) {
 // deno-lint-ignore no-explicit-any
 async function deleteRelation(sb: any, id: string, req: Request) {
   const { error } = await sb.from('relacion_recurso').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1623,7 +1654,7 @@ async function uploadDocument(sb: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json(data, 201, req);
 }
 
@@ -1648,7 +1679,7 @@ async function updateDocument(sb: any, id: string, input: any, req: Request) {
   if (input.orden !== undefined) update.orden = input.orden;
 
   const { data, error } = await sb.from('documento_descargable').update(update).eq('id', id).select().single();
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   if (!data) throw { status: 404, message: 'Document not found' };
   return json(data, 200, req);
 }
@@ -1668,7 +1699,7 @@ async function deleteDocument(sb: any, id: string, req: Request) {
   }
 
   const { error } = await sb.from('documento_descargable').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 
@@ -1704,7 +1735,7 @@ async function createExportJob(sb: any, tipo: string, parametros: any, userId: s
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
 
   // Process async — fire and forget (EdgeRuntime.waitUntil would be ideal, but
   // for now we just start the promise; it will continue in the same invocation)
@@ -2025,7 +2056,7 @@ async function updateUser(sb: any, id: string, input: any, req: Request) {
     .select('id, email, nombre, rol, activo, created_at, updated_at')
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   if (!data) throw { status: 404, message: 'User not found' };
   return json(data, 200, req);
 }
@@ -2041,7 +2072,7 @@ async function deactivateUser(sb: any, id: string, req: Request) {
     .select('email')
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   if (!profile) throw { status: 404, message: 'Usuario no encontrado' };
 
   // 2. Also ban the user in Supabase Auth (forbids new sessions)
@@ -2069,7 +2100,7 @@ async function activateUser(sb: any, id: string, req: Request) {
     .select('email')
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   if (!profile) throw { status: 404, message: 'Usuario no encontrado' };
 
   // Lift the ban from Supabase Auth
@@ -2210,7 +2241,7 @@ async function createProduct(sb: any, input: any, req: Request) {
     .select()
     .single();
 
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
 
   if (input.name) await saveTranslations('producto_turistico', data.id, 'name', input.name);
   if (input.description) await saveTranslations('producto_turistico', data.id, 'description', input.description);
@@ -2227,7 +2258,7 @@ async function updateProduct(sb: any, id: string, input: any, req: Request) {
 
   if (Object.keys(update).length > 0) {
     const { error } = await sb.from('producto_turistico').update(update).eq('id', id);
-    if (error) throw { status: 400, message: error.message };
+    if (error) throw error;
   }
 
   if (input.name) await saveTranslations('producto_turistico', id, 'name', input.name);
@@ -2247,7 +2278,7 @@ async function deleteProduct(sb: any, id: string, req: Request) {
   await sb.from('traduccion').delete().eq('entidad_tipo', 'producto_turistico').eq('entidad_id', id);
 
   const { error } = await sb.from('producto_turistico').delete().eq('id', id);
-  if (error) throw { status: 400, message: error.message };
+  if (error) throw error;
   return json({ deleted: true }, 200, req);
 }
 

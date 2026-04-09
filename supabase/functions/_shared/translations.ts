@@ -2,8 +2,22 @@
  * Shared translation helpers — used by both public and admin functions.
  */
 import { getAdminClient } from './supabase.ts';
+import { sanitizeHtml, sanitizeText } from './sanitize.ts';
 
 type LocalizedValue = Record<string, string>;
+
+/**
+ * Fields that contain HTML (from RichTextEditor) and need full HTML
+ * sanitization. Anything not in this set gets the strict text sanitizer.
+ *
+ * Audit S7 — sanitize at the persistence boundary so the DB never stores
+ * hostile markup, regardless of which Edge Function is calling
+ * saveTranslations.
+ */
+const HTML_FIELDS = new Set([
+  'description',  // recurso_turistico, producto_turistico
+  'body',         // pagina (rich content)
+]);
 
 /** Fetch all translations for an entity: { campo: { lang: value } } */
 export async function getTranslations(
@@ -76,7 +90,13 @@ export async function saveTranslations(
   }> = [];
   const langsToDelete: string[] = [];
 
-  for (const [idioma, valor] of Object.entries(values)) {
+  // S7 — sanitize at the boundary. HTML fields go through the allowlist
+  // sanitizer; plain-text fields get all tags stripped (defensive, in case
+  // someone sends `<script>` in a name).
+  const isHtmlField = HTML_FIELDS.has(campo);
+
+  for (const [idioma, rawValor] of Object.entries(values)) {
+    const valor = isHtmlField ? sanitizeHtml(rawValor) : sanitizeText(rawValor);
     if (valor && valor.trim().length > 0) {
       upserts.push({ entidad_tipo: entidadTipo, entidad_id: entidadId, campo, idioma, valor });
     } else {

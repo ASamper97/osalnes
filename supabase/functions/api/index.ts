@@ -157,7 +157,18 @@ async function listResources(url: URL, req: Request) {
   const status = url.searchParams.get('status') || 'publicado';
   const nameQuery = url.searchParams.get('q') || undefined;
 
-  // If searching by name, first find matching IDs from translations
+  // If searching by name, first find matching IDs from translations.
+  //
+  // S9 — previous implementation had `.limit(100)` here which silently
+  // truncated the result set. A search for "playa" with 200 matches showed
+  // only the first 100 rows, paginated within those, so the user could
+  // never reach matches 101–200 even with .range(). We removed the limit
+  // and added a hard cap of 1000 (still safe; enough for the actual scale
+  // and prevents pathological queries from loading the whole table).
+  //
+  // For a future scale > 1000 matches, switch to a trigram index
+  // (CREATE EXTENSION pg_trgm + GIN index on traduccion.valor) and use
+  // a single JOIN query instead of the two-step IN-list pattern.
   let matchingIds: string[] | undefined;
   if (nameQuery && nameQuery.length >= 2) {
     const { data: tData } = await sb
@@ -166,7 +177,7 @@ async function listResources(url: URL, req: Request) {
       .eq('entidad_tipo', 'recurso_turistico')
       .eq('campo', 'name')
       .ilike('valor', `%${nameQuery}%`)
-      .limit(100);
+      .limit(1000);  // hard cap to prevent runaway scans, was 100
     matchingIds = [...new Set((tData || []).map((r) => r.entidad_id))];
     if (matchingIds.length === 0) {
       return json({ items: [], total: 0, page, limit, pages: 0 }, 200, req);
@@ -511,6 +522,29 @@ async function search(url: URL, req: Request) {
 
 // deno-lint-ignore no-explicit-any
 async function mapResourceRow(row: Record<string, any>) {
+  // ─── S11 — Data flow contract ──────────────────────────────────────
+  //
+  // This helper runs on the PUBLIC api Edge Function. It uses
+  // getAdminClient() (service_role key), so it bypasses every RLS policy
+  // on every table it touches. That is fine TODAY because:
+  //   1. The caller (listResources, getResourceById...) already filters
+  //      to estado_editorial='publicado' before calling this mapper.
+  //   2. We do not return any column from the row that could leak the
+  //      identity of the editor (created_by/updated_by are not in the
+  //      output object below).
+  //
+  // If/when a future migration adds RLS policies on `recurso_turistico`
+  // (e.g. to allow direct anon SELECT for realtime subscriptions), the
+  // policy USING clause MUST mirror the filter applied by the caller.
+  // Otherwise this helper will continue serving rows that the policy
+  // would deny — silent privilege escalation via the public API.
+  //
+  // Audit P1 also lives here (N+1: 1 query base + 2 per row). Keeping
+  // these two concerns documented together because they share the
+  // same fix horizon (extract to _shared/resources.ts with batched
+  // queries — same pattern we used for _shared/zones.ts in zonas A7).
+  // ───────────────────────────────────────────────────────────────────
+
   const sb = getAdminClient();
   const translations = await getTranslations('recurso_turistico', row.id);
 
