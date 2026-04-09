@@ -22,6 +22,8 @@
 | 011 | Link usuario.auth_user_id to auth.users.id (stable lookup) | Yes |
 | 012 | GDPR retention function for log_cambios (anonymize old actor refs) | Yes |
 | 013 | Extend log_cambios.accion CHECK to allow 'anonimizar' (fix for 012) | Yes |
+| 014 | zona schema hardening: updated_at, created_by, updated_by, slug-per-municipio, NOT NULL, indexes | Yes |
+| 015 | Atomic create_zona / update_zona RPCs (fixes audit A6) | Yes |
 
 ## Execution
 

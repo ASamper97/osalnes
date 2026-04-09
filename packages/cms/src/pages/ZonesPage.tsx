@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
+import { useState, type FormEvent } from 'react';
+import { type ZoneItem } from '@/lib/api';
+import { useZones } from '@/lib/use-zones';
 import { useConfirm } from '@/components/ConfirmDialog';
 
 // Mirror of admin/index.ts SLUG_RE — gives instant feedback before round-trip.
@@ -16,11 +17,10 @@ function slugify(text: string): string {
 
 export function ZonesPage() {
   const confirm = useConfirm();
-  const [zones, setZones] = useState<ZoneItem[]>([]);
-  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shared data layer — same hook used by ZonesMapPage. See lib/use-zones.ts.
+  const { zones, municipalities, loading, error, setError, create, update, remove, busyId } = useZones();
 
+  // ── Form state (UI only — data layer lives in the hook) ───────────────────
   const [editing, setEditing] = useState<string | null>(null);
   const [slug, setSlug] = useState('');
   const [municipioId, setMunicipioId] = useState('');
@@ -31,22 +31,7 @@ export function ZonesPage() {
   const [nameFr, setNameFr] = useState('');
   const [namePt, setNamePt] = useState('');
   const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [filterMunicipio, setFilterMunicipio] = useState('');
-
-  async function load() {
-    try {
-      const [z, m] = await Promise.all([api.getZones(), api.getMunicipalities()]);
-      setZones(z);
-      setMunicipalities(m);
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
 
   function resetForm() {
     setEditing(null);
@@ -82,33 +67,22 @@ export function ZonesPage() {
       return;
     }
     setSaving(true);
-    setError(null);
-
-    try {
-      const data = {
-        slug,
-        municipio_id: municipioId,
-        name: {
-          es: nameEs.trim(),
-          gl: nameGl.trim(),
-          en: nameEn.trim(),
-          fr: nameFr.trim(),
-          pt: namePt.trim(),
-        },
-      };
-
-      if (editing && editing !== 'new') {
-        await api.updateZone(editing, data);
-      } else {
-        await api.createZone(data);
-      }
-      resetForm();
-      await load();
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    const payload = {
+      slug,
+      municipio_id: municipioId,
+      name: {
+        es: nameEs.trim(),
+        gl: nameGl.trim(),
+        en: nameEn.trim(),
+        fr: nameFr.trim(),
+        pt: namePt.trim(),
+      },
+    };
+    const ok = editing && editing !== 'new'
+      ? await update(editing, payload)
+      : await create(payload);
+    setSaving(false);
+    if (ok) resetForm();
   }
 
   async function handleDelete(id: string, name: string) {
@@ -119,15 +93,7 @@ export function ZonesPage() {
       variant: 'danger',
     });
     if (!ok) return;
-    setBusyId(id);
-    try {
-      await api.deleteZone(id);
-      await load();
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setBusyId(null);
-    }
+    await remove(id);
   }
 
   function getMunicipioName(id: string) {

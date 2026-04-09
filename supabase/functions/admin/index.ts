@@ -16,6 +16,7 @@ import { verifyAuth, requireRole, type AuthUser } from '../_shared/auth.ts';
 import { routePath, matchRoute } from '../_shared/router.ts';
 import { formatError } from '../_shared/errors.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
+import { listZones as listZonesShared } from '../_shared/zones.ts';
 
 const FN = 'admin';
 const BUCKET = 'media';
@@ -567,17 +568,9 @@ Deno.serve(async (req: Request) => {
     // ==================================================================
 
     if (method === 'GET' && path === '/zones') {
+      // Shared helper — single batched query (no N+1, audit P1).
       const municipio = url.searchParams.get('municipio') || undefined;
-      let q = sb.from('zona').select('id, slug, municipio_id').order('slug');
-      if (municipio) q = q.eq('municipio_id', municipio);
-      const { data, error: err } = await q;
-      if (err) throw err;
-      const items = await Promise.all((data || []).map(async (z) => ({
-        id: z.id,
-        slug: z.slug,
-        municipioId: z.municipio_id,
-        name: await getTranslatedField('zona', z.id, 'name'),
-      })));
+      const items = await listZonesShared(sb, municipio);
       return json(items, 200, req);
     }
 
@@ -595,22 +588,27 @@ Deno.serve(async (req: Request) => {
       if (!body.name?.es?.trim() || !body.name?.gl?.trim()) {
         return json({ error: 'Los nombres en castellano (es) y gallego (gl) son obligatorios.' }, 400, req);
       }
-      const { data, error: err } = await sb.from('zona').insert({
-        slug: body.slug,
-        municipio_id: body.municipio_id,
-      }).select('id').single();
+      // Single atomic call: zone + translations either both succeed or both
+      // roll back. No more "zombie zone with no name" if step 2 fails (A6).
+      const { data: newId, error: err } = await sb.rpc('create_zona', {
+        p_slug: body.slug,
+        p_municipio_id: body.municipio_id,
+        p_name: body.name,
+        p_created_by: user.id,
+      });
       if (err) {
-        // Friendly message for duplicate slug (Postgres unique violation)
+        // Friendly message for duplicate slug-per-municipio
         if ((err as { code?: string }).code === '23505') {
-          return json({ error: `Ya existe una zona con el slug "${body.slug}". Elige otro.` }, 409, req);
+          return json(
+            { error: `Ya existe una zona con el slug "${body.slug}" en este municipio. Elige otro.` },
+            409,
+            req,
+          );
         }
         throw err;
       }
-      if (body.name) {
-        await saveTranslations('zona', data.id, 'name', body.name);
-      }
-      logAudit(sb, 'zona', data.id, 'crear', user.id, { slug: body.slug, municipio_id: body.municipio_id, name: body.name });
-      return json({ id: data.id }, 201, req);
+      logAudit(sb, 'zona', newId, 'crear', user.id, { slug: body.slug, municipio_id: body.municipio_id, name: body.name });
+      return json({ id: newId }, 201, req);
     }
 
     const zoneId = matchRoute('/zones/:id', path);
@@ -621,22 +619,23 @@ Deno.serve(async (req: Request) => {
       if (body.slug && !SLUG_RE.test(body.slug)) {
         return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
       }
-      const updates: Record<string, unknown> = {};
-      if (body.slug) updates.slug = body.slug;
-      if (body.municipio_id) updates.municipio_id = body.municipio_id;
-      if (Object.keys(updates).length > 0) {
-        const { error: err } = await sb.from('zona').update(updates).eq('id', zoneId.id);
-        if (err) {
-          if ((err as { code?: string }).code === '23505') {
-            return json({ error: `Ya existe una zona con el slug "${body.slug}". Elige otro.` }, 409, req);
-          }
-          throw err;
+      // update_zona only touches columns whose argument is non-NULL, and
+      // sync the translations atomically. updated_at is set by the trigger
+      // installed in migration 014.
+      const { error: err } = await sb.rpc('update_zona', {
+        p_id: zoneId.id,
+        p_slug: body.slug || null,
+        p_municipio_id: body.municipio_id || null,
+        p_name: body.name || null,
+        p_updated_by: user.id,
+      });
+      if (err) {
+        if ((err as { code?: string }).code === '23505') {
+          return json({ error: `Ya existe una zona con el slug "${body.slug}" en este municipio.` }, 409, req);
         }
+        throw err;
       }
-      if (body.name) {
-        await saveTranslations('zona', zoneId.id, 'name', body.name);
-      }
-      logAudit(sb, 'zona', zoneId.id, 'modificar', user.id, { updates, name: body.name });
+      logAudit(sb, 'zona', zoneId.id, 'modificar', user.id, { updates: body });
       return json({ ok: true }, 200, req);
     }
 

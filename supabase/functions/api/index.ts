@@ -10,6 +10,7 @@ import { getTranslations, getTranslatedField } from '../_shared/translations.ts'
 import { routePath, matchRoute } from '../_shared/router.ts';
 import { formatError } from '../_shared/errors.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
+import { listZones as listZonesShared } from '../_shared/zones.ts';
 
 const FN = 'api';
 
@@ -350,25 +351,8 @@ async function getNavigation(menuSlug: string, req: Request) {
 async function listZones(url: URL, req: Request) {
   const sb = getAdminClient();
   const municipio = url.searchParams.get('municipio') || undefined;
-
-  let query = sb
-    .from('zona')
-    .select('id, slug, municipio_id')
-    .order('slug');
-
-  if (municipio) query = query.eq('municipio_id', municipio);
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const items = await Promise.all(
-    (data || []).map(async (r) => ({
-      id: r.id,
-      slug: r.slug,
-      municipioId: r.municipio_id,
-      name: await getTranslatedField('zona', r.id, 'name'),
-    })),
-  );
+  // Shared helper — single batched translation query (audit A7 + P1).
+  const items = await listZonesShared(sb, municipio);
   return json(items, 200, req);
 }
 

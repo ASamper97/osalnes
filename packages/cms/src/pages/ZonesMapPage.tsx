@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
+import { type ZoneItem } from '@/lib/api';
+import { useZones } from '@/lib/use-zones';
 import { useConfirm } from '@/components/ConfirmDialog';
 
 /**
@@ -64,10 +65,8 @@ function FlyToMunicipio({ lat, lng }: { lat: number | null; lng: number | null }
 
 export function ZonesMapPage() {
   const confirm = useConfirm();
-  const [zones, setZones] = useState<ZoneItem[]>([]);
-  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shared data layer — same hook used by ZonesPage. See lib/use-zones.ts.
+  const { zones, municipalities, loading, error, setError, create, update, remove, busyId } = useZones();
   const [selectedMunicipioId, setSelectedMunicipioId] = useState<string>('');
 
   // Form state for inline create/edit. Five name fields cover the languages
@@ -82,21 +81,6 @@ export function ZonesMapPage() {
   const [nameFr, setNameFr] = useState('');
   const [namePt, setNamePt] = useState('');
   const [saving, setSaving] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  async function load() {
-    try {
-      const [z, m] = await Promise.all([api.getZones(), api.getMunicipalities()]);
-      setZones(z);
-      setMunicipalities(m);
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
 
   function resetForm() {
     setEditing(null);
@@ -142,36 +126,22 @@ export function ZonesMapPage() {
       return;
     }
     setSaving(true);
-    setError(null);
-
-    try {
-      // Send all five languages. saveTranslations() on the backend handles
-      // empty values by deleting any prior translation, so blanking EN/FR/PT
-      // explicitly clears them (no zombie data — see Tanda 3 C6).
-      const data = {
-        slug,
-        municipio_id: selectedMunicipioId,
-        name: {
-          es: nameEs.trim(),
-          gl: nameGl.trim(),
-          en: nameEn.trim(),
-          fr: nameFr.trim(),
-          pt: namePt.trim(),
-        },
-      };
-
-      if (editing && editing !== 'new') {
-        await api.updateZone(editing, data);
-      } else {
-        await api.createZone(data);
-      }
-      resetForm();
-      await load();
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    const payload = {
+      slug,
+      municipio_id: selectedMunicipioId,
+      name: {
+        es: nameEs.trim(),
+        gl: nameGl.trim(),
+        en: nameEn.trim(),
+        fr: nameFr.trim(),
+        pt: namePt.trim(),
+      },
+    };
+    const ok = editing && editing !== 'new'
+      ? await update(editing, payload)
+      : await create(payload);
+    setSaving(false);
+    if (ok) resetForm();
   }
 
   async function handleDelete(id: string, name: string) {
@@ -182,15 +152,7 @@ export function ZonesMapPage() {
       variant: 'danger',
     });
     if (!ok) return;
-    setBusyId(id);
-    try {
-      await api.deleteZone(id);
-      await load();
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setBusyId(null);
-    }
+    await remove(id);
   }
 
   // Municipalities that have valid coordinates (filter out nulls)
