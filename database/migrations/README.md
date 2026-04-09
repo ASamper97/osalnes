@@ -24,6 +24,7 @@
 | 013 | Extend log_cambios.accion CHECK to allow 'anonimizar' (fix for 012) | Yes |
 | 014 | zona schema hardening: updated_at, created_by, updated_by, slug-per-municipio, NOT NULL, indexes | Yes |
 | 015 | Atomic create_zona / update_zona RPCs (fixes audit A6) | Yes |
+| 016 | Optimistic concurrency control for update_zona (fixes audit DF3) | Yes |
 
 ## Execution
 

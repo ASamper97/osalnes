@@ -25,20 +25,28 @@ export interface ZoneListItem {
   slug: string;
   municipioId: string;
   name: Record<string, string>;
+  /** ISO 8601 timestamp. Used by the optimistic concurrency check (DF3). */
+  updatedAt: string;
 }
 
 /**
  * Fetch zones (optionally filtered by municipio) plus their multilingual
  * names in two batched queries.
+ *
+ * NOTE on DF4: this helper currently returns ALL zones. When/if a future
+ * `zona.activo` column is introduced (audit F6), the public listZones path
+ * (api/index.ts) must add `.eq('activo', true)` here so unpublished zones
+ * are not exposed via the public endpoint. The admin path can keep showing
+ * everything because admins need to manage drafts.
  */
 export async function listZones(
   sb: SupabaseClient,
   municipio?: string,
 ): Promise<ZoneListItem[]> {
-  // Step 1: zones table
+  // Step 1: zones table — include updated_at for optimistic concurrency
   let query = sb
     .from('zona')
-    .select('id, slug, municipio_id')
+    .select('id, slug, municipio_id, updated_at')
     .order('slug');
   if (municipio) query = query.eq('municipio_id', municipio);
 
@@ -64,10 +72,11 @@ export async function listZones(
     namesByZone[t.entidad_id][t.idioma] = t.valor;
   }
 
-  return zonas.map((z: { id: string; slug: string; municipio_id: string }) => ({
+  return zonas.map((z: { id: string; slug: string; municipio_id: string; updated_at: string }) => ({
     id: z.id,
     slug: z.slug,
     municipioId: z.municipio_id,
     name: namesByZone[z.id] || {},
+    updatedAt: z.updated_at,
   }));
 }

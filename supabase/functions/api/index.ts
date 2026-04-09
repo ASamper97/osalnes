@@ -351,7 +351,35 @@ async function getNavigation(menuSlug: string, req: Request) {
 async function listZones(url: URL, req: Request) {
   const sb = getAdminClient();
   const municipio = url.searchParams.get('municipio') || undefined;
-  // Shared helper — single batched translation query (audit A7 + P1).
+  //
+  // ─── Data flow contract (audit DF4 + DF5) ───────────────────────────────
+  //
+  // This is the PUBLIC zones endpoint. Three rules to keep in mind when
+  // adding columns or changing how zones are filtered:
+  //
+  //   1. (DF4) When/if a `zona.activo` (or `status`) column is introduced
+  //      to soft-disable zones (audit F6), this helper MUST add the filter
+  //      to hide unpublished zones from the public web. The admin path in
+  //      admin/index.ts can keep returning everything because admins need
+  //      to manage drafts. The shared listZonesShared() helper does NOT
+  //      filter — it is used by both admin and public, so the filter has
+  //      to live in the caller (here).
+  //
+  //   2. (DF5) Migration 010 enabled RLS on every table with NO policies.
+  //      That means anon access via PostgREST is denied. THIS endpoint uses
+  //      service_role (getAdminClient) which bypasses RLS, so we are the
+  //      single source of truth for "what can the public see". If you ever
+  //      add an RLS policy on `zona` to allow anon SELECT (e.g. to enable
+  //      realtime subscriptions for the web), the policy USING clause MUST
+  //      mirror the filter applied here, otherwise the two paths will
+  //      disagree and a row could be visible via direct REST but hidden
+  //      via this endpoint (or vice-versa).
+  //
+  //   3. The shape returned (id, slug, municipioId, name, updatedAt) is
+  //      consumed by both web/api-client.ts AND cms/api.ts. Adding new
+  //      fields is safe; renaming or removing existing ones requires a
+  //      coordinated frontend update.
+  //
   const items = await listZonesShared(sb, municipio);
   return json(items, 200, req);
 }

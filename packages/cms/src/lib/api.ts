@@ -360,6 +360,9 @@ export interface ZoneItem {
   slug: string;
   municipioId: string;
   name: LocalizedValue;
+  /** ISO 8601 timestamp of the last update. The frontend echoes this back
+   *  on PUT so the backend can detect concurrent edits (DF3). */
+  updatedAt: string;
 }
 
 export interface ProductItem {
@@ -616,11 +619,14 @@ export const api = {
   createZone: (data: { slug: string; municipio_id: string; name: LocalizedValue }) =>
     adminFetch<{ id: string }>('/zones', { method: 'POST', body: JSON.stringify(data) })
       .then((r) => { invalidateZonesCache(); return r; }),
-  updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue }>) =>
+  // expected_updated_at — optimistic concurrency token (DF3). The frontend
+  // hook injects it from the locally cached zone. The backend rejects with
+  // 409 if the row has been modified by someone else in the meantime.
+  updateZone: (id: string, data: Partial<{ slug: string; municipio_id: string; name: LocalizedValue; expected_updated_at: string }>) =>
     adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'PUT', body: JSON.stringify(data) })
       .then((r) => { invalidateZonesCache(); return r; }),
   deleteZone: (id: string) =>
-    adminFetch<{ ok: boolean }>(`/zones/${id}`, { method: 'DELETE' })
+    adminFetch<{ ok: boolean; affectedResources?: number }>(`/zones/${id}`, { method: 'DELETE' })
       .then((r) => { invalidateZonesCache(); return r; }),
 
   // Products

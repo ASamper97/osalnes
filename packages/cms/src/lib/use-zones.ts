@@ -17,6 +17,11 @@ export interface ZoneFormPayload {
   municipio_id: string;
   /** Multilingual name. Empty values clear the corresponding translation. */
   name: Record<string, string>;
+  /** ISO 8601 timestamp of the value originally loaded — used for the
+   *  optimistic concurrency check on PUT (DF3). Required when updating
+   *  an existing zone. The hook injects it for callers; consumers don't
+   *  need to track it themselves. */
+  expected_updated_at?: string;
 }
 
 export interface UseZonesResult {
@@ -59,6 +64,28 @@ export function useZones(): UseZonesResult {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Lightweight DF1 mitigation: when the user comes back to the tab,
+  // refresh the zones list. Two admins editing simultaneously is rare for
+  // this CMS (single-digit user base), so a true realtime subscription
+  // would be overkill. Refresh-on-focus catches 90% of staleness without
+  // the realtime infrastructure (RLS policies, channel subscriptions,
+  // memory pressure from open websockets).
+  //
+  // Note: this refreshes the underlying zones array. Any in-progress form
+  // state in the page component is preserved because the form state lives
+  // outside this hook. If the zone being edited has been modified or
+  // deleted by another admin in the meantime, the optimistic concurrency
+  // check (DF3) will catch it on save.
+  useEffect(() => {
+    function onFocus() {
+      // Avoid double-fetching on the very first focus right after mount
+      if (loading) return;
+      refresh();
+    }
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refresh, loading]);
+
   const create = useCallback(async (payload: ZoneFormPayload): Promise<boolean> => {
     setError(null);
     try {
@@ -74,23 +101,29 @@ export function useZones(): UseZonesResult {
   const update = useCallback(async (id: string, payload: ZoneFormPayload): Promise<boolean> => {
     setError(null);
     try {
-      await api.updateZone(id, payload);
+      // Inject the optimistic concurrency token from the locally cached
+      // zones array. The page component does not need to track updatedAt
+      // itself — the hook owns it. If the row is missing locally (e.g. it
+      // was deleted by another admin), we send NULL and let the backend
+      // 404. If the local row is older than the DB row (because another
+      // admin saved between our load and our save), update_zona() will
+      // raise SQLSTATE 40001 → friendly 409 → caught below.
+      const local = zones.find((z) => z.id === id);
+      const expected_updated_at = local?.updatedAt;
+      await api.updateZone(id, { ...payload, expected_updated_at });
       await refresh();
       return true;
     } catch (err: unknown) {
       setError((err as Error).message);
       return false;
     }
-  }, [refresh]);
+  }, [refresh, zones]);
 
   const remove = useCallback(async (id: string): Promise<number | null> => {
     setError(null);
     setBusyId(id);
     try {
-      // The admin endpoint returns { ok, affectedResources }. The api.ts
-      // typing currently returns `{ ok: boolean }`, so we cast for the
-      // additional field. Refresh after to pick up the cascade.
-      const result = await api.deleteZone(id) as { ok: boolean; affectedResources?: number };
+      const result = await api.deleteZone(id);
       await refresh();
       return result.affectedResources ?? 0;
     } catch (err: unknown) {

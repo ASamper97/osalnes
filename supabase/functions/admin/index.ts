@@ -619,15 +619,19 @@ Deno.serve(async (req: Request) => {
       if (body.slug && !SLUG_RE.test(body.slug)) {
         return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
       }
-      // update_zona only touches columns whose argument is non-NULL, and
-      // sync the translations atomically. updated_at is set by the trigger
-      // installed in migration 014.
+      // update_zona only touches columns whose argument is non-NULL, syncs
+      // translations atomically, and (since migration 016) checks
+      // p_expected_updated_at to detect concurrent edits. The frontend
+      // sends `expected_updated_at` from the value it loaded; if another
+      // admin has modified the row since, the RPC raises SQLSTATE 40001
+      // which formatError() maps to a friendly 409.
       const { error: err } = await sb.rpc('update_zona', {
         p_id: zoneId.id,
         p_slug: body.slug || null,
         p_municipio_id: body.municipio_id || null,
         p_name: body.name || null,
         p_updated_by: user.id,
+        p_expected_updated_at: body.expected_updated_at || null,
       });
       if (err) {
         if ((err as { code?: string }).code === '23505') {
