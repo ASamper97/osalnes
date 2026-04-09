@@ -14,6 +14,8 @@ import {
 } from '../_shared/translations.ts';
 import { verifyAuth, requireRole, type AuthUser } from '../_shared/auth.ts';
 import { routePath, matchRoute } from '../_shared/router.ts';
+import { formatError } from '../_shared/errors.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
 
 const FN = 'admin';
 const BUCKET = 'media';
@@ -57,6 +59,10 @@ Deno.serve(async (req: Request) => {
   const method = req.method;
 
   try {
+    // Per-IP rate limit (120 req/min). Throws 429 on excess.
+    // Runs BEFORE auth so a flooding client cannot exhaust DB connections.
+    rateLimit(req);
+
     // Authenticate all requests
     const user = await verifyAuth(req);
     const sb = getAdminClient();
@@ -675,12 +681,8 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: 'Not found' }, 404, req);
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string; code?: string };
-    return json(
-      { error: e.message || 'Internal server error' },
-      e.status || 500,
-      req,
-    );
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });
 

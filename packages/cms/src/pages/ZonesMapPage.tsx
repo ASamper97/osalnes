@@ -19,6 +19,21 @@ import { useConfirm } from '@/components/ConfirmDialog';
 const DEFAULT_CENTER: [number, number] = [42.45, -8.85];
 const DEFAULT_ZOOM = 11;
 
+// Slug validation: backend enforces kebab-case (a-z, 0-9, hyphens). We mirror
+// the same regex in the UI so users get immediate feedback instead of a
+// confusing 400 from the API. See SLUG_RE in supabase/functions/admin/index.ts.
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Convert any string into a safe kebab-case slug (strips accents, etc). */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
 // Fix for Leaflet default marker icon paths in webpack/vite environments
 // We use small inline SVG markers for two states (default vs selected)
 const defaultIcon = L.divIcon({
@@ -84,6 +99,7 @@ export function ZonesMapPage() {
   }
 
   function startEdit(z: ZoneItem) {
+    setError(null);
     setEditing(z.id);
     setSlug(z.slug);
     setNameEs(z.name?.es || '');
@@ -92,6 +108,7 @@ export function ZonesMapPage() {
 
   function startCreate() {
     if (!selectedMunicipioId) return;
+    setError(null);
     setEditing('new');
     setSlug('');
     setNameEs('');
@@ -101,6 +118,10 @@ export function ZonesMapPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!slug || !selectedMunicipioId || !nameEs) return;
+    if (!SLUG_RE.test(slug)) {
+      setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -251,12 +272,35 @@ export function ZonesMapPage() {
                 <form onSubmit={handleSubmit} className="zones-map__form">
                   <h3>{editing === 'new' ? 'Nueva zona' : 'Editar zona'}</h3>
                   <div className="form-field">
-                    <label>Slug *</label>
-                    <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="centro-historico" required />
+                    <label>Nombre (ES) *</label>
+                    <input
+                      value={nameEs}
+                      onChange={(e) => {
+                        setNameEs(e.target.value);
+                        // Auto-derive slug only when creating, so editing an
+                        // existing zone never silently changes its public URL.
+                        if (editing === 'new') setSlug(slugify(e.target.value));
+                      }}
+                      placeholder="Centro historico"
+                      required
+                      autoFocus
+                    />
                   </div>
                   <div className="form-field">
-                    <label>Nombre (ES) *</label>
-                    <input value={nameEs} onChange={(e) => setNameEs(e.target.value)} placeholder="Centro historico" required />
+                    <label>Slug *</label>
+                    <input
+                      value={slug}
+                      onChange={(e) => setSlug(e.target.value)}
+                      placeholder="centro-historico"
+                      required
+                      pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                      title="Solo letras minusculas, numeros y guiones"
+                    />
+                    {slug && !SLUG_RE.test(slug) && (
+                      <span className="field-hint" style={{ color: '#c0392b' }}>
+                        Solo se permiten letras minusculas, numeros y guiones (ej. centro-historico).
+                      </span>
+                    )}
                   </div>
                   <div className="form-field">
                     <label>Nombre (GL)</label>

@@ -8,6 +8,8 @@ import { handleCors, json } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabase.ts';
 import { getTranslations, getTranslatedField } from '../_shared/translations.ts';
 import { routePath, matchRoute } from '../_shared/router.ts';
+import { formatError } from '../_shared/errors.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
 
 const FN = 'api';
 
@@ -21,6 +23,10 @@ Deno.serve(async (req: Request) => {
   const method = req.method;
 
   try {
+    // Per-IP rate limit (120 req/min). Public API but still bounded to
+    // prevent runaway clients exhausting DB connections.
+    rateLimit(req);
+
     // ====================================================================
     // Health
     // ====================================================================
@@ -127,12 +133,8 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: 'Not found' }, 404, req);
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string };
-    return json(
-      { error: e.message || 'Internal server error' },
-      e.status || 500,
-      req,
-    );
+    const [body, status] = formatError(err);
+    return json(body, status, req);
   }
 });
 

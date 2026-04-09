@@ -34,19 +34,54 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
   }
 
   // Fetch DTI role from the local `usuario` table.
-  // No fallback: if a Supabase auth user exists but has no entry in `usuario`,
-  // the request is rejected. Defaulting to 'editor' (the previous behaviour)
-  // would silently grant content-edit privileges to anyone holding a valid
-  // Supabase JWT — including orphaned accounts and any user invited but not
-  // yet provisioned in the DTI catalogue.
-  if (!user.email) {
-    throw { status: 401, message: 'Token sin email asociado' };
+  //
+  // Lookup strategy:
+  //   1. Prefer `auth_user_id = user.id` — stable UUID, immune to email
+  //      changes and case sensitivity. Migration 011 added this column and
+  //      backfilled it for existing rows.
+  //   2. Fallback to case-insensitive email match — covers legacy rows that
+  //      were not backfilled (e.g. invitations created after the migration
+  //      but before the user accepted them). On a successful fallback we
+  //      opportunistically write the auth_user_id link so the next call
+  //      uses the fast path.
+  //
+  // No bypass: if BOTH lookups fail the request is rejected. Defaulting to
+  // 'editor' (the original behaviour) would silently grant content-edit
+  // privileges to anyone holding a valid Supabase JWT.
+
+  // Step 1: lookup by stable auth_user_id
+  let dtiUser: { id: string; rol: string; activo: boolean } | null = null;
+  {
+    const { data } = await sb
+      .from('usuario')
+      .select('id, rol, activo')
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+    dtiUser = data;
   }
-  const { data: dtiUser } = await sb
-    .from('usuario')
-    .select('id, rol, activo')
-    .eq('email', user.email)
-    .single();
+
+  // Step 2: fallback to case-insensitive email
+  if (!dtiUser) {
+    if (!user.email) {
+      throw { status: 401, message: 'Token sin email asociado' };
+    }
+    const { data } = await sb
+      .from('usuario')
+      .select('id, rol, activo')
+      .ilike('email', user.email)
+      .maybeSingle();
+    dtiUser = data;
+
+    // Backfill the link for next time (fire-and-forget — failure is harmless)
+    if (dtiUser) {
+      sb.from('usuario')
+        .update({ auth_user_id: user.id })
+        .eq('id', dtiUser.id)
+        .then(() => {}, (err: unknown) => {
+          console.error('[auth] backfill auth_user_id failed:', err);
+        });
+    }
+  }
 
   if (!dtiUser) {
     throw {
@@ -59,7 +94,7 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
     throw { status: 403, message: 'Tu cuenta esta desactivada. Contacta con un administrador.' };
   }
 
-  return { id: user.id, email: user.email, role: dtiUser.rol, active: dtiUser.activo };
+  return { id: user.id, email: user.email || '', role: dtiUser.rol, active: dtiUser.activo };
 }
 
 /** Throw 403 if the user does not have one of the required roles. */

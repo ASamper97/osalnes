@@ -2,6 +2,18 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ZoneItem, type MunicipalityItem } from '@/lib/api';
 import { useConfirm } from '@/components/ConfirmDialog';
 
+// Mirror of admin/index.ts SLUG_RE — gives instant feedback before round-trip.
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
 export function ZonesPage() {
   const confirm = useConfirm();
   const [zones, setZones] = useState<ZoneItem[]>([]);
@@ -41,6 +53,7 @@ export function ZonesPage() {
   }
 
   function startEdit(z: ZoneItem) {
+    setError(null);
     setEditing(z.id);
     setSlug(z.slug);
     setMunicipioId(z.municipioId);
@@ -51,6 +64,10 @@ export function ZonesPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!slug || !municipioId || !nameEs) return;
+    if (!SLUG_RE.test(slug)) {
+      setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -108,7 +125,7 @@ export function ZonesPage() {
     <div>
       <div className="page-header">
         <h1>Zonas geograficas</h1>
-        <button className="btn btn-primary" onClick={() => { resetForm(); setEditing('new'); }}>
+        <button className="btn btn-primary" onClick={() => { setError(null); resetForm(); setEditing('new'); }}>
           + Nueva zona
         </button>
       </div>
@@ -130,8 +147,18 @@ export function ZonesPage() {
         <form onSubmit={handleSubmit} className="inline-form" style={{ marginBottom: '1.5rem' }}>
           <div className="form-row">
             <div className="form-field">
-              <label>Slug *</label>
-              <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="centro-historico" required />
+              <label>Nombre (ES) *</label>
+              <input
+                value={nameEs}
+                onChange={(e) => {
+                  setNameEs(e.target.value);
+                  // Auto-derive slug only on create — never silently change
+                  // a published URL while editing.
+                  if (editing === 'new') setSlug(slugify(e.target.value));
+                }}
+                placeholder="Centro historico"
+                required
+              />
             </div>
             <div className="form-field">
               <label>Municipio *</label>
@@ -145,8 +172,20 @@ export function ZonesPage() {
           </div>
           <div className="form-row">
             <div className="form-field">
-              <label>Nombre (ES) *</label>
-              <input value={nameEs} onChange={(e) => setNameEs(e.target.value)} placeholder="Centro historico" required />
+              <label>Slug *</label>
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="centro-historico"
+                required
+                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                title="Solo letras minusculas, numeros y guiones"
+              />
+              {slug && !SLUG_RE.test(slug) && (
+                <span className="field-hint" style={{ color: '#c0392b' }}>
+                  Solo letras minusculas, numeros y guiones.
+                </span>
+              )}
             </div>
             <div className="form-field">
               <label>Nombre (GL)</label>
