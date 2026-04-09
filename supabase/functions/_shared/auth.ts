@@ -86,12 +86,12 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
   if (!dtiUser) {
     throw {
       status: 403,
-      message: 'Tu email no esta registrado en el CMS de O Salnes. Pide acceso a un administrador.',
+      message: 'Tu email no está registrado en el CMS de O Salnés. Pide acceso a un administrador.',
     };
   }
 
   if (!dtiUser.activo) {
-    throw { status: 403, message: 'Tu cuenta esta desactivada. Contacta con un administrador.' };
+    throw { status: 403, message: 'Tu cuenta está desactivada. Contacta con un administrador.' };
   }
 
   return { id: user.id, email: user.email || '', role: dtiUser.rol, active: dtiUser.activo };

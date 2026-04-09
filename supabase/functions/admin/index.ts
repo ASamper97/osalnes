@@ -580,7 +580,7 @@ Deno.serve(async (req: Request) => {
       if (!body.slug || !body.municipio_id) return json({ error: 'slug and municipio_id required' }, 400, req);
       // Validate slug format (kebab-case) — prevents URLs like "Centro Histórico!"
       if (!SLUG_RE.test(body.slug)) {
-        return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
+        return json({ error: 'El slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
       }
       // ES + GL are mandatory at the institutional level (Lei 5/1988 — gallego
       // cooficial). The frontend enforces this too, but we double-check here
@@ -621,7 +621,7 @@ Deno.serve(async (req: Request) => {
       requireRole(user, 'admin', 'editor');
       const body = await req.json();
       if (body.slug && !SLUG_RE.test(body.slug)) {
-        return json({ error: 'slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
+        return json({ error: 'El slug debe ser kebab-case (a-z, 0-9 y guiones)' }, 400, req);
       }
       // update_zona only touches columns whose argument is non-NULL, syncs
       // translations atomically, and (since migration 016) checks

@@ -42,6 +42,10 @@ export function formatError(err: unknown): [Record<string, string>, number] {
   return [{ error: 'Error interno del servidor. Si persiste, contacta con un administrador.' }, 500];
 }
 
+// Note: postgresCodeToMessage strings already contain the correct accents
+// where needed. The audit (U7) was about user-facing TypeScript strings in
+// the zone module — these were checked during Tanda 9.
+
 /**
  * Map a Postgres SQLSTATE code to a friendly Spanish message.
  * See https://www.postgresql.org/docs/current/errcodes-appendix.html
@@ -49,16 +53,16 @@ export function formatError(err: unknown): [Record<string, string>, number] {
 export function postgresCodeToMessage(code: string): string {
   switch (code) {
     case '23505': return 'Ya existe un registro con esos datos. Usa otro identificador.';
-    case '23503': return 'No se puede completar la operacion: hay datos relacionados que lo impiden.';
+    case '23503': return 'No se puede completar la operación: hay datos relacionados que lo impiden.';
     case '23502': return 'Falta un campo obligatorio.';
     case '23514': return 'Los datos no cumplen las restricciones del modelo.';
-    case '22P02': return 'Formato de dato invalido.';
+    case '22P02': return 'Formato de dato inválido.';
     case '22001': return 'Texto demasiado largo para el campo.';
     case '42703': return 'Campo desconocido en la solicitud.';
     case '42P01': return 'Recurso no disponible.';
-    case '42501': return 'Permisos insuficientes para esta operacion.';
+    case '42501': return 'Permisos insuficientes para esta operación.';
     case '40001': return 'Conflicto de concurrencia. Reintenta en unos segundos.';
-    case '53300': return 'El servidor esta saturado. Reintenta en unos segundos.';
+    case '53300': return 'El servidor está saturado. Reintenta en unos segundos.';
     default:      return 'Error de base de datos. Si persiste, contacta con un administrador.';
   }
 }

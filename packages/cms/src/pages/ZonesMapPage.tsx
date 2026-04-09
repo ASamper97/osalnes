@@ -1,20 +1,20 @@
 import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { type ZoneItem } from '@/lib/api';
 import { useZones } from '@/lib/use-zones';
 import { useConfirm } from '@/components/ConfirmDialog';
 
 /**
- * ZonesMapPage — Gestion visual de zonas geograficas
+ * ZonesMapPage — Gestión visual de zonas geográficas
  *
  * Reemplaza el formulario plano por un mapa interactivo de los 8
  * municipios + panel lateral con las zonas del municipio seleccionado.
  *
- * Las zonas no tienen coordenadas propias (son agrupaciones logicas
+ * Las zonas no tienen coordenadas propias (son agrupaciones lógicas
  * dentro de un municipio), pero el mapa permite navegar visualmente
- * entre municipios y crear/editar zonas en su contexto geografico.
+ * entre municipios y crear/editar zonas en su contexto geográfico.
  */
 
 // Default center on O Salnes (Galicia, Spain)
@@ -52,6 +52,15 @@ const activeIcon = L.divIcon({
   iconAnchor: [17, 46],
 });
 
+/** Detect prefers-reduced-motion (cached lookup, refreshed each call). */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 /**
  * Fly the map to the given coordinates when they change.
  *
@@ -65,17 +74,44 @@ function FlyToMunicipio({ lat, lng }: { lat: number | null; lng: number | null }
   const map = useMap();
   useEffect(() => {
     if (lat === null || lng === null) return;
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) {
+    if (prefersReducedMotion()) {
       map.setView([lat, lng], 13, { animate: false });
     } else {
       map.flyTo([lat, lng], 13, { duration: 0.5 });
     }
   }, [lat, lng, map]);
   return null;
+}
+
+/**
+ * Floating "fit all" button (audit U8). Positioned over the map's top-right
+ * corner via absolute styles in styles.css. Uses useMap() so it can call
+ * fitBounds on the parent MapContainer instance without needing a ref.
+ */
+function FitAllButton({
+  points,
+}: { points: Array<{ latitude: number; longitude: number }> }) {
+  const map = useMap();
+  function fitAll() {
+    if (points.length === 0) return;
+    const bounds = L.latLngBounds(points.map((p) => [p.latitude, p.longitude] as [number, number]));
+    map.fitBounds(bounds, {
+      padding: [50, 50],
+      animate: !prefersReducedMotion(),
+      duration: 0.5,
+    });
+  }
+  return (
+    <button
+      type="button"
+      className="zones-map__fit-all-btn"
+      onClick={fitAll}
+      title="Encajar todos los municipios en pantalla"
+      aria-label="Encajar todos los municipios en pantalla"
+    >
+      ⛶
+    </button>
+  );
 }
 
 export function ZonesMapPage() {
@@ -137,7 +173,7 @@ export function ZonesMapPage() {
       return;
     }
     if (!SLUG_RE.test(slug)) {
-      setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
+      setError('El slug solo admite letras minúsculas, números y guiones (ej. centro-historico).');
       return;
     }
     setSaving(true);
@@ -161,8 +197,8 @@ export function ZonesMapPage() {
 
   async function handleDelete(id: string, name: string) {
     const ok = await confirm({
-      title: `Eliminar zona "${name}"?`,
-      message: 'Los recursos turisticos asociados a esta zona perderan la asociacion. Esta accion no se puede deshacer.',
+      title: `¿Eliminar zona "${name}"?`,
+      message: 'Los recursos turísticos asociados a esta zona perderán la asociación. Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar zona',
       variant: 'danger',
     });
@@ -188,13 +224,13 @@ export function ZonesMapPage() {
     return counts;
   }, [zones]);
 
-  if (loading) return <div><h1>Zonas</h1><p style={{ color: 'var(--cms-text-light)' }}>Cargando...</p></div>;
+  if (loading) return <div><h1>Zonas</h1><p style={{ color: 'var(--cms-text-light)' }}>Cargando…</p></div>;
 
   return (
     <div className="zones-map-page">
       <div className="page-header">
         <div>
-          <h1>Zonas geograficas</h1>
+          <h1>Zonas geográficas</h1>
           <span className="zones-map__hint">{zones.length} zonas en {municipalitiesWithCoords.length} municipios</span>
         </div>
         {/* WCAG 2.1.1 Keyboard — provide an accessible alternative for users
@@ -212,7 +248,7 @@ export function ZonesMapPage() {
         <div
           className="zones-map__map"
           role="application"
-          aria-label="Mapa interactivo de los municipios de O Salnes. Pulsa en un marcador para gestionar sus zonas. Si necesitas una alternativa accesible, usa el enlace 'Vista lista'."
+          aria-label="Mapa interactivo de los municipios de O Salnés. Pulsa en un marcador para gestionar sus zonas. Si necesitas una alternativa accesible, usa el enlace 'Vista lista'."
         >
           <MapContainer
             center={DEFAULT_CENTER}
@@ -223,13 +259,22 @@ export function ZonesMapPage() {
             style={{ width: '100%', height: '100%' }}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              attribution='Datos: Mancomunidade O Salnés · &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
             {selectedMunicipio && (
               <FlyToMunicipio lat={selectedMunicipio.latitude} lng={selectedMunicipio.longitude} />
             )}
+
+            {/* U8: floating "fit all" button — restores the default
+                view encompassing every municipio */}
+            <FitAllButton
+              points={municipalitiesWithCoords.map((m) => ({
+                latitude: m.latitude!,
+                longitude: m.longitude!,
+              }))}
+            />
 
             {municipalitiesWithCoords.map((m) => {
               const isActive = m.id === selectedMunicipioId;
@@ -260,8 +305,13 @@ export function ZonesMapPage() {
                     },
                   }}
                 >
+                  {/* U6: Tooltip on hover (no click required) so users can
+                      browse municipios without committing to a selection. */}
+                  <Tooltip direction="top" offset={[0, -38]} opacity={0.95}>
+                    <strong>{muniName}</strong> · {count} {count === 1 ? 'zona' : 'zonas'}
+                  </Tooltip>
                   <Popup>
-                    <strong>{m.name?.es || m.slug}</strong>
+                    <strong>{muniName}</strong>
                     <br />
                     {count} {count === 1 ? 'zona' : 'zonas'}
                   </Popup>
@@ -286,9 +336,17 @@ export function ZonesMapPage() {
         <aside className="zones-map__panel">
           {!selectedMunicipio ? (
             <div className="zones-map__empty">
-              <div className="zones-map__empty-icon">📍</div>
-              <h3>Selecciona un municipio</h3>
-              <p>Haz clic en cualquier marcador del mapa para ver y gestionar sus zonas geograficas (parroquias, barrios o agrupaciones).</p>
+              <div className="zones-map__empty-icon">👈</div>
+              <h3>Empieza por el mapa</h3>
+              <p>
+                Haz clic en cualquier <strong>marcador azul</strong> del mapa para
+                seleccionar un municipio y gestionar sus zonas geográficas
+                (parroquias, barrios o agrupaciones).
+              </p>
+              <p className="zones-map__empty-hint">
+                💡 También puedes usar la <Link to="/zones/classic">vista en lista</Link> para
+                ver todas las zonas en una tabla ordenable.
+              </p>
             </div>
           ) : (
             <>
@@ -300,8 +358,20 @@ export function ZonesMapPage() {
                 </span>
               </div>
 
+              {/* U10: keep the "+ Añadir" button always visible. While the
+                  user is editing or creating, it stays in view but disabled
+                  so it remains discoverable instead of disappearing. */}
+              <button
+                className="btn btn-primary btn-sm zones-map__add-btn"
+                onClick={startCreate}
+                disabled={editing !== null}
+                title={editing ? 'Termina la edición actual antes de añadir otra zona' : undefined}
+              >
+                + Añadir zona en {selectedMunicipio.name?.es || selectedMunicipio.slug}
+              </button>
+
               {/* Inline form */}
-              {editing ? (
+              {editing && (
                 <form onSubmit={handleSubmit} className="zones-map__form">
                   <h3>{editing === 'new' ? 'Nueva zona' : 'Editar zona'}</h3>
                   <div className="form-field">
@@ -314,7 +384,7 @@ export function ZonesMapPage() {
                         // existing zone never silently changes its public URL.
                         if (editing === 'new') setSlug(slugify(e.target.value));
                       }}
-                      placeholder="Centro historico"
+                      placeholder="Centro histórico"
                       required
                       autoFocus
                     />
@@ -327,11 +397,11 @@ export function ZonesMapPage() {
                       placeholder="centro-historico"
                       required
                       pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                      title="Solo letras minusculas, numeros y guiones"
+                      title="Solo letras minúsculas, números y guiones"
                     />
                     {slug && !SLUG_RE.test(slug) && (
                       <span className="field-hint" style={{ color: '#c0392b' }}>
-                        Solo se permiten letras minusculas, numeros y guiones (ej. centro-historico).
+                        Solo se permiten letras minúsculas, números y guiones (ej. centro-historico).
                       </span>
                     )}
                   </div>
@@ -340,14 +410,14 @@ export function ZonesMapPage() {
                     <input
                       value={nameGl}
                       onChange={(e) => setNameGl(e.target.value)}
-                      placeholder="Centro historico"
+                      placeholder="Centro histórico"
                       required
                     />
                     <span className="field-hint">Obligatorio (Lei 5/1988 — gallego cooficial)</span>
                   </div>
 
                   <details className="zones-map__form-details">
-                    <summary>Anadir traducciones (opcional)</summary>
+                    <summary>Añadir traducciones (opcional)</summary>
                     <div className="form-field">
                       <label htmlFor="zone-name-en">Nombre (EN)</label>
                       <input
@@ -372,28 +442,24 @@ export function ZonesMapPage() {
                         id="zone-name-pt"
                         value={namePt}
                         onChange={(e) => setNamePt(e.target.value)}
-                        placeholder="Centro historico"
+                        placeholder="Centro histórico"
                       />
                     </div>
                   </details>
 
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-                      {saving ? 'Guardando...' : editing === 'new' ? 'Crear zona' : 'Guardar'}
+                      {saving ? 'Guardando…' : editing === 'new' ? 'Crear zona' : 'Guardar'}
                     </button>
                     <button type="button" className="btn btn-sm" onClick={resetForm}>Cancelar</button>
                   </div>
                 </form>
-              ) : (
-                <button className="btn btn-primary btn-sm zones-map__add-btn" onClick={startCreate}>
-                  + Anadir zona en {selectedMunicipio.name?.es || selectedMunicipio.slug}
-                </button>
               )}
 
               {/* Zones list */}
               <div className="zones-map__list">
                 {zonesOfSelected.length === 0 ? (
-                  <p className="zones-map__list-empty">Sin zonas todavia. Pulsa "+ Anadir zona" para crear la primera.</p>
+                  <p className="zones-map__list-empty">Sin zonas todavía. Pulsa «+ Añadir zona» para crear la primera.</p>
                 ) : (
                   zonesOfSelected.map((z) => (
                     <div key={z.id} className={`zones-map__zone ${editing === z.id ? 'zones-map__zone--editing' : ''}`}>
@@ -405,7 +471,7 @@ export function ZonesMapPage() {
                       <div className="action-btns">
                         <button className="btn btn-sm" onClick={() => startEdit(z)} disabled={busyId === z.id}>Editar</button>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(z.id, z.name?.es || z.slug)} disabled={busyId === z.id}>
-                          {busyId === z.id ? '...' : 'Eliminar'}
+                          {busyId === z.id ? 'Eliminando…' : 'Eliminar'}
                         </button>
                       </div>
                     </div>

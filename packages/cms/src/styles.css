@@ -2313,6 +2313,38 @@ textarea:focus-visible {
   align-items: center;
 }
 
+/* Floating "fit all municipios" button (audit U8). Top-right corner of the
+   map, above Leaflet's own zoom control which sits at top-left by default. */
+.zones-map__fit-all-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 500;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  border: 1px solid var(--cms-border);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--cms-text);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.15);
+  backdrop-filter: blur(4px);
+  transition: all var(--transition);
+}
+
+.zones-map__fit-all-btn:hover,
+.zones-map__fit-all-btn:focus-visible {
+  background: #fff;
+  border-color: var(--cms-primary, #1a5276);
+  color: var(--cms-primary, #1a5276);
+  outline: none;
+  box-shadow: 0 6px 16px rgba(15, 28, 46, 0.2);
+}
+
 /* Side panel */
 
 .zones-map__panel {

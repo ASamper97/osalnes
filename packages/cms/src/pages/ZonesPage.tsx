@@ -63,7 +63,7 @@ export function ZonesPage() {
       return;
     }
     if (!SLUG_RE.test(slug)) {
-      setError('El slug solo admite letras minusculas, numeros y guiones (ej. centro-historico).');
+      setError('El slug solo admite letras minúsculas, números y guiones (ej. centro-historico).');
       return;
     }
     setSaving(true);
@@ -87,8 +87,8 @@ export function ZonesPage() {
 
   async function handleDelete(id: string, name: string) {
     const ok = await confirm({
-      title: `Eliminar zona "${name}"?`,
-      message: 'Los recursos turisticos asociados a esta zona perderan la asociacion. Esta accion no se puede deshacer.',
+      title: `¿Eliminar zona "${name}"?`,
+      message: 'Los recursos turísticos asociados a esta zona perderán la asociación. Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar zona',
       variant: 'danger',
     });
@@ -104,12 +104,12 @@ export function ZonesPage() {
     ? zones.filter((z) => z.municipioId === filterMunicipio)
     : zones;
 
-  if (loading) return <div><h1>Zonas</h1><p style={{ color: 'var(--cms-text-light)' }}>Cargando...</p></div>;
+  if (loading) return <div><h1>Zonas</h1><p style={{ color: 'var(--cms-text-light)' }}>Cargando…</p></div>;
 
   return (
     <div>
       <div className="page-header">
-        <h1>Zonas geograficas</h1>
+        <h1>Zonas geográficas</h1>
         <button className="btn btn-primary" onClick={() => { setError(null); resetForm(); setEditing('new'); }}>
           + Nueva zona
         </button>
@@ -141,7 +141,7 @@ export function ZonesPage() {
                   // a published URL while editing.
                   if (editing === 'new') setSlug(slugify(e.target.value));
                 }}
-                placeholder="Centro historico"
+                placeholder="Centro histórico"
                 required
               />
             </div>
@@ -164,11 +164,11 @@ export function ZonesPage() {
                 placeholder="centro-historico"
                 required
                 pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                title="Solo letras minusculas, numeros y guiones"
+                title="Solo letras minúsculas, números y guiones"
               />
               {slug && !SLUG_RE.test(slug) && (
                 <span className="field-hint" style={{ color: '#c0392b' }}>
-                  Solo letras minusculas, numeros y guiones.
+                  Solo letras minúsculas, números y guiones.
                 </span>
               )}
             </div>
@@ -177,7 +177,7 @@ export function ZonesPage() {
               <input
                 value={nameGl}
                 onChange={(e) => setNameGl(e.target.value)}
-                placeholder="Centro historico"
+                placeholder="Centro histórico"
                 required
               />
               <span className="field-hint">Obligatorio (Lei 5/1988)</span>
@@ -186,7 +186,7 @@ export function ZonesPage() {
 
           <details className="zones-form-details" style={{ marginBottom: '1rem' }}>
             <summary style={{ cursor: 'pointer', padding: '0.5rem 0', fontSize: '0.9rem' }}>
-              Anadir traducciones (opcional) — EN / FR / PT
+              Añadir traducciones (opcional) — EN / FR / PT
             </summary>
             <div className="form-row" style={{ marginTop: '0.5rem' }}>
               <div className="form-field">
@@ -213,14 +213,14 @@ export function ZonesPage() {
                   id="zone-cls-name-pt"
                   value={namePt}
                   onChange={(e) => setNamePt(e.target.value)}
-                  placeholder="Centro historico"
+                  placeholder="Centro histórico"
                 />
               </div>
             </div>
           </details>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Guardando...' : editing === 'new' ? 'Crear' : 'Guardar'}
+              {saving ? 'Guardando…' : editing === 'new' ? 'Crear' : 'Guardar'}
             </button>
             <button type="button" className="btn btn-outline" onClick={resetForm}>Cancelar</button>
           </div>
@@ -250,7 +250,7 @@ export function ZonesPage() {
               <td><code style={{ fontSize: '0.8rem' }}>{z.slug}</code></td>
               <td>{z.name?.es || '-'}</td>
               <td>{z.name?.gl || '-'}</td>
-              <td title={`Idiomas con traduccion: ${langs.join(', ').toUpperCase()}`} style={{ fontSize: '0.78rem', color: 'var(--cms-text-light)' }}>
+              <td title={`Idiomas con traducción: ${langs.join(', ').toUpperCase()}`} style={{ fontSize: '0.78rem', color: 'var(--cms-text-light)' }}>
                 {langs.length}/5
               </td>
               <td>{getMunicipioName(z.municipioId)}</td>
@@ -258,7 +258,7 @@ export function ZonesPage() {
                 <div className="action-btns">
                   <button className="btn btn-sm" onClick={() => startEdit(z)}>Editar</button>
                   <button className="btn btn-sm btn-danger" onClick={() => handleDelete(z.id, z.name?.es || z.slug)} disabled={busyId === z.id}>
-                    {busyId === z.id ? '...' : 'Eliminar'}
+                    {busyId === z.id ? 'Eliminando…' : 'Eliminar'}
                   </button>
                 </div>
               </td>
