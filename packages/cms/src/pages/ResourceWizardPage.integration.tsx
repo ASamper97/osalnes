@@ -1,9 +1,11 @@
+// @ts-nocheck
 // ──────────────────────────────────────────────────────────────────────────
 // INTEGRACIÓN: ResourceWizardPage.tsx
 //
 // Este fichero NO se commitea tal cual. Son los fragmentos que hay que
 // pegar/sustituir en `packages/cms/src/pages/ResourceWizardPage.tsx` para
 // conectar TagSelector (paso 4) y PidCompletenessCard (paso 7).
+// Se borrará al completar la Tarea 4 del prompt guía-burros v2.
 // ──────────────────────────────────────────────────────────────────────────
 
 

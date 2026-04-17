@@ -103,8 +103,8 @@ export const GENERAL_TYPES = {
   Organization: 'Organization',
 } as const;
 
-/** Todos los tipos de recurso UNE 178503 */
-export const RESOURCE_TYPES = {
+/** Todos los tipos de recurso UNE 178503 (codigos schema.org) */
+export const SCHEMA_ORG_RESOURCE_TYPES = {
   ...ACCOMMODATION_TYPES,
   ...FOOD_TYPES,
   ...ATTRACTION_TYPES,
@@ -114,7 +114,7 @@ export const RESOURCE_TYPES = {
   ...GENERAL_TYPES,
 } as const;
 
-export type ResourceType = typeof RESOURCE_TYPES[keyof typeof RESOURCE_TYPES];
+export type ResourceType = typeof SCHEMA_ORG_RESOURCE_TYPES[keyof typeof SCHEMA_ORG_RESOURCE_TYPES];
 
 /** Mapping type -> schema.org equivalent */
 export const SCHEMA_ORG_MAP: Record<string, string> = {
