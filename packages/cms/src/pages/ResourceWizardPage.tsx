@@ -14,6 +14,7 @@ import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
 import TagSelector from '@/components/TagSelector';
+import PidCompletenessCard from '@/components/PidCompletenessCard';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL } from '@osalnes/shared/data/resource-type-catalog';
@@ -1088,6 +1089,11 @@ export function ResourceWizardPage() {
           onApplyTouristTypes={(types) => { setTouristTypes(types); markDirty(); }}
         />
         <div className="wizard__completion-grid">
+          <PidCompletenessCard
+            selectedKeys={tagKeys}
+            onEdit={() => setCurrentStep(3)}
+          />
+
           <WizardCompletionCard
             title="Identificacion"
             icon="🏷️"
