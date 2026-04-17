@@ -22,8 +22,8 @@ drop table if exists public.resource_tags;
 -- 2) Enum (solo se borra si no hay nada que lo referencie — la tabla ya se dropeó)
 drop type if exists public.tag_field;
 
--- 1) Columnas nuevas en resources
-alter table public.resources
+-- 1) Columnas nuevas en recurso_turistico
+alter table public.recurso_turistico
   drop column if exists imported_at,
   drop column if exists imported_from,
   drop column if exists review_required,

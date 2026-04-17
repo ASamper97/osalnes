@@ -19,18 +19,21 @@
 -- Fuente de verdad del catálogo: packages/shared/src/data/tag-catalog.ts
 -- ==========================================================================
 
--- 1) Campos nuevos en resources --------------------------------------------
-alter table public.resources
+-- 1) Campos nuevos en recurso_turistico ------------------------------------
+-- Nota: la tabla de recursos se llama `recurso_turistico` en este schema
+-- (ver 001_initial_schema.sql:87). Los nombres de columnas legacy que añade
+-- esta migración se mantienen en inglés para alinearse con el exportador PID.
+alter table public.recurso_turistico
   add column if not exists xlsx_tipo_original text,
   add column if not exists review_required   boolean not null default false,
   add column if not exists imported_from     text,
   add column if not exists imported_at       timestamptz;
 
-comment on column public.resources.xlsx_tipo_original is
+comment on column public.recurso_turistico.xlsx_tipo_original is
   'Valor original de la columna Tipo en el xlsx de importación (trazabilidad)';
-comment on column public.resources.review_required is
+comment on column public.recurso_turistico.review_required is
   'Marcado cuando el mapping automático no es exacto y requiere revisión editorial';
-comment on column public.resources.imported_from is
+comment on column public.recurso_turistico.imported_from is
   'Identificador de la fuente de import (p. ej. xlsx_osalnes_v1, manual)';
 
 
@@ -51,7 +54,7 @@ exception when duplicate_object then null; end $$;
 
 -- 3) Tabla pivote de etiquetas --------------------------------------------
 create table if not exists public.resource_tags (
-  resource_id     uuid              not null references public.resources(id) on delete cascade,
+  resource_id     uuid              not null references public.recurso_turistico(id) on delete cascade,
   tag_key         text              not null,   -- '{groupKey}.{tagSlug}' — tag-catalog.ts
   field           public.tag_field  not null,   -- redundante con catálogo, evita joins en export
   value           text              not null,   -- valor raw a exportar (Beach, Hotel, 'wifi', ...)
@@ -79,14 +82,16 @@ create or replace view public.v_resource_pid_tags as
     rt.field,
     rt.tag_key,
     rt.value
-  from public.resources r
+  from public.recurso_turistico r
   join public.resource_tags rt on rt.resource_id = r.id
   where rt.pid_exportable = true;
 
 
 -- 6) RLS -------------------------------------------------------------------
--- Mismo modelo que `resources`: anónimo lee solo published, editor
--- autenticado lee/escribe todo.
+-- Mismo modelo que `recurso_turistico`: anónimo lee solo publicados, editor
+-- autenticado lee/escribe todo. El baseline de 010 deja RLS activado sin
+-- policies (deny-all), igual que recurso_turistico, así que esta policy solo
+-- tiene efecto si en el futuro se abre acceso anon a recurso_turistico.
 alter table public.resource_tags enable row level security;
 
 drop policy if exists resource_tags_read_public on public.resource_tags;
@@ -95,9 +100,9 @@ drop policy if exists resource_tags_rw_authed   on public.resource_tags;
 create policy resource_tags_read_public on public.resource_tags
   for select using (
     exists (
-      select 1 from public.resources r
+      select 1 from public.recurso_turistico r
       where r.id = resource_tags.resource_id
-        and r.status = 'published'
+        and r.estado_editorial = 'publicado'
     )
   );
 
