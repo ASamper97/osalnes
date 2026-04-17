@@ -2,8 +2,23 @@
   "name": "@osalnes/shared",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./data/tag-catalog": {
+      "types": "./dist/data/tag-catalog.d.ts",
+      "default": "./dist/data/tag-catalog.js"
+    },
+    "./data/resource-type-catalog": {
+      "types": "./dist/data/resource-type-catalog.d.ts",
+      "default": "./dist/data/resource-type-catalog.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"

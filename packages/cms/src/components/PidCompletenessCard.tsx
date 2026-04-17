@@ -14,7 +14,7 @@ import { useMemo } from 'react';
 import {
   TAGS_BY_KEY,
   type TagField,
-} from '@osalnes/shared';
+} from '@osalnes/shared/data/tag-catalog';
 
 export interface PidCompletenessCardProps {
   /** Claves de etiquetas actualmente seleccionadas */

@@ -11,7 +11,7 @@
  * exacto usa el más próximo + reviewRequired=true.
  */
 
-import type { Tag, TagGroup } from './tag-catalog';
+import type { Tag, TagGroup } from './tag-catalog.js';
 
 export interface ResourceTypeDefinition {
   /** Etiqueta en la columna `Tipo` del xlsx original */

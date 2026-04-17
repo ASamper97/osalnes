@@ -21,10 +21,10 @@ import { useMemo, useState } from 'react';
 import {
   TAGS_BY_GROUP,
   GROUP_BY_KEY,
-  getWizardGroupsForType,
   type Tag,
   type TagGroup,
-} from '@osalnes/shared';
+} from '@osalnes/shared/data/tag-catalog';
+import { getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Props

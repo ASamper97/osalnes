@@ -13,8 +13,11 @@ import { TemplateSelector } from '@/components/TemplateSelector';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
+import TagSelector from '@/components/TagSelector';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
+import { RESOURCE_TYPE_BY_XLSX_LABEL } from '@osalnes/shared/data/resource-type-catalog';
+import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -39,20 +42,6 @@ async function translateText(text: string, from: string, to: string): Promise<st
   const data = await res.json();
   return data.translated || data.texto_traducido || text;
 }
-
-const TOURIST_TYPES_BY_CATEGORY: Record<string, readonly string[]> = {
-  viajero: ['FAMILY TOURISM', 'LGTBI TOURISM', 'BACKPACKING TOURISM', 'BUSINESS TOURISM', 'ROMANTIC TOURISM', 'SENIOR TOURISM'],
-  actividad: ['ADVENTURE TOURISM', 'WELLNESS TOURISM', 'CYCLING TOURISM', 'DIVING TOURISM', 'SAILING TOURISM', 'WATER SPORTS TOURISM', 'TREKKING TOURISM'],
-  motivacion: ['BEACH AND SUN TOURISM', 'CULTURAL TOURISM', 'ECOTOURISM', 'HERITAGE TOURISM', 'NATURE TOURISM', 'RURAL TOURISM', 'BIRDWATCHING', 'EVENTS AND FESTIVALS TOURISM'],
-  producto: ['FOOD TOURISM', 'WINE TOURISM', 'BEER TOURISM', 'OLIVE OIL TOURISM'],
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  viajero: 'Tipo de viajero',
-  actividad: 'Actividad',
-  motivacion: 'Motivacion',
-  producto: 'Producto turistico',
-};
 
 function slugify(text: string): string {
   return text
@@ -126,10 +115,15 @@ export function ResourceWizardPage() {
   const [sameAs, setSameAs] = useState('');
 
   // Step 4: Clasificacion turistica
+  // Legacy: tourist_types y category_ids se siguen escribiendo en paralelo
+  // hasta migrar el dato (// TODO legacy).
   const [touristTypes, setTouristTypes] = useState<string[]>([]);
   const [ratingValue, setRatingValue] = useState('');
   const [servesCuisine, setServesCuisine] = useState('');
   const [occupancy, setOccupancy] = useState('');
+  // Guia-burros v2 — tags UNE 178503 (catalogo 154×18). Hidratacion desde
+  // resource_tags la hace la Tarea 6 en el loader.
+  const [tagKeys, setTagKeys] = useState<string[]>([]);
 
   // Step 5: Multimedia + Documentos (managed by child components)
 
@@ -237,13 +231,6 @@ export function ResourceWizardPage() {
     markDirty();
   }
 
-  function toggleCategory(catId: string) {
-    setSelectedCategories((prev) =>
-      prev.includes(catId) ? prev.filter((c) => c !== catId) : [...prev, catId],
-    );
-    markDirty();
-  }
-
   // ── Data loading ────────────────────────────────────────────
 
   useEffect(() => {
@@ -268,6 +255,24 @@ export function ResourceWizardPage() {
       .catch(() => { if (!cancelled) setZones([]); });
     return () => { cancelled = true; };
   }, [municipioId]);
+
+  // Al cambiar la tipologia (paso 1), limpia las tags seleccionadas que
+  // dejen de ser aplicables al nuevo tipo. Evita que un Hotel→Playa arrastre
+  // amenities de alojamiento que no tienen sentido en una playa.
+  useEffect(() => {
+    const typology = typologies.find((t) => t.typeCode === rdfType);
+    const label = typology?.name?.es;
+    if (!label) return;
+    const def = RESOURCE_TYPE_BY_XLSX_LABEL[label];
+    if (!def) return;
+    const allowed = new Set(def.wizardGroups);
+    setTagKeys((prev) =>
+      prev.filter((k) => {
+        const tag = TAGS_BY_KEY[k];
+        return tag ? allowed.has(tag.groupKey) : false;
+      }),
+    );
+  }, [rdfType, typologies]);
 
   useEffect(() => {
     if (isNew) return;
@@ -528,9 +533,8 @@ export function ResourceWizardPage() {
 
   // ── Computed ─────────────────────────────────────────────────
 
-  const rootCategories = categories.filter((c) => !c.parentId);
-  const subCategories = (parentId: string) => categories.filter((c) => c.parentId === parentId);
   const currentTypology = typologies.find((t) => t.typeCode === rdfType);
+  const resourceTypeLabel = currentTypology?.name?.es ?? null;
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -904,54 +908,19 @@ export function ResourceWizardPage() {
           </WizardFieldGroup>
 
           <WizardFieldGroup
-            title="Tipos de turismo (UNE 178503)"
-            description="Marca los tipos de turismo asociados a este recurso. Esto mejora las busquedas y el posicionamiento."
+            title="Clasificacion semantica (UNE 178503)"
+            description="Marca todas las etiquetas que apliquen. El catalogo solo muestra los grupos relevantes para el tipo que seleccionaste en el paso 1."
+            tip="Las etiquetas con badge 'PID' se exportan a la Plataforma Inteligente de Destinos. Las marcadas 'cms' son solo editoriales. Cambia la tipologia en el paso 1 para ver otros grupos disponibles."
           >
-            <div className="categories-grid">
-              {Object.entries(TOURIST_TYPES_BY_CATEGORY).map(([cat, types]) => (
-                <div key={cat} className="category-group">
-                  <strong>{CATEGORY_LABELS[cat] || cat}</strong>
-                  {types.map((tt) => (
-                    <label key={tt} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={touristTypes.includes(tt)}
-                        onChange={() => {
-                          setTouristTypes((prev) =>
-                            prev.includes(tt) ? prev.filter((t) => t !== tt) : [...prev, tt]
-                          );
-                          markDirty();
-                        }}
-                      />
-                      {tt.replace(' TOURISM', '').toLowerCase()}
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Categorias del portal"
-            description="Marca las categorias internas del portal donde debe aparecer este recurso."
-          >
-            <div className="categories-grid">
-              {rootCategories.map((root) => (
-                <div key={root.id} className="category-group">
-                  <strong>{root.name?.es || root.slug}</strong>
-                  {subCategories(root.id).map((sub) => (
-                    <label key={sub.id} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={selectedCategories.includes(sub.id)}
-                        onChange={() => toggleCategory(sub.id)}
-                      />
-                      {sub.name?.es || sub.slug}
-                    </label>
-                  ))}
-                </div>
-              ))}
-            </div>
+            <TagSelector
+              resourceTypeLabel={resourceTypeLabel}
+              value={tagKeys}
+              onChange={(next) => {
+                setTagKeys(next);
+                markDirty();
+              }}
+              includeMunicipio={false}
+            />
           </WizardFieldGroup>
         </>
       )}
