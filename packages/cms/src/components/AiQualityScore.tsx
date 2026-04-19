@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { aiValidate, aiCategorize, type ValidationResult, type CategorizationResult } from '@/lib/ai';
+import { aiValidate, aiCategorize, type ValidationResult, type CategorizationResult, type ApplicableTag } from '@/lib/ai';
+import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
 
 /**
  * AiQualityScore — Evaluacion de calidad con IA para el paso de revision
@@ -8,8 +9,11 @@ import { aiValidate, aiCategorize, type ValidationResult, type CategorizationRes
 interface AiQualityScoreProps {
   /** All resource data for evaluation */
   resourceData: Record<string, unknown>;
-  /** Callback to apply suggested tourist types */
-  onApplyTouristTypes?: (types: string[]) => void;
+  /** Subset of the UNE 178503 catalog that applies to the current resource
+   *  type. Passed by the wizard; used as allowed set for aiCategorize. */
+  applicableTags: ApplicableTag[];
+  /** Callback to merge AI-suggested tag_keys into the wizard selection. */
+  onApplyTagKeys?: (keys: string[]) => void;
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -26,7 +30,7 @@ const LEVEL_ICONS: Record<string, string> = {
   incompleto: '❌',
 };
 
-export function AiQualityScore({ resourceData, onApplyTouristTypes }: AiQualityScoreProps) {
+export function AiQualityScore({ resourceData, applicableTags, onApplyTagKeys }: AiQualityScoreProps) {
   const [loading, setLoading] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [categorization, setCategorization] = useState<CategorizationResult | null>(null);
@@ -42,6 +46,7 @@ export function AiQualityScore({ resourceData, onApplyTouristTypes }: AiQualityS
           name: (resourceData.nameEs as string) || '',
           description: (resourceData.descEs as string) || '',
           type: (resourceData.rdfType as string) || '',
+          applicableTags,
         }),
       ]);
       setValidation(valResult);
@@ -133,24 +138,26 @@ export function AiQualityScore({ resourceData, onApplyTouristTypes }: AiQualityS
             </div>
           )}
 
-          {/* AI Category suggestions */}
-          {categorization && categorization.tourist_types.length > 0 && (
+          {/* AI Tag suggestions (UNE 178503 — guía-burros v2) */}
+          {categorization && categorization.suggested_keys.length > 0 && (
             <div className="ai-quality__section">
-              <h4 className="ai-quality__section-title">🏷️ Tipos de turismo sugeridos por IA</h4>
+              <h4 className="ai-quality__section-title">🏷️ Etiquetas sugeridas por IA</h4>
               <p className="ai-quality__reasoning">{categorization.reasoning}</p>
               <div className="ai-quality__tags">
-                {categorization.tourist_types.map((t) => (
-                  <span key={t} className="ai-quality__tag">{t.replace(' TOURISM', '').toLowerCase()}</span>
+                {categorization.suggested_keys.map((k) => (
+                  <span key={k} className="ai-quality__tag">
+                    {TAGS_BY_KEY[k]?.label ?? k}
+                  </span>
                 ))}
               </div>
-              {onApplyTouristTypes && (
+              {onApplyTagKeys && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
                   style={{ marginTop: '0.5rem' }}
-                  onClick={() => onApplyTouristTypes(categorization.tourist_types)}
+                  onClick={() => onApplyTagKeys(categorization.suggested_keys)}
                 >
-                  Aplicar tipos sugeridos
+                  Aplicar etiquetas sugeridas
                 </button>
               )}
             </div>

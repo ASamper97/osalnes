@@ -9,6 +9,7 @@
  */
 
 import { getAuthHeaders } from './api';
+import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -137,16 +138,24 @@ export async function aiValidate(context: Record<string, unknown>): Promise<Vali
   };
 }
 
-/** Suggest categories and tourist types */
+/** Suggest UNE 178503 tag keys from a resource description (guía-burros v2). */
 export interface CategorizationResult {
-  tourist_types: string[];
+  suggested_keys: string[];
   reasoning: string;
+}
+
+/** Tag descriptor sent to the edge function as catálogo aplicable. */
+export interface ApplicableTag {
+  key: string;
+  label: string;
+  field: string;
 }
 
 export async function aiCategorize(context: {
   name: string;
   description: string;
   type: string;
+  applicableTags: ApplicableTag[];
 }): Promise<CategorizationResult> {
   const res = await callAi<CategorizationResult>({
     action: 'categorize',
@@ -155,14 +164,20 @@ export async function aiCategorize(context: {
       name: context.name,
       type: context.type,
       description: context.description,
+      applicableTags: context.applicableTags,
     },
   });
 
+  // Valida las claves devueltas contra el catálogo (defensa contra
+  // alucinaciones del modelo — solo dejamos pasar las que existen).
+  let parsed: CategorizationResult = { suggested_keys: [], reasoning: '' };
   if (typeof res.result === 'object' && res.result !== null) {
-    return res.result as CategorizationResult;
+    parsed = res.result as CategorizationResult;
   }
-
-  return { tourist_types: [], reasoning: '' };
+  const suggested_keys = (parsed.suggested_keys ?? []).filter(
+    (k) => typeof k === 'string' && TAGS_BY_KEY[k] !== undefined,
+  );
+  return { suggested_keys, reasoning: parsed.reasoning ?? '' };
 }
 
 /** Import resource data from an external URL using AI */

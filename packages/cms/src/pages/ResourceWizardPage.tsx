@@ -19,8 +19,8 @@ import TagSelector from '@/components/TagSelector';
 import PidCompletenessCard from '@/components/PidCompletenessCard';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
-import { RESOURCE_TYPE_BY_XLSX_LABEL } from '@osalnes/shared/data/resource-type-catalog';
-import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
+import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
+import { TAGS_BY_KEY, TAGS_BY_GROUP } from '@osalnes/shared/data/tag-catalog';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -556,6 +556,13 @@ export function ResourceWizardPage() {
 
   const currentTypology = typologies.find((t) => t.typeCode === rdfType);
   const resourceTypeLabel = currentTypology?.name?.es ?? null;
+  // Subset del catálogo UNE 178503 que aplica a la tipología actual. Se
+  // pasa a AiQualityScore → aiCategorize → edge function como catálogo
+  // permitido, para reducir alucinaciones (el modelo solo puede elegir
+  // entre estas claves).
+  const applicableTags = getWizardGroupsForType(resourceTypeLabel)
+    .flatMap((g) => TAGS_BY_GROUP[g] ?? [])
+    .map((t) => ({ key: t.key, label: t.label, field: t.field as string }));
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -1106,7 +1113,11 @@ export function ResourceWizardPage() {
             municipio: municipalities.find((m) => m.id === municipioId)?.name?.es || '',
             hasMedia: !!savedId,
           }}
-          onApplyTouristTypes={(types) => { setTouristTypes(types); markDirty(); }}
+          applicableTags={applicableTags}
+          onApplyTagKeys={(keys) => {
+            setTagKeys((prev) => Array.from(new Set([...prev, ...keys])));
+            markDirty();
+          }}
         />
         <div className="wizard__completion-grid">
           <PidCompletenessCard

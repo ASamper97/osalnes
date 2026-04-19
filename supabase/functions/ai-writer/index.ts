@@ -95,19 +95,23 @@ Sin explicaciones adicionales, SOLO el JSON`,
 
 ${CONTEXT_SALNES}
 
-A partir del nombre y descripción de un recurso turístico, sugiere:
-1. Los tipos de turismo más relevantes (del estándar UNE 178503)
-2. Posibles categorías internas del portal
+Tarea: dado el nombre y descripción de un recurso turístico, sugiere qué
+etiquetas del catálogo UNE 178503 (versión local O Salnés) le aplican.
 
-Tipos de turismo disponibles:
-- Viajero: FAMILY, LGTBI, BACKPACKING, BUSINESS, ROMANTIC, SENIOR
-- Actividad: ADVENTURE, WELLNESS, CYCLING, DIVING, SAILING, WATER SPORTS, TREKKING
-- Motivación: BEACH AND SUN, CULTURAL, ECOTOURISM, HERITAGE, NATURE, RURAL, BIRDWATCHING, EVENTS AND FESTIVALS
-- Producto: FOOD, WINE, BEER, OLIVE OIL
+El catálogo aplicable al tipo concreto de este recurso viene en el mensaje
+del usuario como lista de tag_keys permitidas. SOLO puedes devolver claves
+de esa lista. NO inventes claves nuevas.
+
+Cada tag_key tiene formato "{groupKey}.{tagSlug}" (ej. "familiar.familias",
+"instalaciones.piscina-climatizada", "serv-alojamiento.aparcamiento",
+"municipio.sanxenxo").
+
+Elige solo las que claramente apliquen al texto; es preferible devolver
+pocas etiquetas muy pertinentes antes que muchas dudosas.
 
 Responde en JSON exacto:
-{"tourist_types":["TYPE1 TOURISM","TYPE2 TOURISM"],"reasoning":"explicación breve"}
-Sin texto adicional, SOLO el JSON`,
+{"suggested_keys":["group.slug","group.slug"],"reasoning":"explicación breve"}
+Sin texto adicional, SOLO el JSON.`,
 
   alt_text: `Genera un texto alternativo (alt text) descriptivo y accesible para una imagen turística.
 
@@ -184,10 +188,24 @@ Descripción: ${desc}`;
         const name = context?.name || '';
         const desc = text || context?.description || '';
         const type = context?.type || '';
+        // applicableTags viene precomputado desde el CMS (lib/ai.ts) a partir
+        // del catálogo UNE 178503 filtrado por la tipología del recurso. Deno
+        // no puede importar @osalnes/shared, así que no duplicamos el catálogo
+        // aquí — confiamos en el subset que manda el cliente.
+        const applicableTags = Array.isArray(context?.applicableTags)
+          ? context.applicableTags
+          : [];
+        const tagsList = applicableTags
+          .map((t: { key: string; label?: string; field?: string }) =>
+            `- ${t.key}: "${t.label ?? ''}" (${t.field ?? ''})`)
+          .join('\n');
         userMessage = `Clasifica este recurso turístico:
 Nombre: ${name}
 Tipo: ${type}
-Descripción: ${desc}`;
+Descripción: ${desc}
+
+Catálogo aplicable (usa SOLO estas claves):
+${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
         break;
       }
 
