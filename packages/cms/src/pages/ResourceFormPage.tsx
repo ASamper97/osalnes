@@ -505,6 +505,22 @@ export function ResourceFormPage() {
         </fieldset>
 
         {/* --- UNE 178503 sec. 7.6-7.7 --- */}
+        {/*
+          TODO legacy — sin TagSelector (guía-burros v2, Tarea 7).
+
+          El flujo canónico para clasificar recursos es el wizard
+          (/resources/:id). Esta ruta /resources/:id/classic no está enlazada
+          desde ningún sitio del CMS y se considera fallback latente; por eso
+          NO se integra aquí el <TagSelector> del catálogo UNE 178503 (154×18)
+          ni la persistencia en resource_tags. Los campos de abajo
+          (tourist_types, category_ids) son los legacy que el wizard sigue
+          escribiendo en paralelo hasta que se migre el dato.
+
+          Si se reactiva este fallback: copiar el patrón de
+          ResourceWizardPage.tsx — state tagKeys, useEffect de limpieza al
+          cambiar rdfType, loadResourceTags en el loader, saveResourceTags
+          tras el upsert en handleSubmit.
+        */}
         <fieldset>
           <legend>Clasificacion turistica (UNE 178503)</legend>
 
