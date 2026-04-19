@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
+import { saveResourceTags, loadResourceTags } from '@/lib/resource-tags';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
 import { MediaUploader } from '@/components/MediaUploader';
 import { DocumentUploader } from '@/components/DocumentUploader';
@@ -277,8 +279,15 @@ export function ResourceWizardPage() {
 
   useEffect(() => {
     if (isNew) return;
-    api.getResource(id!)
-      .then((r) => {
+    // Carga en paralelo del recurso (edge function) y sus tags UNE 178503
+    // (tabla resource_tags vía supabase-js directo, permitido por la policy
+    // authenticated de la migración 018). Si el fetch de tags falla —p.ej.
+    // tabla aún sin datos— seguimos adelante con array vacío; no bloquea.
+    Promise.all([
+      api.getResource(id!),
+      loadResourceTags(supabase, id!).catch(() => [] as string[]),
+    ])
+      .then(([r, keys]) => {
         setRdfType(r.rdfType || '');
         setRdfTypesSecondary(r.rdfTypes || []);
         setSlug(r.slug || '');
@@ -318,6 +327,7 @@ export function ResourceWizardPage() {
         setSavedId(r.id);
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
+        setTagKeys(keys);
         setLoading(false);
       })
       .catch((err) => { setError(err.message); setLoading(false); });
@@ -518,12 +528,22 @@ export function ResourceWizardPage() {
 
     try {
       dirty.current = false;
-      if (isNew || !savedId) {
+      const wasNew = isNew || !savedId;
+      let resourceId: string;
+      if (wasNew) {
         const created = await api.createResource(body);
         setSavedId(created.id);
-        navigate(`/resources/${created.id}`, { replace: true });
+        resourceId = created.id;
       } else {
-        await api.updateResource(savedId, body);
+        await api.updateResource(savedId!, body);
+        resourceId = savedId!;
+      }
+      // Sincroniza las tags UNE 178503 después del upsert del recurso
+      // (tabla resource_tags, policy authenticated de la migración 018).
+      await saveResourceTags(supabase, resourceId, tagKeys);
+      if (wasNew) {
+        navigate(`/resources/${resourceId}`, { replace: true });
+      } else {
         navigate('/resources');
       }
     } catch (err: unknown) {
