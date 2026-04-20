@@ -14,6 +14,14 @@ import {
   type SavedView,
 } from '@/lib/saved-views';
 import { useNotifications } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
+import { loadResourcesPidSummary, pidStatus, type PidSummary, type PidStatus } from '@/lib/resource-tags';
+
+const PID_STATUS_LABEL: Record<PidStatus, string> = {
+  ready: 'Listo PID',
+  partial: 'Mejorable',
+  incomplete: 'Incompleto',
+};
 
 const STATUS_LABELS: Record<string, string> = {
   borrador: 'Borrador',
@@ -74,6 +82,8 @@ export function ResourcesPage() {
   const [page, setPage] = useState(1);
   // Menú "⋯" de acciones por fila. Una fila abierta a la vez.
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Resumen PID por recurso (Lote 2). Se carga en paralelo tras listar.
+  const [pidByResource, setPidByResource] = useState<Record<string, PidSummary>>({});
 
   /** F3: clear the zona URL param without reloading. */
   function clearZonaFilter() {
@@ -159,7 +169,14 @@ export function ResourcesPage() {
     if (zonaFilterId) params.zona = zonaFilterId;
 
     api.getResources(params)
-      .then(setResources)
+      .then((res) => {
+        setResources(res);
+        // En paralelo: contadores PID para pintar la columna de completitud.
+        // Si falla (RLS, red), la columna queda como "incomplete" por defecto.
+        loadResourcesPidSummary(supabase, res.items.map((r) => r.id))
+          .then(setPidByResource)
+          .catch(() => setPidByResource({}));
+      })
       .catch((err) => setError(err.message));
   }, [page, filterType, filterStatus, filterMunicipio, zonaFilterId]);
 
@@ -424,13 +441,14 @@ export function ResourcesPage() {
                 <th>Nombre</th>
                 <th>Tipologia</th>
                 <th>Estado</th>
+                <th title="Completitud semantica UNE 178503 para export a SEGITTUR">PID</th>
                 <th>Actualizado</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6}>
+                <tr><td colSpan={7}>
                   <EmptyState
                     variant="inline"
                     icon="🏖️"
@@ -478,6 +496,29 @@ export function ResourcesPage() {
                     >
                       {STATUS_LABELS[r.status] || r.status}
                     </span>
+                  </td>
+                  <td>
+                    {(() => {
+                      const summary = pidByResource[r.id];
+                      const status = pidStatus(summary);
+                      const count = summary?.pidCount ?? 0;
+                      return (
+                        <span
+                          className={`pid-chip pid-chip--${status}`}
+                          title={
+                            status === 'incomplete'
+                              ? 'Faltan etiquetas obligatorias (tipo de recurso y municipio)'
+                              : status === 'partial'
+                                ? `${count} etiquetas PID — añade más para exportar`
+                                : `${count} etiquetas PID — listo para SEGITTUR`
+                          }
+                        >
+                          <span className="pid-chip__dot" aria-hidden="true" />
+                          {PID_STATUS_LABEL[status]}
+                          <span className="pid-chip__count">{count}</span>
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={{ fontSize: '0.8rem' }}>
                     {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString('es') : '-'}

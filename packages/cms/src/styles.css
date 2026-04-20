@@ -694,6 +694,51 @@ textarea:focus-visible {
   margin: 0.25rem 0;
 }
 
+/* ── Chip "Completitud PID" en el listado de recursos (Lote 2) ───────── */
+.pid-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pid-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pid-chip__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.7rem;
+  padding: 0 0.35rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.08);
+}
+.pid-chip--ready {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+.pid-chip--ready .pid-chip__dot { background: #16a34a; }
+.pid-chip--partial {
+  background: #fef9c3;
+  border-color: #fde68a;
+  color: #854d0e;
+}
+.pid-chip--partial .pid-chip__dot { background: #ca8a04; }
+.pid-chip--incomplete {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+.pid-chip--incomplete .pid-chip__dot { background: #dc2626; }
+
 /* ==========================================================================
    Alerts
    ========================================================================== */

@@ -70,3 +70,55 @@ export async function loadResourceTags(
   if (error) throw error;
   return (data ?? []).map((row) => row.tag_key as string);
 }
+
+/**
+ * Resumen PID por recurso — alimenta la columna "Completitud PID" del
+ * listado (Lote 2 rediseño). Una sola query con IN (ids), tolerante a
+ * error (devuelve mapa vacío → columna se rinde a "sin datos", no rompe).
+ */
+export interface PidSummary {
+  /** Total de tags marcadas pid_exportable=true */
+  pidCount: number;
+  /** Tiene al menos una tag con field='type' */
+  hasType: boolean;
+  /** Tiene al menos una tag con field='addressLocality' (municipio) */
+  hasLocality: boolean;
+}
+
+export async function loadResourcesPidSummary(
+  supabase: SupabaseClient,
+  resourceIds: string[],
+): Promise<Record<string, PidSummary>> {
+  const out: Record<string, PidSummary> = {};
+  if (resourceIds.length === 0) return out;
+  for (const id of resourceIds) out[id] = { pidCount: 0, hasType: false, hasLocality: false };
+
+  const { data, error } = await supabase
+    .from('resource_tags')
+    .select('resource_id, field, pid_exportable')
+    .in('resource_id', resourceIds);
+  if (error) return out;
+
+  for (const row of data ?? []) {
+    const s = out[row.resource_id as string];
+    if (!s) continue;
+    if (row.pid_exportable) s.pidCount++;
+    if (row.field === 'type') s.hasType = true;
+    if (row.field === 'addressLocality') s.hasLocality = true;
+  }
+  return out;
+}
+
+export type PidStatus = 'ready' | 'partial' | 'incomplete';
+
+/**
+ * Reglas coherentes con PidCompletenessCard del wizard (Tarea 5):
+ * - incomplete: falta `type` o falta `addressLocality` (mínimos obligatorios).
+ * - partial: tiene los dos pero menos de 5 tags PID exportables en total.
+ * - ready: ambos mínimos + ≥5 tags PID.
+ */
+export function pidStatus(summary: PidSummary | undefined): PidStatus {
+  if (!summary || !summary.hasType || !summary.hasLocality) return 'incomplete';
+  if (summary.pidCount < 5) return 'partial';
+  return 'ready';
+}
