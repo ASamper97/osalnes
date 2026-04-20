@@ -1,0 +1,228 @@
+/* ──────────────────────────────────────────────────────────────────────
+ * TemplatePicker — estilos
+ * Rediseño de la pantalla "¿Cómo quieres empezar?"
+ * ────────────────────────────────────────────────────────────────────── */
+
+.template-picker {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.template-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+.template-picker-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.01em;
+}
+.template-picker-header p {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+  max-width: 640px;
+  line-height: 1.55;
+}
+
+/* ── CTA import por IA ── */
+.template-import-cta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.07), rgba(99, 102, 241, 0.07));
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  border-radius: 12px;
+  color: #1e293b;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  font: inherit;
+}
+.template-import-cta:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(99, 102, 241, 0.12));
+  border-color: rgba(139, 92, 246, 0.4);
+}
+.template-import-cta:active {
+  transform: translateY(1px);
+}
+.template-import-cta-icon {
+  font-size: 1.3rem;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.template-import-cta-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.template-import-cta-body strong {
+  color: #7c3aed;
+  font-weight: 600;
+  font-size: 0.98rem;
+}
+.template-import-cta-body span {
+  color: #64748b;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.template-import-cta-arrow {
+  color: #7c3aed;
+  font-size: 1.2rem;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.template-import-cta:hover .template-import-cta-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+/* ── Separador ── */
+.template-picker-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0 1.5rem;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+}
+.template-picker-divider::before,
+.template-picker-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+/* ── Grid de plantillas ── */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.template-card {
+  text-align: left;
+  padding: 1.25rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  min-height: 170px;
+}
+.template-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
+}
+.template-card:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.template-card:active {
+  transform: translateY(0);
+}
+
+.template-card-icon {
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  line-height: 1;
+}
+
+.template-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
+}
+
+.template-card-desc {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0 0 auto;
+  line-height: 1.45;
+  padding-bottom: 0.85rem;
+}
+
+.template-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: auto;
+}
+.template-card-tags-count {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.template-card-tags-count--blank {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Tarjeta "empezar en blanco" — estilo secundario */
+.template-card--blank {
+  background: #fafafa;
+  border-style: dashed;
+}
+.template-card--blank:hover {
+  background: #ffffff;
+  border-style: solid;
+}
+
+/* ── Botones ── */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn-ghost {
+  background: transparent;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+.btn-ghost:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+/* ── Móvil ── */
+@media (max-width: 640px) {
+  .template-picker-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+}

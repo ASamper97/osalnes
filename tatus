@@ -1,0 +1,20 @@
+[33m0c1f66d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m feat(resources,users): municipio por usuario + "mis recursos" · lote 3b
+[33m28babfd[m feat(resources): banner "Pendiente de tu atención" contextual al rol · lote 3a
+[33med3614d[m feat(resources): columna Completitud PID en listado · lote 2
+[33m0397df9[m feat(resources): rediseño listado · lote 1 quick wins
+[33mfe67176[m guia-burros v2 · tarea 9 · test E2E v_resource_pid_tags verificado
+[33m6864a5e[m guia-burros v2 · tarea 8 · ai-writer.categorize sugiere tag_keys UNE 178503
+[33m005b4b0[m guia-burros v2 · tarea 7 · ResourceFormPage clásico marcado como legacy
+[33m963109c[m guia-burros v2 · tarea 6 · persistencia y carga de tags UNE 178503
+[33ma61ff6c[m guia-burros v2 · tarea 5 · PidCompletenessCard al inicio del paso 7
+[33mf36458b[m guia-burros v2 · tarea 4 · TagSelector integrado en paso 4 del ResourceWizard
+[33m019ac87[m guia-burros v2 · tarea 3 · CSS consolidado en styles.css
+[33m27d6c74[m guia-burros v2 · tarea 2 · migración 018 aplicada (resource_tags + vista + RLS)
+[33m4f6dc9a[m guia-burros v2 · tarea 1 · catálogos UNE 178503 exportados desde @osalnes/shared
+[33m9d332d4[m chore: guía-burros v2 · ficheros fuente sin integrar
+[33m7f2f44d[m fix(security): section 4 hardening — Recursos (Tanda Recursos-2)
+[33mf9bead4[m fix(recursos): critical hardening C1-C6 (Tanda Recursos-1)
+[33m923cfc6[m feat(zonas): resource count per zone with deep link (audit F3)
+[33mf0e75d9[m feat(zonas): seed 46 parroquias for the 9 O Salnés concellos (F2)
+[33m3eeaf1a[m fix(zonas): UX polish (Tanda 9, U5/U6/U7/U8/U10/U13/U14)
+[33m77623ee[m perf(zonas): section 8 performance work (Tanda 8, P3/P4/P5)
