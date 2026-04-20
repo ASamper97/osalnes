@@ -15,8 +15,8 @@
  * referencia aquí. Nunca al revés.
  */
 
-import type { Tag } from './tag-catalog';
-import { TAGS_BY_KEY } from './tag-catalog';
+import type { Tag } from './tag-catalog.js';
+import { TAGS_BY_KEY } from './tag-catalog.js';
 
 export interface ResourceTemplate {
   /** Clave estable (kebab-case) */

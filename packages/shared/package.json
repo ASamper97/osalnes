@@ -17,6 +17,10 @@
     "./data/resource-type-catalog": {
       "types": "./dist/data/resource-type-catalog.d.ts",
       "default": "./dist/data/resource-type-catalog.js"
+    },
+    "./data/resource-templates": {
+      "types": "./dist/data/resource-templates.d.ts",
+      "default": "./dist/data/resource-templates.js"
     }
   },
   "scripts": {
