@@ -16,6 +16,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.integration.tsx"]
+  "include": ["src"]
 }

@@ -13,6 +13,7 @@ import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import TemplatePicker from '@/pages/TemplatePicker';
 import { ImportFromUrlModal } from '@/components/ImportFromUrlModal';
+import MainTypeSelector from '@/components/MainTypeSelector';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
@@ -99,8 +100,15 @@ export function ResourceWizardPage() {
 
   // ── Form state ──────────────────────────────────────────────
   // Step 1: Identificacion
+  // rdfType se mantiene como state local porque recurso_turistico.rdf_type
+  // es NOT NULL — se deriva del mainTypeKey al guardar. La migración 020 lo
+  // marca DEPRECATED, pero no lo borra hasta la limpieza posterior.
   const [rdfType, setRdfType] = useState('TouristAttraction');
   const [rdfTypesSecondary, setRdfTypesSecondary] = useState<string[]>([]);
+  // Paso 0 · tarea 4: tipología UNE como fuente única. `mainTypeKey` es
+  // la clave del catálogo (tipo-de-recurso.*); los subtipos viven ahora en
+  // el paso 4 como tags, NO en un segundo vocabulario.
+  const [mainTypeKey, setMainTypeKey] = useState<string | null>(null);
   const [slug, setSlug] = useState('');
   const [municipioId, setMunicipioId] = useState('');
   const [zonaId, setZonaId] = useState('');
@@ -222,6 +230,7 @@ export function ResourceWizardPage() {
       // "Empezar en blanco" — el paso 1 forzará a elegir una tipología.
       setTemplateApplied(true);
       setActiveTemplate(null);
+      setMainTypeKey(null);
       markDirty();
       return;
     }
@@ -231,6 +240,7 @@ export function ResourceWizardPage() {
     // hasta la migración de limpieza post-backfill).
     const mainTag = TAGS_BY_KEY[tpl.mainTagKey];
     if (mainTag) setRdfType(mainTag.value);
+    setMainTypeKey(tpl.mainTagKey);
 
     // Tags pre-aplicadas: main + initialTagKeys → visibles ya en el paso 4.
     setTagKeys([tpl.mainTagKey, ...tpl.initialTagKeys]);
@@ -355,6 +365,27 @@ export function ResourceWizardPage() {
     );
   }, [rdfType, typologies]);
 
+  // Paso 0 · tarea 4 — Sincronía mainTypeKey ↔ tagKeys ↔ rdfType.
+  // Cuando el usuario cambia la tipología principal en el paso 1:
+  //   1. El tag `tipo-de-recurso.*` correspondiente aparece ya marcado en
+  //      el TagSelector del paso 4 (setTagKeys con mainTypeKey al frente).
+  //   2. Cualquier otro tag `tipo-de-recurso.*` previo se quita (solo uno
+  //      principal; los subtipos viven en otros grupos del catálogo).
+  //   3. rdf_type legacy se deriva del value schema.org del catálogo para
+  //      no violar el NOT NULL de recurso_turistico.rdf_type al guardar
+  //      (hasta la migración de limpieza post-backfill).
+  useEffect(() => {
+    if (!mainTypeKey) return;
+    setTagKeys((prev) => {
+      const filtered = prev.filter(
+        (k) => !k.startsWith('tipo-de-recurso.') || k === mainTypeKey,
+      );
+      return filtered.includes(mainTypeKey) ? filtered : [...filtered, mainTypeKey];
+    });
+    const tag = TAGS_BY_KEY[mainTypeKey];
+    if (tag?.value) setRdfType(tag.value);
+  }, [mainTypeKey]);
+
   useEffect(() => {
     if (isNew) return;
     // Carga en paralelo del recurso (edge function) y sus tags UNE 178503
@@ -406,6 +437,11 @@ export function ResourceWizardPage() {
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
         setTagKeys(keys);
+        // Hidratar mainTypeKey desde el primer tag del grupo tipo-de-recurso.*
+        // presente en las tags del recurso. Si no hay, queda null — el paso 1
+        // forzará a elegir uno antes de avanzar.
+        const mainFromTags = keys.find((k) => k.startsWith('tipo-de-recurso.'));
+        if (mainFromTags) setMainTypeKey(mainFromTags);
         setLoading(false);
       })
       .catch((err) => { setError(err.message); setLoading(false); });
@@ -473,12 +509,15 @@ export function ResourceWizardPage() {
 
   const validateStep1 = useCallback((): string[] => {
     const errs: string[] = [];
-    if (!rdfType) errs.push('Selecciona una tipologia para el recurso');
+    // Paso 0 · tarea 4: mainTypeKey (tipología UNE) es obligatorio.
+    // rdfType legacy se deriva automáticamente, no se valida aparte.
+    if (!mainTypeKey) errs.push('Selecciona una tipología para el recurso');
     if (!nameEs.trim()) errs.push('El nombre en castellano es obligatorio');
-    if (!slug.trim()) errs.push('El slug es obligatorio (se genera automaticamente a partir del nombre)');
-    if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errs.push('El slug solo admite letras minusculas, numeros y guiones');
+    if (!municipioId) errs.push('El municipio es obligatorio');
+    if (!slug.trim()) errs.push('El slug es obligatorio (se genera automáticamente a partir del nombre)');
+    if (slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) errs.push('El slug solo admite letras minúsculas, números y guiones');
     return errs;
-  }, [rdfType, nameEs, slug]);
+  }, [mainTypeKey, nameEs, municipioId, slug]);
 
   const validateStep2 = useCallback((): string[] => {
     // Content step — name already validated in step 1, descriptions are optional but recommended
@@ -575,9 +614,14 @@ export function ResourceWizardPage() {
     setError(null);
     setSaving(true);
 
+    // Paso 0 · tarea 4: rdf_type deriva del value del mainTag UNE si está
+    // presente (fuente única); cae a rdfType legacy y por último al default
+    // 'TouristAttraction' para no violar el NOT NULL de recurso_turistico.
+    const mainTagDerivedType = mainTypeKey ? TAGS_BY_KEY[mainTypeKey]?.value : null;
+    const effectiveRdfType = mainTagDerivedType || rdfType || 'TouristAttraction';
     const body = {
-      rdf_type: rdfType,
-      rdf_types: rdfTypesSecondary.filter((t) => t !== rdfType),
+      rdf_type: effectiveRdfType,
+      rdf_types: rdfTypesSecondary.filter((t) => t !== effectiveRdfType),
       slug,
       municipio_id: municipioId || null,
       zona_id: zonaId || null,
@@ -616,9 +660,15 @@ export function ResourceWizardPage() {
         await api.updateResource(savedId!, body);
         resourceId = savedId!;
       }
-      // Sincroniza las tags UNE 178503 después del upsert del recurso
-      // (tabla resource_tags, policy authenticated de la migración 018).
-      await saveResourceTags(supabase, resourceId, tagKeys);
+      // Sincroniza las tags UNE 178503 después del upsert del recurso.
+      // Incluye el mainTypeKey del paso 1 junto con los tagKeys del paso 4
+      // (Set para evitar duplicado si ya estaba). policy authenticated de
+      // la migración 018.
+      const allKeys = Array.from(new Set([
+        ...(mainTypeKey ? [mainTypeKey] : []),
+        ...tagKeys,
+      ]));
+      await saveResourceTags(supabase, resourceId, allKeys);
       if (wasNew) {
         navigate(`/resources/${resourceId}`, { replace: true });
       } else {
@@ -727,51 +777,22 @@ export function ResourceWizardPage() {
       {currentStep === 0 && (
         <>
           <WizardFieldGroup
-            title="Tipologia principal"
-            description="Que tipo de recurso turistico es? Esto determina los campos disponibles y como se muestra en la web."
+            title="Tipología"
             required
+            tip="La tipología determina qué campos y etiquetas te pide el wizard más adelante. Si tu recurso encaja en varios tipos, elige el principal ahora; los matices se añaden en el paso 4 como etiquetas."
           >
-            <div className="form-field">
-              <select value={rdfType} onChange={(e) => { setRdfType(e.target.value); markDirty(); }}>
-                {typologies.map((t) => (
-                  <option key={t.typeCode} value={t.typeCode}>
-                    {t.name?.es || t.typeCode} ({t.grupo})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ fontSize: '0.78rem', color: 'var(--cms-text-light)', cursor: 'pointer' }}>
-                Tipologias secundarias ({rdfTypesSecondary.length})
-              </summary>
-              <div className="secondary-types-grid" style={{ marginTop: '0.5rem' }}>
-                {typologies.filter((t) => t.typeCode !== rdfType).map((t) => (
-                  <label key={t.typeCode} className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={rdfTypesSecondary.includes(t.typeCode)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setRdfTypesSecondary((prev) => [...prev, t.typeCode]);
-                        } else {
-                          setRdfTypesSecondary((prev) => prev.filter((x) => x !== t.typeCode));
-                        }
-                        markDirty();
-                      }}
-                    />
-                    {t.name?.es || t.typeCode}
-                  </label>
-                ))}
-              </div>
-            </details>
+            <MainTypeSelector
+              value={mainTypeKey}
+              onChange={(next) => { setMainTypeKey(next); markDirty(); }}
+              helperText="Elige la tipología que mejor describa el recurso. Son los 18 tipos oficiales UNE 178503."
+            />
           </WizardFieldGroup>
 
           <WizardFieldGroup
             title="Nombre del recurso"
-            description="El nombre principal tal como se mostrara en la web y en buscadores."
+            description="El nombre principal tal como se mostrará en la web y en buscadores."
             required
-            tip="Usa el nombre oficial o el mas reconocible. Ejemplo: 'Mirador de A Lanzada', no 'mirador lanzada'."
+            tip="Usa el nombre oficial o el más reconocible. Ejemplo: 'Mirador de A Lanzada', no 'mirador lanzada'."
           >
             <div className="form-row">
               <div className="form-field">
@@ -796,32 +817,13 @@ export function ResourceWizardPage() {
           </WizardFieldGroup>
 
           <WizardFieldGroup
-            title="Slug (URL amigable)"
-            description="Se genera automaticamente a partir del nombre. Es la parte de la URL que identifica este recurso."
-          >
-            <div className="form-field">
-              <input
-                value={slug}
-                onChange={(e) => { setSlug(e.target.value); markDirty(); }}
-                placeholder="mirador-a-lanzada"
-                disabled={!isNew}
-              />
-              {!isNew && <span className="field-hint">El slug no se puede cambiar para proteger las URLs existentes</span>}
-              {isNew && slug && (
-                <span className="field-hint">
-                  Vista previa: {WEB_BASE}/es/recurso/<strong>{slug}</strong>
-                </span>
-              )}
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
             title="Municipio y zona"
-            description="A que municipio de O Salnes pertenece este recurso?"
+            required
+            tip="La zona es la parroquia o zona turística dentro del municipio — ayuda a que el buscador y el mapa filtren con precisión. Se cargan al elegir municipio."
           >
             <div className="form-row">
               <div className="form-field">
-                <label>Municipio</label>
+                <label>Municipio *</label>
                 <select
                   value={municipioId}
                   onChange={(e) => {
@@ -837,9 +839,24 @@ export function ResourceWizardPage() {
                 </select>
               </div>
               <div className="form-field">
-                <label>Zona</label>
-                <select value={zonaId} onChange={(e) => { setZonaId(e.target.value); markDirty(); }} disabled={!municipioId}>
-                  <option value="">-- Sin zona --</option>
+                <label>
+                  Zona / Parroquia
+                  {municipioId && zones.length === 0 && (
+                    <span className="field-hint"> (sin zonas registradas)</span>
+                  )}
+                </label>
+                <select
+                  value={zonaId}
+                  onChange={(e) => { setZonaId(e.target.value); markDirty(); }}
+                  disabled={!municipioId || zones.length === 0}
+                >
+                  <option value="">
+                    {!municipioId
+                      ? '-- Elige municipio primero --'
+                      : zones.length === 0
+                        ? '-- Sin zonas --'
+                        : '-- Sin zona --'}
+                  </option>
                   {zones.map((z) => (
                     <option key={z.id} value={z.id}>{z.name?.es || z.slug}</option>
                   ))}
@@ -847,6 +864,31 @@ export function ResourceWizardPage() {
               </div>
             </div>
           </WizardFieldGroup>
+
+          {/* Slug escondido tras un <details> — el 95% de editores no lo
+              necesita tocar (se genera solo del nombre). Al abrirlo se ve
+              la URL resultante y un aviso de que editarlo rompe enlaces. */}
+          <details className="wizard-advanced">
+            <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: 'var(--cms-text-light)' }}>
+              ⚙️ Editar slug (URL amigable)
+            </summary>
+            <div className="form-field" style={{ marginTop: '0.5rem' }}>
+              <input
+                value={slug}
+                onChange={(e) => { setSlug(e.target.value); markDirty(); }}
+                placeholder="se-genera-automaticamente"
+                disabled={!isNew}
+              />
+              {!isNew && <span className="field-hint">El slug no se puede cambiar para proteger las URLs existentes.</span>}
+              {isNew && (
+                <span className="field-hint">
+                  Se genera automáticamente desde el nombre. Vista previa:{' '}
+                  <code>{WEB_BASE}/es/recurso/<strong>{slug || 'mirador-a-lanzada'}</strong></code>.
+                  Solo edítalo si sabes lo que haces — cambios rompen enlaces antiguos.
+                </span>
+              )}
+            </div>
+          </details>
         </>
       )}
 
