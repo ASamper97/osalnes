@@ -69,8 +69,11 @@ export function ResourcesPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterMunicipio, setFilterMunicipio] = useState('');
   const [searchName, setSearchName] = useState('');
   const [page, setPage] = useState(1);
+  // Menú "⋯" de acciones por fila. Una fila abierta a la vez.
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   /** F3: clear the zona URL param without reloading. */
   function clearZonaFilter() {
@@ -150,6 +153,7 @@ export function ResourcesPage() {
     const params: Record<string, string> = { page: String(page), limit: '20' };
     if (filterType) params.type = filterType;
     if (filterStatus) params.status = filterStatus;
+    if (filterMunicipio) params.municipio = filterMunicipio;
     // F3: include the zona filter when present so the public api restricts
     // the result set server-side. Receives a zona UUID.
     if (zonaFilterId) params.zona = zonaFilterId;
@@ -157,7 +161,7 @@ export function ResourcesPage() {
     api.getResources(params)
       .then(setResources)
       .catch((err) => setError(err.message));
-  }, [page, filterType, filterStatus, zonaFilterId]);
+  }, [page, filterType, filterStatus, filterMunicipio, zonaFilterId]);
 
   useEffect(() => {
     loadResources();
@@ -243,6 +247,33 @@ export function ResourcesPage() {
       setBusyId(null);
     }
   }
+
+  // Mapas de etiquetas para mostrar nombres en español en vez de códigos
+  // técnicos (TouristAttraction → "Atracción turística", etc.). Datos
+  // vienen de la edge function /typologies y /municipalities (ya cacheados
+  // 5 min en api.ts).
+  const typologyLabel = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const t of typologies) m[t.typeCode] = t.name?.es || t.typeCode;
+    return m;
+  }, [typologies]);
+
+  const municipioLabel = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const mu of municipalities) m[mu.id] = mu.name?.es || mu.slug;
+    return m;
+  }, [municipalities]);
+
+  // Click fuera del menú "⋯" para cerrarlo. Solo activo cuando hay un menú abierto.
+  useEffect(() => {
+    if (!openMenuId) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.action-menu')) setOpenMenuId(null);
+    }
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [openMenuId]);
 
   const filtered = useMemo(() => {
     if (!resources) return [];
@@ -356,13 +387,19 @@ export function ResourcesPage() {
           ))}
         </select>
 
-        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}>
-          <option value="">Todos los estados</option>
-          <option value="borrador">Borrador</option>
-          <option value="revision">Revision</option>
-          <option value="publicado">Publicado</option>
-          <option value="archivado">Archivado</option>
+        <select
+          value={filterMunicipio}
+          onChange={(e) => { setFilterMunicipio(e.target.value); setPage(1); }}
+          aria-label="Filtrar por municipio"
+        >
+          <option value="">Todos los municipios</option>
+          {municipalities.map((m) => (
+            <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+          ))}
         </select>
+        {/* El select redundante "Todos los estados" se sustituye por los tabs
+            de saved-views arriba (Todos / Publicados / Revisión / Borradores /
+            Archivados). filterStatus ahora se controla desde esos tabs. */}
       </div>
 
       {!resources && !error && <SkeletonTable rows={6} />}
@@ -420,9 +457,20 @@ export function ResourcesPage() {
                   <td>
                     <strong>{r.name?.es || r.name?.gl || r.slug}</strong>
                     <br />
-                    <span style={{ fontSize: '0.75rem', color: '#999' }}>{r.slug}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#999' }}>
+                      {r.municipioId && municipioLabel[r.municipioId]
+                        ? `${municipioLabel[r.municipioId]} · ${r.slug}`
+                        : r.slug}
+                    </span>
                   </td>
-                  <td><span className={`tipo-badge tipo-badge--${TIPO_GRUPO[r.rdfType] || 'general'}`}>{r.rdfType}</span></td>
+                  <td>
+                    <span
+                      className={`tipo-badge tipo-badge--${TIPO_GRUPO[r.rdfType] || 'general'}`}
+                      title={r.rdfType}
+                    >
+                      {typologyLabel[r.rdfType] || r.rdfType}
+                    </span>
+                  </td>
                   <td>
                     <span
                       className="status-badge"
@@ -439,22 +487,62 @@ export function ResourcesPage() {
                       <button className="btn btn-sm" onClick={() => navigate(`/resources/${r.id}`)} disabled={busyId === r.id}>
                         Editar
                       </button>
-                      <button className="btn btn-sm btn-outline" onClick={() => setQrResource({ slug: r.slug, name: r.name?.es || r.name?.gl || r.slug })} title="Generar QR">
-                        QR
-                      </button>
-                      {(STATE_TRANSITIONS[r.status] || []).map((t) => (
+                      <div className="action-menu">
                         <button
-                          key={t.target}
-                          className={`btn btn-sm ${t.style || 'btn-outline'}`}
-                          onClick={() => handleStatusChange(r.id, t.target)}
+                          type="button"
+                          className="btn btn-sm btn-icon"
+                          aria-label="Mas acciones"
+                          aria-haspopup="menu"
+                          aria-expanded={openMenuId === r.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(openMenuId === r.id ? null : r.id);
+                          }}
                           disabled={busyId === r.id}
                         >
-                          {busyId === r.id ? '...' : t.label}
+                          ⋯
                         </button>
-                      ))}
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id, r.name?.es || r.slug)} disabled={busyId === r.id}>
-                        {busyId === r.id ? '...' : 'Eliminar'}
-                      </button>
+                        {openMenuId === r.id && (
+                          <div className="action-menu__dropdown" role="menu">
+                            <button
+                              type="button"
+                              className="action-menu__item"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setQrResource({ slug: r.slug, name: r.name?.es || r.name?.gl || r.slug });
+                              }}
+                            >
+                              Ver QR
+                            </button>
+                            {(STATE_TRANSITIONS[r.status] || []).map((t) => (
+                              <button
+                                key={t.target}
+                                type="button"
+                                className={`action-menu__item${t.style === 'btn-danger' ? ' action-menu__item--warning' : ''}`}
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  handleStatusChange(r.id, t.target);
+                                }}
+                                disabled={busyId === r.id}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                            <div className="action-menu__separator" />
+                            <button
+                              type="button"
+                              className="action-menu__item action-menu__item--danger"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                handleDelete(r.id, r.name?.es || r.slug);
+                              }}
+                              disabled={busyId === r.id}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>

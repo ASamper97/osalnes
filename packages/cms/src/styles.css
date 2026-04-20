@@ -630,7 +630,69 @@ textarea:focus-visible {
 .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.action-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.action-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+
+/* ── Kebab menu "⋯" para la tabla de recursos (Lote 1 rediseño) ─────── */
+.btn-icon {
+  width: 32px;
+  padding: 0.25rem 0;
+  text-align: center;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.action-menu {
+  position: relative;
+  display: inline-block;
+}
+.action-menu__dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(15, 28, 46, 0.18);
+  padding: 0.25rem 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+.action-menu__item {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  color: #1f2937;
+  cursor: pointer;
+  width: 100%;
+}
+.action-menu__item:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.action-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.action-menu__item--warning {
+  color: #92400e;
+}
+.action-menu__item--warning:hover:not(:disabled) {
+  background: #fef3c7;
+}
+.action-menu__item--danger {
+  color: #b91c1c;
+}
+.action-menu__item--danger:hover:not(:disabled) {
+  background: #fee2e2;
+}
+.action-menu__separator {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0.25rem 0;
+}
 
 /* ==========================================================================
    Alerts
