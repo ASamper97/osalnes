@@ -1,9 +1,9 @@
 -- ==========================================================================
--- Migration 019 — Fuente única de tipologías · ROLLBACK
+-- Migration 020 — Fuente única de tipologías · ROLLBACK
 -- ==========================================================================
 
 -- 4) Trigger y función de warning
-drop trigger if exists trg_warn_legacy_tipology on public.resources;
+drop trigger if exists trg_warn_legacy_tipology on public.recurso_turistico;
 drop function if exists public._warn_legacy_tipology_write();
 
 -- 3) Función de backfill y tabla puente
@@ -17,6 +17,7 @@ drop view if exists public.v_resource_main_type;
 do $$
 declare
   cols text[] := array[
+    'rdf_type', 'rdf_types',
     'tipology_main', 'type_main', 'main_type', 'tipologia_principal', 'primary_type',
     'tipology_secondary', 'type_secondary', 'secondary_types', 'tipologias_secundarias', 'secondary_type'
   ];
@@ -25,9 +26,9 @@ begin
   foreach col in array cols loop
     if exists (
       select 1 from information_schema.columns
-      where table_schema = 'public' and table_name = 'resources' and column_name = col
+      where table_schema = 'public' and table_name = 'recurso_turistico' and column_name = col
     ) then
-      execute format($q$comment on column public.resources.%I is null$q$, col);
+      execute format($q$comment on column public.recurso_turistico.%I is null$q$, col);
     end if;
   end loop;
 end $$;
