@@ -17,6 +17,7 @@ import { useNotifications } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { loadResourcesPidSummary, pidStatus, type PidSummary, type PidStatus } from '@/lib/resource-tags';
 import { PendingTasksBanner } from '@/components/PendingTasksBanner';
+import { useAuth } from '@/lib/auth-context';
 
 const PID_STATUS_LABEL: Record<PidStatus, string> = {
   ready: 'Listo PID',
@@ -63,6 +64,7 @@ export function ResourcesPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { notify } = useNotifications();
+  const { profile } = useAuth();
   // F3: read ?zona=<id> URL param so the "click a zone → see its recursos"
   // flow from ZonesMapPage / ZonesPage works. We also keep a local cache of
   // all zones (small dataset, see use-zones P3 trade-off) so we can render
@@ -79,6 +81,12 @@ export function ResourcesPage() {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterMunicipio, setFilterMunicipio] = useState('');
+  // true → añade ?created_by=me en el listado. Lote 3b.
+  const [onlyMine, setOnlyMine] = useState(false);
+  // Flag para no repisar la preselección del municipio del user cuando ya
+  // tocó el filtro manualmente. Sin esto, cualquier re-render del hook
+  // auth devolvería al filtro default al municipio del editor.
+  const [municipioTouched, setMunicipioTouched] = useState(false);
   const [searchName, setSearchName] = useState('');
   const [page, setPage] = useState(1);
   // Menú "⋯" de acciones por fila. Una fila abierta a la vez.
@@ -165,6 +173,7 @@ export function ResourcesPage() {
     if (filterType) params.type = filterType;
     if (filterStatus) params.status = filterStatus;
     if (filterMunicipio) params.municipio = filterMunicipio;
+    if (onlyMine) params.created_by = 'me';
     // F3: include the zona filter when present so the public api restricts
     // the result set server-side. Receives a zona UUID.
     if (zonaFilterId) params.zona = zonaFilterId;
@@ -179,7 +188,7 @@ export function ResourcesPage() {
           .catch(() => setPidByResource({}));
       })
       .catch((err) => setError(err.message));
-  }, [page, filterType, filterStatus, filterMunicipio, zonaFilterId]);
+  }, [page, filterType, filterStatus, filterMunicipio, onlyMine, zonaFilterId]);
 
   useEffect(() => {
     loadResources();
@@ -194,8 +203,27 @@ export function ResourcesPage() {
       setFilterStatus(qStatus);
       setPage(1);
     }
+    // Lote 3b — el link "Ver mis borradores" del PendingTasksBanner
+    // trae ?mine=1 para activar el toggle "Solo mis recursos" sin que el
+    // editor tenga que marcarlo a mano.
+    if (searchParams.get('mine') === '1' && !onlyMine) {
+      setOnlyMine(true);
+      setPage(1);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Preselecciona el municipio del usuario (migración 019). Se aplica una
+  // sola vez al cargar el perfil y solo si el editor no ha tocado el filtro;
+  // si lo cambió manualmente, `municipioTouched` lo deja en paz.
+  useEffect(() => {
+    if (municipioTouched) return;
+    if (!profile?.municipioId) return;
+    if (filterMunicipio) return;
+    setFilterMunicipio(profile.municipioId);
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.municipioId]);
 
   useEffect(() => {
     api.getTypologies().then(setTypologies).catch(() => {});
@@ -423,7 +451,11 @@ export function ResourcesPage() {
 
         <select
           value={filterMunicipio}
-          onChange={(e) => { setFilterMunicipio(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setFilterMunicipio(e.target.value);
+            setMunicipioTouched(true);
+            setPage(1);
+          }}
           aria-label="Filtrar por municipio"
         >
           <option value="">Todos los municipios</option>
@@ -431,6 +463,19 @@ export function ResourcesPage() {
             <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
           ))}
         </select>
+        {/* Toggle "Solo mis recursos" — envía ?created_by=me a la edge
+            function /resources (Lote 3b). Oculto para analitica/tecnico
+            que no tienen recursos propios por naturaleza de su rol. */}
+        {profile?.role && profile.role !== 'analitica' && profile.role !== 'tecnico' && (
+          <label className="only-mine-toggle">
+            <input
+              type="checkbox"
+              checked={onlyMine}
+              onChange={(e) => { setOnlyMine(e.target.checked); setPage(1); }}
+            />
+            Solo mis recursos
+          </label>
+        )}
         {/* El select redundante "Todos los estados" se sustituye por los tabs
             de saved-views arriba (Todos / Publicados / Revisión / Borradores /
             Archivados). filterStatus ahora se controla desde esos tabs. */}

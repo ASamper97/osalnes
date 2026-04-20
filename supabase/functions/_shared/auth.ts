@@ -5,10 +5,15 @@
 import { getAdminClient } from './supabase.ts';
 
 export interface AuthUser {
+  /** Supabase auth.user.id (stable UUID from auth schema) */
   id: string;
+  /** usuario.id — the FK target for recurso_turistico.created_by and friends */
+  dbId: string;
   email: string;
   role: string;
   active: boolean;
+  /** Municipio asignado por defecto al editor local. NULL para admins/analítica. */
+  municipioId: string | null;
 }
 
 /**
@@ -50,11 +55,11 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
   // privileges to anyone holding a valid Supabase JWT.
 
   // Step 1: lookup by stable auth_user_id
-  let dtiUser: { id: string; rol: string; activo: boolean } | null = null;
+  let dtiUser: { id: string; rol: string; activo: boolean; municipio_id: string | null } | null = null;
   {
     const { data } = await sb
       .from('usuario')
-      .select('id, rol, activo')
+      .select('id, rol, activo, municipio_id')
       .eq('auth_user_id', user.id)
       .maybeSingle();
     dtiUser = data;
@@ -67,7 +72,7 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
     }
     const { data } = await sb
       .from('usuario')
-      .select('id, rol, activo')
+      .select('id, rol, activo, municipio_id')
       .ilike('email', user.email)
       .maybeSingle();
     dtiUser = data;
@@ -94,7 +99,14 @@ export async function verifyAuth(req: Request): Promise<AuthUser> {
     throw { status: 403, message: 'Tu cuenta está desactivada. Contacta con un administrador.' };
   }
 
-  return { id: user.id, email: user.email || '', role: dtiUser.rol, active: dtiUser.activo };
+  return {
+    id: user.id,
+    dbId: dtiUser.id,
+    email: user.email || '',
+    role: dtiUser.rol,
+    active: dtiUser.activo,
+    municipioId: dtiUser.municipio_id ?? null,
+  };
 }
 
 /** Throw 403 if the user does not have one of the required roles. */

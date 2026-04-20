@@ -11,6 +11,7 @@ import { routePath, matchRoute } from '../_shared/router.ts';
 import { formatError } from '../_shared/errors.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
 import { listZones as listZonesShared } from '../_shared/zones.ts';
+import { verifyAuth } from '../_shared/auth.ts';
 
 const FN = 'api';
 
@@ -157,6 +158,28 @@ async function listResources(url: URL, req: Request) {
   const status = url.searchParams.get('status') || 'publicado';
   const nameQuery = url.searchParams.get('q') || undefined;
 
+  // Lote 3b rediseño — filtro "mis recursos" (created_by = me) para que el
+  // editor vea solo los suyos desde el listado del CMS. Acepta:
+  //   created_by=me       → resuelve al usuario.id del JWT (requiere header)
+  //   created_by=<uuid>   → literal (para admin u otras integraciones)
+  //   created_by=null     → recursos sin autor (legacy pre-auth)
+  // Si "me" viene sin Authorization válido, se ignora silenciosamente y el
+  // endpoint responde su comportamiento público habitual.
+  const createdByRaw = url.searchParams.get('created_by');
+  let createdBy: string | 'null' | undefined;
+  if (createdByRaw === 'me') {
+    try {
+      const authed = await verifyAuth(req);
+      createdBy = authed.dbId;
+    } catch {
+      createdBy = undefined;
+    }
+  } else if (createdByRaw === 'null') {
+    createdBy = 'null';
+  } else if (createdByRaw) {
+    createdBy = createdByRaw;
+  }
+
   // If searching by name, first find matching IDs from translations.
   //
   // S9 — previous implementation had `.limit(100)` here which silently
@@ -193,6 +216,8 @@ async function listResources(url: URL, req: Request) {
   if (municipio) query = query.eq('municipio_id', municipio);
   if (zona) query = query.eq('zona_id', zona);
   if (matchingIds) query = query.in('id', matchingIds);
+  if (createdBy === 'null') query = query.is('created_by', null);
+  else if (createdBy) query = query.eq('created_by', createdBy);
 
   const offset = (page - 1) * limit;
   const orderCol = sort === 'updated' ? 'updated_at' : 'created_at';

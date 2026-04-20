@@ -796,6 +796,23 @@ textarea:focus-visible {
   flex-wrap: wrap;
 }
 
+/* ── Toggle "Solo mis recursos" (Lote 3b) ──────────────────────────── */
+.only-mine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.85rem;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+.only-mine-toggle:hover { background: #f8fafc; }
+.only-mine-toggle input { cursor: pointer; }
+
 /* ==========================================================================
    Alerts
    ========================================================================== */

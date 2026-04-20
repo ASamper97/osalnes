@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type UserItem } from '@/lib/api';
+import { api, type UserItem, type MunicipalityItem } from '@/lib/api';
 import { EmptyState } from '@/components/EmptyState';
 import { useConfirm } from '@/components/ConfirmDialog';
 import { useNotifications } from '@/lib/notifications';
@@ -106,6 +106,9 @@ export function UsersPage() {
   const [email, setEmail] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState('editor');
+  // Migración 019 — municipio opcional asignado al usuario (editor local).
+  const [municipioId, setMunicipioId] = useState<string>('');
+  const [municipalities, setMunicipalities] = useState<MunicipalityItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -122,12 +125,17 @@ export function UsersPage() {
 
   useEffect(() => { loadUsers(); }, []);
 
+  useEffect(() => {
+    api.getMunicipalities().then(setMunicipalities).catch(() => {});
+  }, []);
+
   function resetForm() {
     setEditingId(null);
     setShowForm(false);
     setEmail('');
     setNombre('');
     setRol('editor');
+    setMunicipioId('');
   }
 
   function startCreate() {
@@ -141,6 +149,7 @@ export function UsersPage() {
     setEmail(u.email);
     setNombre(u.nombre);
     setRol(u.rol);
+    setMunicipioId(u.municipio_id ?? '');
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -157,7 +166,7 @@ export function UsersPage() {
 
     try {
       if (editingId) {
-        await api.updateUser(editingId, { nombre, rol });
+        await api.updateUser(editingId, { nombre, rol, municipio_id: municipioId || null });
         notify({
           type: 'success',
           title: 'Usuario actualizado',
@@ -167,7 +176,7 @@ export function UsersPage() {
         loadUsers();
       } else {
         // Create user — receives back the invitation link to share manually
-        const result = await api.createUser({ email, nombre, rol });
+        const result = await api.createUser({ email, nombre, rol, municipio_id: municipioId || null });
         const userEmail = email;
         const userNombre = nombre;
         resetForm();
@@ -351,6 +360,25 @@ export function UsersPage() {
             <div className="form-field">
               <label>Nombre *</label>
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder="Nombre Apellidos" />
+            </div>
+          </div>
+
+          {/* Municipio asignado — opcional. Si el usuario lo tiene, el
+              listado de Recursos le aparecerá prefiltrado por ese municipio
+              al entrar (mejora UX editor local · migración 019). */}
+          <div className="form-row">
+            <div className="form-field">
+              <label>Municipio asignado (opcional)</label>
+              <select value={municipioId} onChange={(e) => setMunicipioId(e.target.value)}>
+                <option value="">— Sin municipio fijo —</option>
+                {municipalities.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name?.es || m.slug}</option>
+                ))}
+              </select>
+              <span className="field-hint">
+                Recomendado para editores locales (Cambados, Sanxenxo…). Déjalo vacío
+                para perfiles transversales (admin, validador, analítica).
+              </span>
             </div>
           </div>
 

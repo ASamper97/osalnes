@@ -73,7 +73,13 @@ Deno.serve(async (req: Request) => {
     // ==================================================================
 
     if (method === 'GET' && path === '/profile') {
-      return json({ id: user.id, email: user.email, role: user.role, active: user.active }, 200, req);
+      return json({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+        municipioId: user.municipioId,
+      }, 200, req);
     }
 
     if (method === 'GET' && path === '/stats') {
@@ -1925,7 +1931,7 @@ const VALID_ROLES = ['admin', 'editor', 'validador', 'tecnico', 'analitica'];
 async function listUsers(sb: any, req: Request) {
   const { data, error } = await sb
     .from('usuario')
-    .select('id, email, nombre, rol, activo, created_at, updated_at')
+    .select('id, email, nombre, rol, activo, municipio_id, created_at, updated_at')
     .order('nombre');
 
   if (error) throw error;
@@ -1936,7 +1942,7 @@ async function listUsers(sb: any, req: Request) {
 async function getUserById(sb: any, id: string, req: Request) {
   const { data, error } = await sb
     .from('usuario')
-    .select('id, email, nombre, rol, activo, created_at, updated_at')
+    .select('id, email, nombre, rol, activo, municipio_id, created_at, updated_at')
     .eq('id', id)
     .single();
 
@@ -2014,8 +2020,12 @@ async function createUser(sb: any, input: any, req: Request) {
       nombre: input.nombre,
       rol: input.rol,
       activo: true,
+      // municipio_id es opcional — un admin o analítica no tiene "su municipio";
+      // un editor local sí lo tendrá asignado para que el listado de Recursos
+      // le venga prefiltrado (migración 019).
+      municipio_id: input.municipio_id || null,
     })
-    .select('id, email, nombre, rol, activo, created_at, updated_at')
+    .select('id, email, nombre, rol, activo, municipio_id, created_at, updated_at')
     .single();
 
   if (profileError) {
@@ -2046,6 +2056,11 @@ async function updateUser(sb: any, id: string, input: any, req: Request) {
     if (!VALID_ROLES.includes(input.rol)) throw { status: 400, message: `Rol invalido: ${input.rol}` };
     update.rol = input.rol;
   }
+  // municipio_id: puede venir null explícito para quitar la asignación, o
+  // un uuid para cambiarlo. Solo se escribe si viene en el body.
+  if (input.municipio_id !== undefined) {
+    update.municipio_id = input.municipio_id || null;
+  }
   // NOTE: email is intentionally not updatable (would desync auth.users)
   // NOTE: activo is managed via dedicated activate/deactivate endpoints
 
@@ -2053,7 +2068,7 @@ async function updateUser(sb: any, id: string, input: any, req: Request) {
     .from('usuario')
     .update(update)
     .eq('id', id)
-    .select('id, email, nombre, rol, activo, created_at, updated_at')
+    .select('id, email, nombre, rol, activo, municipio_id, created_at, updated_at')
     .single();
 
   if (error) throw error;

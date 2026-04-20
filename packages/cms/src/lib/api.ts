@@ -158,6 +158,10 @@ export interface UserProfile {
   email: string;
   role: 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
   active: boolean;
+  /** Municipio asignado por defecto al usuario (migración 019). NULL para
+   *  admins/analítica. Alimenta la preselección del filtro de municipio en
+   *  el listado de Recursos. */
+  municipioId: string | null;
 }
 
 export interface DashboardStats {
@@ -351,6 +355,9 @@ export interface UserItem {
   nombre: string;
   rol: string;
   activo: boolean;
+  /** Municipio asignado al usuario (migración 019). NULL si no aplica
+   *  (admin/analítica) o si no se asignó al crearlo. */
+  municipio_id: string | null;
   created_at: string;
 }
 
@@ -582,10 +589,10 @@ export const api = {
    * Returns the invitation link so the admin can copy & share it manually
    * (WhatsApp, email, etc.). The admin never sees a password.
    */
-  createUser: (data: { email: string; nombre: string; rol: string; redirectTo?: string }) =>
+  createUser: (data: { email: string; nombre: string; rol: string; municipio_id?: string | null; redirectTo?: string }) =>
     adminFetch<UserItem & { invitation_link: string | null }>('/users', { method: 'POST', body: JSON.stringify(data) }),
 
-  updateUser: (id: string, data: Partial<{ nombre: string; rol: string }>) =>
+  updateUser: (id: string, data: Partial<{ nombre: string; rol: string; municipio_id: string | null }>) =>
     adminFetch<UserItem>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   /** Soft-disable: user keeps existing in BBDD but cannot log in until reactivated. */

@@ -41,15 +41,18 @@ export function PendingTasksBanner() {
       /* admin */ ['borrador', 'revision'];
 
     Promise.all(
-      interesting.map((status) =>
-        // limit=1 + sort=updated → sólo necesitamos total y el más antiguo
-        api.getResources({ status, limit: '1', sort: 'updated' })
+      interesting.map((status) => {
+        // Lote 3b — el editor ve SOLO sus borradores (created_by=me).
+        // El validador y el admin ven la cola/sistema entero.
+        const params: Record<string, string> = { status, limit: '1', sort: 'updated' };
+        if (role === 'editor') params.created_by = 'me';
+        return api.getResources(params)
           .then((res) => {
             const oldest = res.items[0]?.updatedAt ?? null;
             return [status, { total: res.total, oldest }] as const;
           })
-          .catch(() => [status, { total: 0, oldest: null }] as const),
-      ),
+          .catch(() => [status, { total: 0, oldest: null }] as const);
+      }),
     ).then((entries) => {
       const next: Record<string, StatusCount> = {};
       for (const [s, v] of entries) next[s] = v;
@@ -86,14 +89,14 @@ function renderEditor(counts: Record<string, StatusCount>) {
         <h3 className="pending-tasks__title">Tu trabajo</h3>
       </div>
       <p className="pending-tasks__line">
-        <strong>{n}</strong> {n === 1 ? 'borrador' : 'borradores'} sin publicar.
+        Tienes <strong>{n}</strong> {n === 1 ? 'borrador tuyo' : 'borradores tuyos'} sin publicar.
         <span className="pending-tasks__hint">
           {' '}Completa y envía a revisión cuando estén listos.
         </span>
       </p>
       <div className="pending-tasks__actions">
-        <Link to="/resources?status=borrador" className="btn btn-sm btn-primary">
-          Ver borradores →
+        <Link to="/resources?status=borrador&mine=1" className="btn btn-sm btn-primary">
+          Ver mis borradores →
         </Link>
       </div>
     </div>
