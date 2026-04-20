@@ -11,7 +11,8 @@ import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 import { AiSeoGenerator } from '@/components/AiSeoGenerator';
 import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
-import { TemplateSelector } from '@/components/TemplateSelector';
+import TemplatePicker from '@/pages/TemplatePicker';
+import { ImportFromUrlModal } from '@/components/ImportFromUrlModal';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
@@ -21,6 +22,7 @@ import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
 import { TAGS_BY_KEY, TAGS_BY_GROUP } from '@osalnes/shared/data/tag-catalog';
+import { RESOURCE_TEMPLATE_BY_KEY } from '@osalnes/shared/data/resource-templates';
 
 const WEB_BASE = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -84,6 +86,9 @@ export function ResourceWizardPage() {
   // Template selector — only shown for new resources before the wizard starts
   const [templateApplied, setTemplateApplied] = useState(!isNew);
   const [activeTemplate, setActiveTemplate] = useState<ResourceTemplate | null>(null);
+  // Paso 0 rediseño · tarea 3: modal de "Importar desde URL con IA".
+  // El TemplatePicker delega el flujo al padre; este flag lo abre.
+  const [importModalOpen, setImportModalOpen] = useState(false);
   // Live preview panel
   const [previewOpen, setPreviewOpen] = useState(false);
   // Editorial state
@@ -199,6 +204,79 @@ export function ResourceWizardPage() {
       if (imported.tourist_types?.length) setTouristTypes(imported.tourist_types);
     }
 
+    setTemplateApplied(true);
+    markDirty();
+  }
+
+  /**
+   * Paso 0 · Tarea 3 — handler del TemplatePicker nuevo.
+   * Recibe una `templateKey` del catálogo UNE (shared) y pre-rellena el
+   * state. Sustituye al flujo del TemplateSelector legacy que pasaba un
+   * ResourceTemplate completo con `defaults` y `highlights` inventados.
+   */
+  function handleTemplatePick(templateKey: string) {
+    const tpl = RESOURCE_TEMPLATE_BY_KEY[templateKey];
+    if (!tpl) return;
+
+    if (tpl.isBlank) {
+      // "Empezar en blanco" — el paso 1 forzará a elegir una tipología.
+      setTemplateApplied(true);
+      setActiveTemplate(null);
+      markDirty();
+      return;
+    }
+
+    // rdf_type se deriva del value schema.org del mainTag para no violar
+    // el NOT NULL de recurso_turistico.rdf_type al guardar (compat legacy
+    // hasta la migración de limpieza post-backfill).
+    const mainTag = TAGS_BY_KEY[tpl.mainTagKey];
+    if (mainTag) setRdfType(mainTag.value);
+
+    // Tags pre-aplicadas: main + initialTagKeys → visibles ya en el paso 4.
+    setTagKeys([tpl.mainTagKey, ...tpl.initialTagKeys]);
+
+    // Adapter mínimo al tipo ResourceTemplate legacy para alimentar el
+    // subtitle del wizard ("Plantilla: {icon} {name}"). Los campos
+    // `defaults` y `highlights` quedan vacíos — el flujo nuevo no los usa.
+    setActiveTemplate({
+      id: tpl.key,
+      name: tpl.label,
+      description: tpl.description,
+      icon: tpl.icon,
+      rdfType: mainTag?.value || 'TouristAttraction',
+      defaults: {},
+      highlights: [],
+    } as unknown as ResourceTemplate);
+
+    setTemplateApplied(true);
+    markDirty();
+  }
+
+  /**
+   * Aplica los campos extraídos por la IA desde una URL al state del
+   * wizard. Reutiliza el mismo mapping que la rama imported del
+   * applyTemplate legacy, pero desacoplado de cualquier template.
+   */
+  function applyImportedFields(imported: ImportedResource) {
+    if (imported.rdf_type) setRdfType(imported.rdf_type);
+    if (imported.name) {
+      setNameEs(imported.name);
+      setSlug(slugify(imported.name));
+    }
+    if (imported.description) setDescEs(`<p>${imported.description.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`);
+    if (imported.address) setAddressStreet(imported.address);
+    if (imported.postal_code) setAddressPostal(imported.postal_code);
+    if (imported.telephone?.length) setTelephone(imported.telephone.join(', '));
+    if (imported.email?.length) setEmail(imported.email.join(', '));
+    if (imported.url) setUrl(imported.url);
+    if (imported.opening_hours) setOpeningHours(imported.opening_hours);
+    if (imported.latitude !== undefined && imported.latitude !== null) setLatitude(imported.latitude.toString());
+    if (imported.longitude !== undefined && imported.longitude !== null) setLongitude(imported.longitude.toString());
+    if (imported.rating_value) setRatingValue(imported.rating_value.toString());
+    if (imported.cuisine?.length) setServesCuisine(imported.cuisine.join(', '));
+    if (imported.tourist_types?.length) setTouristTypes(imported.tourist_types);
+
+    setImportModalOpen(false);
     setTemplateApplied(true);
     markDirty();
   }
@@ -568,13 +646,23 @@ export function ResourceWizardPage() {
 
   if (loading) return <p>Cargando recurso...</p>;
 
-  // Show TemplateSelector before the wizard for new resources
+  // Show TemplatePicker before the wizard for new resources (paso 0 tarea 3).
+  // El modal de import se monta condicionalmente encima del picker.
   if (isNew && !templateApplied) {
     return (
-      <TemplateSelector
-        onSelect={applyTemplate}
-        onCancel={() => navigate('/resources')}
-      />
+      <>
+        <TemplatePicker
+          onPick={handleTemplatePick}
+          onImportFromUrl={() => setImportModalOpen(true)}
+          onCancel={() => navigate('/resources')}
+        />
+        {importModalOpen && (
+          <ImportFromUrlModal
+            onImported={applyImportedFields}
+            onCancel={() => setImportModalOpen(false)}
+          />
+        )}
+      </>
     );
   }
 
