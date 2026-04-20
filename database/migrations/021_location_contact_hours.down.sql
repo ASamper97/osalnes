@@ -18,12 +18,12 @@ drop index if exists idx_resources_opening_hours_kind;
 drop index if exists idx_resources_social_links;
 
 -- Columnas (ver nota de pérdida de datos arriba)
-alter table public.resources drop column if exists opening_hours_plan;
-alter table public.resources drop column if exists social_links;
-alter table public.resources drop column if exists contact_web;
-alter table public.resources drop column if exists contact_email;
-alter table public.resources drop column if exists contact_phone;
-alter table public.resources drop column if exists parroquia_text;
-alter table public.resources drop column if exists locality;
-alter table public.resources drop column if exists postal_code;
-alter table public.resources drop column if exists street_address;
+alter table public.recurso_turistico drop column if exists opening_hours_plan;
+alter table public.recurso_turistico drop column if exists social_links;
+alter table public.recurso_turistico drop column if exists contact_web;
+alter table public.recurso_turistico drop column if exists contact_email;
+alter table public.recurso_turistico drop column if exists contact_phone;
+alter table public.recurso_turistico drop column if exists parroquia_text;
+alter table public.recurso_turistico drop column if exists locality;
+alter table public.recurso_turistico drop column if exists postal_code;
+alter table public.recurso_turistico drop column if exists street_address;

@@ -2,6 +2,12 @@
 -- Migration 021 — Ubicación, contacto y horarios estructurados (paso 3)
 -- ==========================================================================
 --
+-- Corrección del prompt original: la tabla real del schema es
+-- `public.recurso_turistico` (no `public.resources`, que era el nombre
+-- asumido por el prompt). Mismo ajuste que se hizo en las migraciones 018
+-- y 020 del paso 0. Reemplazo aplicado a los DDL, los índices, la vista y
+-- los SELECT de information_schema.
+--
 -- WHY
 -- ---
 -- El paso 3 del wizard pasa de textareas libres a datos estructurados
@@ -39,22 +45,22 @@ begin
   -- street_address: calle + número
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'street_address'
   ) then
-    alter table public.resources add column street_address text;
-    comment on column public.resources.street_address is
+    alter table public.recurso_turistico add column street_address text;
+    comment on column public.recurso_turistico.street_address is
       'Dirección postal (calle y número). Se mapea a schema.org streetAddress.';
   end if;
 
   -- postal_code
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'postal_code'
   ) then
-    alter table public.resources add column postal_code text;
-    comment on column public.resources.postal_code is
+    alter table public.recurso_turistico add column postal_code text;
+    comment on column public.recurso_turistico.postal_code is
       'Código postal. Se mapea a schema.org postalCode.';
   end if;
 
@@ -63,22 +69,22 @@ begin
   -- la tabla municipios.
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'locality'
   ) then
-    alter table public.resources add column locality text;
-    comment on column public.resources.locality is
+    alter table public.recurso_turistico add column locality text;
+    comment on column public.recurso_turistico.locality is
       'Municipio como texto (auto-rellenado por geocoding). Se mapea a schema.org addressLocality.';
   end if;
 
   -- parroquia como texto libre (distinto de zona_id FK)
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'parroquia_text'
   ) then
-    alter table public.resources add column parroquia_text text;
-    comment on column public.resources.parroquia_text is
+    alter table public.recurso_turistico add column parroquia_text text;
+    comment on column public.recurso_turistico.parroquia_text is
       'Parroquia o barrio como texto libre. Complementa zona_id si está puesto.';
   end if;
 end $$;
@@ -90,41 +96,41 @@ do $$
 begin
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'contact_phone'
   ) then
-    alter table public.resources add column contact_phone text;
-    comment on column public.resources.contact_phone is
+    alter table public.recurso_turistico add column contact_phone text;
+    comment on column public.recurso_turistico.contact_phone is
       'Teléfono principal con prefijo internacional. Se mapea a schema.org telephone.';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'contact_email'
   ) then
-    alter table public.resources add column contact_email text;
-    comment on column public.resources.contact_email is
+    alter table public.recurso_turistico add column contact_email text;
+    comment on column public.recurso_turistico.contact_email is
       'Email de contacto. Se mapea a schema.org email.';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'contact_web'
   ) then
-    alter table public.resources add column contact_web text;
-    comment on column public.resources.contact_web is
+    alter table public.recurso_turistico add column contact_web text;
+    comment on column public.recurso_turistico.contact_web is
       'URL del sitio web. Se mapea a schema.org url.';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'social_links'
   ) then
-    alter table public.resources add column social_links jsonb not null default '[]'::jsonb;
-    comment on column public.resources.social_links is
+    alter table public.recurso_turistico add column social_links jsonb not null default '[]'::jsonb;
+    comment on column public.recurso_turistico.social_links is
       'Enlaces a redes sociales. Array de { platform, url }. Se mapea a schema.org sameAs (array de URLs).';
   end if;
 end $$;
@@ -136,11 +142,11 @@ do $$
 begin
   if not exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources'
+    where table_schema = 'public' and table_name = 'recurso_turistico'
       and column_name = 'opening_hours_plan'
   ) then
-    alter table public.resources add column opening_hours_plan jsonb;
-    comment on column public.resources.opening_hours_plan is
+    alter table public.recurso_turistico add column opening_hours_plan jsonb;
+    comment on column public.recurso_turistico.opening_hours_plan is
       'Plan estructurado de horarios. Discriminated union por `kind` (always/weekly/seasonal/appointment/event/external/closed) + closures[] ortogonales + note. Ver shared/data/opening-hours.ts para el shape. Mapea a schema.org OpeningHoursSpecification + specialOpeningHoursSpecification.';
   end if;
 end $$;
@@ -152,10 +158,10 @@ end $$;
 -- "recursos abiertos todo el año".
 
 create index if not exists idx_resources_social_links
-  on public.resources using gin (social_links);
+  on public.recurso_turistico using gin (social_links);
 
 create index if not exists idx_resources_opening_hours_kind
-  on public.resources ((opening_hours_plan ->> 'kind'));
+  on public.recurso_turistico ((opening_hours_plan ->> 'kind'));
 
 
 -- 5) Índice sobre lat/lng para búsquedas espaciales ------------------------
@@ -163,24 +169,20 @@ create index if not exists idx_resources_opening_hours_kind
 -- Solo si existen las columnas (sin reemplazar si ya existe índice).
 -- Nombre de columnas flexible por si varía en distintos entornos.
 
+-- IF EXISTS directo en vez de variables boolean intermedias. Postgres con
+-- check_function_bodies=on interpretaba `has_lat`/`has_lng` como relations
+-- (42P01) — mismo fix que aplicamos en la migración 020 (_warn_legacy_tipology).
 do $$
-declare
-  has_lat boolean;
-  has_lng boolean;
 begin
-  select exists (
+  if exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources' and column_name = 'latitude'
-  ) into has_lat;
-
-  select exists (
+    where table_schema = 'public' and table_name = 'recurso_turistico' and column_name = 'latitude'
+  ) and exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'resources' and column_name = 'longitude'
-  ) into has_lng;
-
-  if has_lat and has_lng then
+    where table_schema = 'public' and table_name = 'recurso_turistico' and column_name = 'longitude'
+  ) then
     execute 'create index if not exists idx_resources_latlng
-             on public.resources (latitude, longitude)
+             on public.recurso_turistico (latitude, longitude)
              where latitude is not null and longitude is not null';
   end if;
 end $$;
@@ -193,7 +195,7 @@ end $$;
 
 create or replace view public.v_resources_geolocated as
   select r.*
-  from public.resources r
+  from public.recurso_turistico r
   where r.latitude is not null
     and r.longitude is not null
     and r.latitude between -90 and 90
