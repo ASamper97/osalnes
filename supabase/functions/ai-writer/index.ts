@@ -121,6 +121,33 @@ Reglas:
 - Incluye contexto turístico si es relevante
 - Responde SOLO con el texto alt, sin comillas ni explicaciones
 - Responde en el idioma indicado`,
+
+  // Acción `draft` (paso 2 · t2). Redacta un borrador inicial para la ficha
+  // de un recurso cuando el editor aún no ha escrito nada. A diferencia de
+  // `improve` (que parte de un texto existente), aquí solo tenemos el
+  // nombre, la tipología UNE y el municipio.
+  draft: `Eres un redactor experto en turismo para la Mancomunidad de O Salnés (Galicia).
+
+${CONTEXT_SALNES}
+
+Tarea: redactar un borrador de descripción para una ficha turística a partir
+del nombre, la tipología y el municipio del recurso. El borrador aparecerá
+como propuesta en el CMS; el editor lo revisará antes de publicarlo.
+
+Reglas:
+- Entre 120 y 200 palabras.
+- Tono profesional pero cercano, sin ser cursi ni publicitario.
+- Estructura: (1) qué es y qué lo hace especial, (2) detalles sensoriales
+  o contexto histórico/cultural breve si procede, (3) información práctica
+  útil para el visitante.
+- Si no dispones de información específica (horarios exactos, precios,
+  teléfonos), NO la inventes: escribe en genérico o sugiere al visitante
+  consultar fuentes oficiales.
+- Respeta los topónimos gallegos (Illa de Arousa, Cambados, O Grove,
+  Meaño, Vilagarcía, Sanxenxo, Ribadumia, Vilanova, Meis).
+- Para gallego: usa gallego real (galego real, non castelán galeguizado).
+- Devuelve SOLO el texto del borrador, sin títulos ni comillas ni
+  introducciones tipo "Aquí tienes…".`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -213,6 +240,31 @@ ${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
         userMessage = `Genera alt text en ${langName(lang || 'es')} para una imagen de: ${text}`;
         break;
 
+      case 'draft': {
+        // Entradas del paso 2 del wizard: name / typeKey / municipio / targetLang.
+        // typeKey viene en formato UNE `tipo-de-recurso.*`; lo humanizamos para
+        // que el prompt hable en castellano natural ("mirador" en vez de
+        // "tipo-de-recurso.mirador").
+        const name = body.name || '';
+        const typeKey = body.typeKey as string | null | undefined;
+        const municipio = body.municipio as string | null | undefined;
+        const targetLang = (body.targetLang as 'es' | 'gl' | undefined) || 'es';
+        const typeLabel = typeKey ? humanizeTypeKey(typeKey) : 'recurso turístico';
+        const municipioHint = municipio
+          ? `ubicado en ${municipio}, comarca de O Salnés (Rías Baixas, Galicia)`
+          : 'en la comarca de O Salnés (Rías Baixas, Galicia)';
+        const langHint = targetLang === 'gl'
+          ? 'Redacta el borrador directamente en gallego (galego real, non castelán galeguizado).'
+          : 'Redacta el borrador en castellano.';
+        userMessage = `Datos del recurso:
+  - Nombre: "${name}"
+  - Tipo: ${typeLabel}
+  - Localización: ${municipioHint}
+
+${langHint}`;
+        break;
+      }
+
       default:
         userMessage = text;
     }
@@ -226,8 +278,12 @@ ${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: userMessage }] }],
         generationConfig: {
-          temperature: action === 'translate' ? 0.2 : action === 'improve' ? 0.7 : 0.4,
-          maxOutputTokens: action === 'validate' ? 1024 : 512,
+          temperature: action === 'translate'
+            ? 0.2
+            : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+          maxOutputTokens: action === 'validate'
+            ? 1024
+            : action === 'draft' ? 400 : 512,
           topP: 0.9,
         },
       }),
@@ -275,6 +331,33 @@ function langName(code: string): string {
     es: 'español', gl: 'gallego', en: 'inglés', fr: 'francés', pt: 'portugués',
   };
   return names[code] || code;
+}
+
+// Humaniza una clave del catálogo UNE (p.ej. `tipo-de-recurso.mirador` →
+// "mirador") para que el prompt `draft` hable en castellano natural. Si la
+// clave no está mapeada, cae a "recurso turístico" como fallback genérico.
+function humanizeTypeKey(k: string): string {
+  const map: Record<string, string> = {
+    'tipo-de-recurso.playa':             'playa',
+    'tipo-de-recurso.mirador':           'mirador',
+    'tipo-de-recurso.museo':             'museo',
+    'tipo-de-recurso.iglesia-capilla':   'iglesia, capilla, ermita o convento',
+    'tipo-de-recurso.pazo-arq-civil':    'pazo o edificio civil histórico',
+    'tipo-de-recurso.yacimiento-ruina':  'yacimiento arqueológico o ruina',
+    'tipo-de-recurso.molino':            'molino o elemento etnográfico',
+    'tipo-de-recurso.puerto-lonja':      'puerto o lonja',
+    'tipo-de-recurso.espacio-natural':   'espacio natural',
+    'tipo-de-recurso.paseo-maritimo':    'paseo marítimo',
+    'tipo-de-recurso.ruta':              'ruta de senderismo o itinerario',
+    'tipo-de-recurso.bodega':            'bodega DO Rías Baixas',
+    'tipo-de-recurso.restaurante':       'restaurante',
+    'tipo-de-recurso.hotel':             'hotel',
+    'tipo-de-recurso.alojamiento-rural': 'alojamiento rural o casa de aldea',
+    'tipo-de-recurso.camping':           'camping',
+    'tipo-de-recurso.fiesta-festival':   'fiesta popular o festival',
+    'tipo-de-recurso.leyenda':           'leyenda o tradición local',
+  };
+  return map[k] ?? 'recurso turístico';
 }
 
 async function getMockResult(req: Request): Promise<unknown> {
