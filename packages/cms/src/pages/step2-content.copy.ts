@@ -46,6 +46,9 @@ export const STEP2_COPY = {
     aiImproveButton: 'Mejorar el texto actual con IA',
     aiImproveHint:
       'La IA reescribirá tu descripción para hacerla más atractiva, manteniendo los datos que aportas. Podrás aceptar o descartar el resultado.',
+    /** Estados del botón mientras la IA trabaja (mismo patrón que translation.translating). */
+    drafting: 'Escribiendo…',
+    improving: 'Mejorando…',
   },
 
   // Bloque de traducción
@@ -55,6 +58,8 @@ export const STEP2_COPY = {
       'Cuando termines el castellano, la IA traducirá la descripción al gallego. Es una primera versión: podrás editarla después, porque conoces mejor los matices locales.',
     button: 'Traducir al gallego',
     buttonRetranslate: 'Volver a traducir',
+    /** Estado de espera mientras la IA traduce en respuesta a un click manual. */
+    translating: 'Traduciendo…',
     buttonDisabledHint:
       'Escribe primero la descripción en castellano para poder traducirla.',
     autoOnNextTitle: 'Traducción automática al gallego',

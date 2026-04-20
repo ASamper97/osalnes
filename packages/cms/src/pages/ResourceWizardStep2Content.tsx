@@ -260,7 +260,7 @@ export default function ResourceWizardStep2Content({
                   onClick={handleDraftEs}
                   disabled={loading !== null}
                 >
-                  ✨ {loading === 'draft-es' ? 'Escribiendo…' : STEP2_COPY.editorEs.aiStartButton}
+                  ✨ {loading === 'draft-es' ? STEP2_COPY.editorEs.drafting : STEP2_COPY.editorEs.aiStartButton}
                 </button>
               </div>
             ) : (
@@ -275,7 +275,7 @@ export default function ResourceWizardStep2Content({
                   onClick={handleImproveEs}
                   disabled={loading !== null}
                 >
-                  ✨ {loading === 'improve-es' ? 'Mejorando…' : STEP2_COPY.editorEs.aiImproveButton}
+                  ✨ {loading === 'improve-es' ? STEP2_COPY.editorEs.improving : STEP2_COPY.editorEs.aiImproveButton}
                 </button>
               </div>
             )}
@@ -306,7 +306,7 @@ export default function ResourceWizardStep2Content({
           >
             ⚡{' '}
             {loading === 'translate-gl'
-              ? 'Traduciendo…'
+              ? STEP2_COPY.translation.translating
               : descriptionGl.trim().length > 0
               ? STEP2_COPY.translation.buttonRetranslate
               : STEP2_COPY.translation.button}
@@ -376,7 +376,7 @@ export default function ResourceWizardStep2Content({
                 onClick={handleImproveGl}
                 disabled={loading !== null}
               >
-                ✨ {loading === 'improve-gl' ? 'Mejorando…' : STEP2_COPY.editorGl.aiImproveButton}
+                ✨ {loading === 'improve-gl' ? STEP2_COPY.editorEs.improving : STEP2_COPY.editorGl.aiImproveButton}
               </button>
             </div>
           </div>
