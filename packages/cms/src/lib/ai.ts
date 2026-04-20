@@ -25,6 +25,12 @@ interface AiRequestBase {
   to?: string;
   lang?: string;
   context?: Record<string, unknown>;
+  // Campos extra usados por la acción `draft` (paso 2 · t2). El edge
+  // function `ai-writer` los lee directamente del body.
+  name?: string;
+  typeKey?: string | null;
+  municipio?: string | null;
+  targetLang?: 'es' | 'gl';
 }
 
 interface AiResponse<T = string> {
@@ -62,16 +68,76 @@ async function callAi<T = string>(body: AiRequestBase): Promise<AiResponse<T>> {
   return res.json();
 }
 
-/** Improve a tourism description */
-export async function aiImprove(text: string): Promise<string> {
-  const res = await callAi({ action: 'improve', text });
+/**
+ * Improve a tourism description.
+ *
+ * Dos firmas soportadas:
+ *   - Posicional `aiImprove(text)` → legacy (RichTextEditor, AiWritingAssistant).
+ *   - Objeto `aiImprove({ text, lang?, context? })` → nueva (paso 2 del wizard).
+ * Ambas devuelven la propuesta como string. Se mantiene compatibilidad sin
+ * romper consumers actuales.
+ */
+export interface AiImproveInput {
+  text: string;
+  lang?: string;
+  context?: { name?: string; typeKey?: string | null };
+}
+export async function aiImprove(text: string): Promise<string>;
+export async function aiImprove(input: AiImproveInput): Promise<string>;
+export async function aiImprove(arg: string | AiImproveInput): Promise<string> {
+  const text = typeof arg === 'string' ? arg : arg.text;
+  const body: AiRequestBase = { action: 'improve', text };
+  if (typeof arg !== 'string') {
+    if (arg.lang) body.lang = arg.lang;
+    if (arg.context) body.context = arg.context as Record<string, unknown>;
+  }
+  const res = await callAi(body);
   return typeof res.result === 'string' ? res.result : text;
 }
 
-/** Context-aware tourism translation */
-export async function aiTranslate(text: string, from: string, to: string): Promise<string> {
-  const res = await callAi({ action: 'translate', text, from, to });
+/**
+ * Context-aware tourism translation. Mismas dos firmas que aiImprove:
+ *   - Posicional `aiTranslate(text, from, to)` → legacy.
+ *   - Objeto `aiTranslate({ text, from, to })` → paso 2 + useBackgroundTranslation.
+ */
+export interface AiTranslateInput {
+  text: string;
+  from: string;
+  to: string;
+}
+export async function aiTranslate(text: string, from: string, to: string): Promise<string>;
+export async function aiTranslate(input: AiTranslateInput): Promise<string>;
+export async function aiTranslate(
+  arg: string | AiTranslateInput,
+  from?: string,
+  to?: string,
+): Promise<string> {
+  const text = typeof arg === 'string' ? arg : arg.text;
+  const fromLang = typeof arg === 'string' ? from! : arg.from;
+  const toLang = typeof arg === 'string' ? to! : arg.to;
+  const res = await callAi({ action: 'translate', text, from: fromLang, to: toLang });
   return typeof res.result === 'string' ? res.result : text;
+}
+
+/**
+ * Generar un borrador inicial de descripción partiendo solo de nombre +
+ * tipología + municipio (paso 2 · t3). Requiere el action `draft` en la
+ * edge function ai-writer (paso 2 · t2).
+ */
+export async function aiDraft(input: {
+  name: string;
+  typeKey: string | null;
+  municipio: string | null;
+  targetLang: 'es' | 'gl';
+}): Promise<string> {
+  const res = await callAi({
+    action: 'draft',
+    name: input.name,
+    typeKey: input.typeKey,
+    municipio: input.municipio,
+    targetLang: input.targetLang,
+  });
+  return typeof res.result === 'string' ? res.result : '';
 }
 
 /** Generate SEO title and description */

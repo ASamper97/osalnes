@@ -10,14 +10,23 @@ import { aiImprove } from '@/lib/ai';
  * Reemplaza textareas planos con formato enriquecido y ayuda IA inline.
  */
 
-interface RichTextEditorProps {
+export interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
+  /** Subset de botones a mostrar en la toolbar. Reconocidos: bold, italic,
+   *  h2, h3, ul, ol, link, quote, undo, redo. Si se omite, se muestran todos.
+   *  Uso por el rediseño del paso 2 (no implementado todavía: la toolbar
+   *  sigue enseñando los botones completos). */
+  toolbar?: string[];
+  /** Cuando true, bloquea la interacción con el editor. Lo consume
+   *  ResourceWizardStep2Content mientras corre una acción IA. Implementación
+   *  mínima: aplica pointer-events: none al contenedor. */
+  disabled?: boolean;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, minHeight = 200 }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, minHeight = 200, disabled = false }: RichTextEditorProps) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -96,7 +105,14 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 200 }
   }
 
   return (
-    <div className="rte" style={{ minHeight }}>
+    <div
+      className="rte"
+      style={{
+        minHeight,
+        ...(disabled ? { pointerEvents: 'none', opacity: 0.6 } : undefined),
+      }}
+      aria-disabled={disabled || undefined}
+    >
       <Toolbar editor={editor} onImprove={handleImproveSelection} onLink={handleSetLink} aiLoading={aiLoading} />
       <EditorContent editor={editor} className="rte__content" />
       <div className="rte__footer">
@@ -231,3 +247,7 @@ function Toolbar({ editor, onImprove, onLink, aiLoading }: ToolbarProps) {
     </div>
   );
 }
+
+// Default export para consumidores nuevos (p.ej. ResourceWizardStep2Content).
+// El named export se mantiene por compat con RichTextEditor referenciado en otros sitios.
+export default RichTextEditor;
