@@ -616,6 +616,17 @@ async function mapResourceRow(row: Record<string, any>) {
     updatedAt: row.updated_at,
     // deno-lint-ignore no-explicit-any
     categoryIds: (cats || []).map((c: any) => c.categoria_id),
+    // Paso 3 · t4 — campos estructurados de la migración 021. snake_case
+    // coherente con admin/mapResourceRow; el wizard los hidrata directo.
+    street_address: row.street_address ?? null,
+    postal_code: row.postal_code ?? null,
+    locality: row.locality ?? null,
+    parroquia_text: row.parroquia_text ?? null,
+    contact_phone: row.contact_phone ?? null,
+    contact_email: row.contact_email ?? null,
+    contact_web: row.contact_web ?? null,
+    social_links: row.social_links ?? [],
+    opening_hours_plan: row.opening_hours_plan ?? null,
   };
 }
 

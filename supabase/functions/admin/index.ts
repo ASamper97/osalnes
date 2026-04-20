@@ -747,6 +747,18 @@ async function createResource(sb: any, input: any, usuarioId: string, req: Reque
       opening_hours: input.opening_hours || null,
       extras: input.extras || {},
       visible_en_mapa: input.visible_en_mapa ?? true,
+      // Paso 3 · t4 — campos estructurados de la migración 021. Los legacy
+      // (address_street, address_postal, telephone, email, url, same_as,
+      // opening_hours) se siguen escribiendo arriba hasta la limpieza física.
+      street_address: input.street_address ?? null,
+      postal_code: input.postal_code ?? null,
+      locality: input.locality ?? null,
+      parroquia_text: input.parroquia_text ?? null,
+      contact_phone: input.contact_phone ?? null,
+      contact_email: input.contact_email ?? null,
+      contact_web: input.contact_web ?? null,
+      social_links: input.social_links ?? [],
+      opening_hours_plan: input.opening_hours_plan ?? null,
       estado_editorial: 'borrador',
       created_by: usuarioId,
       updated_by: usuarioId,
@@ -795,6 +807,10 @@ async function updateResource(sb: any, id: string, input: any, usuarioId: string
     'same_as', 'tourist_types', 'rating_value', 'serves_cuisine',
     'is_accessible_for_free', 'public_access', 'occupancy',
     'opening_hours', 'extras', 'visible_en_mapa',
+    // Paso 3 · t4 — campos estructurados de la migración 021.
+    'street_address', 'postal_code', 'locality', 'parroquia_text',
+    'contact_phone', 'contact_email', 'contact_web',
+    'social_links', 'opening_hours_plan',
   ];
 
   for (const f of fields) {
@@ -2332,5 +2348,17 @@ async function mapResourceRow(sb: any, row: Record<string, any>) {
     publishedAt: row.published_at, createdAt: row.created_at, updatedAt: row.updated_at,
     // deno-lint-ignore no-explicit-any
     categoryIds: (cats || []).map((c: any) => c.categoria_id),
+    // Paso 3 · t4 — campos estructurados de la migración 021. Se devuelven
+    // en snake_case por coherencia con lo que envía el cliente en el body
+    // de update; el hidratador del wizard los lee así directamente.
+    street_address: row.street_address ?? null,
+    postal_code: row.postal_code ?? null,
+    locality: row.locality ?? null,
+    parroquia_text: row.parroquia_text ?? null,
+    contact_phone: row.contact_phone ?? null,
+    contact_email: row.contact_email ?? null,
+    contact_web: row.contact_web ?? null,
+    social_links: row.social_links ?? [],
+    opening_hours_plan: row.opening_hours_plan ?? null,
   };
 }

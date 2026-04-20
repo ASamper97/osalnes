@@ -217,6 +217,18 @@ export interface ResourceSummary {
   createdAt: string;
   updatedAt: string;
   categoryIds: string[];
+  // Paso 3 · t4 — campos estructurados de la migración 021. Devueltos en
+  // snake_case por ambas edge functions (admin, api) porque el wizard los
+  // re-envía tal cual al guardar — evitamos re-mapear ida y vuelta.
+  street_address?: string | null;
+  postal_code?: string | null;
+  locality?: string | null;
+  parroquia_text?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  contact_web?: string | null;
+  social_links?: unknown[];
+  opening_hours_plan?: unknown | null;
 }
 
 /**
@@ -247,6 +259,16 @@ export interface ResourceInput {
   opening_hours?: string | null;
   extras?: Record<string, unknown>;
   visible_en_mapa?: boolean;
+  // Paso 3 · t4 — campos estructurados de la migración 021.
+  street_address?: string | null;
+  postal_code?: string | null;
+  locality?: string | null;
+  parroquia_text?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  contact_web?: string | null;
+  social_links?: unknown[];
+  opening_hours_plan?: unknown | null;
   name?: LocalizedValue;
   description?: LocalizedValue;
   seo_title?: LocalizedValue;

@@ -18,6 +18,11 @@ import ResourceWizardStep2Content from '@/pages/ResourceWizardStep2Content';
 import TranslationReadyToast from '@/components/TranslationReadyToast';
 import { useBackgroundTranslation } from '@/lib/useBackgroundTranslation';
 import type { GlStatus } from '@/pages/step2-content.copy';
+import ResourceWizardStep3Location from '@/pages/ResourceWizardStep3Location';
+import type { LocationData, ContactData } from '@/pages/ResourceWizardStep3Location';
+import type { SocialLink } from '@/components/SocialLinksEditor';
+import type { OpeningHoursPlan } from '@osalnes/shared/data/opening-hours';
+import { emptyPlanByKind, validatePlan } from '@osalnes/shared/data/opening-hours';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
@@ -129,6 +134,10 @@ export function ResourceWizardPage() {
   const [glStatus, setGlStatus] = useState<GlStatus>('empty');
 
   // Step 3: Ubicacion + Contacto
+  // Legacy: mantenidos para compat con completion cards del paso 7, preview,
+  // template apply e import-from-url. Al guardar se envían junto con los
+  // campos nuevos estructurados (fuente de verdad del paso 3) hasta la
+  // limpieza física posterior a backfill.
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [addressStreet, setAddressStreet] = useState('');
@@ -138,6 +147,27 @@ export function ResourceWizardPage() {
   const [url, setUrl] = useState('');
   const [openingHours, setOpeningHours] = useState('');
   const [sameAs, setSameAs] = useState('');
+
+  // Paso 3 · t4 — state nuevo estructurado (migración 021).
+  // Fuente de verdad del paso 3 rediseñado: mapa + dirección + contacto +
+  // redes sociales + plan de horarios. Se sincroniza hacia los legacy al
+  // cambiar (para que el paso 7 preview/completion lea los valores al
+  // día sin refactorizarlo).
+  const [location, setLocation] = useState<LocationData>({
+    lat: null,
+    lng: null,
+    streetAddress: '',
+    postalCode: '',
+    locality: '',
+    parroquia: '',
+  });
+  const [contact, setContact] = useState<ContactData>({
+    phone: '',
+    email: '',
+    web: '',
+    socialLinks: [],
+  });
+  const [hoursPlan, setHoursPlan] = useState<OpeningHoursPlan>(emptyPlanByKind('weekly'));
 
   // Step 4: Clasificacion turistica
   // Legacy: tourist_types y category_ids se siguen escribiendo en paralelo
@@ -449,6 +479,26 @@ export function ResourceWizardPage() {
         setSavedId(r.id);
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
+        // Paso 3 · t4 — hidratación de los 3 estados estructurados nuevos.
+        // Prioridad al campo estructurado (migración 021) con fallback a
+        // los campos legacy (compat mientras hay recursos sin backfill).
+        setLocation({
+          lat: r.location?.latitude ?? null,
+          lng: r.location?.longitude ?? null,
+          streetAddress: r.street_address ?? r.location?.streetAddress ?? '',
+          postalCode: r.postal_code ?? r.location?.postalCode ?? '',
+          locality: r.locality ?? '',
+          parroquia: r.parroquia_text ?? '',
+        });
+        setContact({
+          phone: r.contact_phone ?? (r.contact?.telephone?.[0] ?? ''),
+          email: r.contact_email ?? (r.contact?.email?.[0] ?? ''),
+          web: r.contact_web ?? (r.contact?.url ?? ''),
+          socialLinks: (Array.isArray(r.social_links) ? (r.social_links as SocialLink[]) : []),
+        });
+        setHoursPlan(
+          (r.opening_hours_plan as OpeningHoursPlan | null) ?? emptyPlanByKind('weekly'),
+        );
         // Paso 2 · t5 — hidratación legacy→tag: si el recurso tenía
         // is_accessible_for_free=true en columna legacy, nos aseguramos de
         // que `caracteristicas.gratuito` esté entre las tags. Al guardar,
@@ -547,17 +597,21 @@ export function ResourceWizardPage() {
 
   const validateStep3 = useCallback((): string[] => {
     const errs: string[] = [];
-    const lat = latitude ? parseFloat(latitude) : null;
-    const lng = longitude ? parseFloat(longitude) : null;
-    if (lat !== null && (lat < -90 || lat > 90)) errs.push('La latitud debe estar entre -90 y 90');
-    if (lng !== null && (lng < -180 || lng > 180)) errs.push('La longitud debe estar entre -180 y 180');
-    const emails = email ? email.split(',').map((e) => e.trim()).filter(Boolean) : [];
-    for (const e of emails) {
-      if (!EMAIL_RE.test(e)) errs.push(`Email invalido: ${e}`);
+    // Paso 3 · t4 — validación sobre los states estructurados nuevos
+    // (fuente de verdad del paso 3). El componente guarantiza que las
+    // coordenadas son números; sólo validamos consistencia.
+    if ((location.lat != null) !== (location.lng != null)) {
+      errs.push('Las coordenadas deben tener latitud y longitud.');
     }
-    if (url && !URL_RE.test(url)) errs.push('La URL debe comenzar con http:// o https://');
+    if (contact.email && !EMAIL_RE.test(contact.email)) {
+      errs.push('El correo electrónico no tiene un formato válido.');
+    }
+    if (contact.web && !URL_RE.test(contact.web)) {
+      errs.push('El sitio web debe empezar por http:// o https://');
+    }
+    errs.push(...validatePlan(hoursPlan));
     return errs;
-  }, [latitude, longitude, email, url]);
+  }, [location.lat, location.lng, contact.email, contact.web, hoursPlan]);
 
   const validateStep6 = useCallback((): string[] => {
     const errs: string[] = [];
@@ -646,15 +700,35 @@ export function ResourceWizardPage() {
       slug,
       municipio_id: municipioId || null,
       zona_id: zonaId || null,
-      latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null,
-      address_street: addressStreet || null,
-      address_postal: addressPostal || null,
-      telephone: telephone ? telephone.split(',').map((t) => t.trim()).filter(Boolean) : [],
-      email: email ? email.split(',').map((e) => e.trim()).filter(Boolean) : [],
-      url: url || null,
-      same_as: sameAs ? sameAs.split('\n').map((s) => s.trim()).filter(Boolean) : [],
+      // Paso 3 · t4 — lat/lng derivan del state nuevo `location`. Los
+      // legacy address_street/postal/telephone/email/url/same_as/opening_hours
+      // se siguen escribiendo en paralelo (derivados del state estructurado)
+      // hasta la migración de limpieza física post-backfill.
+      latitude: location.lat ?? (latitude ? parseFloat(latitude) : null),
+      longitude: location.lng ?? (longitude ? parseFloat(longitude) : null),
+      address_street: location.streetAddress || addressStreet || null,
+      address_postal: location.postalCode || addressPostal || null,
+      telephone: contact.phone
+        ? [contact.phone]
+        : (telephone ? telephone.split(',').map((t) => t.trim()).filter(Boolean) : []),
+      email: contact.email
+        ? [contact.email]
+        : (email ? email.split(',').map((e) => e.trim()).filter(Boolean) : []),
+      url: contact.web || url || null,
+      same_as: contact.socialLinks.length > 0
+        ? contact.socialLinks.map((l) => l.url)
+        : (sameAs ? sameAs.split('\n').map((s) => s.trim()).filter(Boolean) : []),
       opening_hours: openingHours || null,
+      // Paso 3 · t4 — campos estructurados (migración 021), fuente de verdad.
+      street_address: location.streetAddress || null,
+      postal_code: location.postalCode || null,
+      locality: location.locality || null,
+      parroquia_text: location.parroquia || null,
+      contact_phone: contact.phone || null,
+      contact_email: contact.email || null,
+      contact_web: contact.web || null,
+      social_links: contact.socialLinks,
+      opening_hours_plan: hoursPlan,
       // Paso 2 · t5 — acceso_gratuito deriva del tag caracteristicas.gratuito
       // (fuente única). Se sigue escribiendo la columna legacy en paralelo
       // hasta que todos los recursos estén migrados y los consumidores
@@ -968,72 +1042,35 @@ export function ResourceWizardPage() {
           STEP 3 — Ubicacion + Contacto
           ================================================================ */}
       {currentStep === 2 && (
-        <>
-          <WizardFieldGroup
-            title="Coordenadas GPS"
-            description="Las coordenadas permiten que el recurso aparezca en el mapa interactivo del portal."
-            tip="Puedes obtener las coordenadas desde Google Maps: haz clic derecho sobre el punto y copia las coordenadas."
-          >
-            <div className="form-row">
-              <div className="form-field">
-                <label>Latitud</label>
-                <input type="number" step="any" value={latitude} onChange={(e) => { setLatitude(e.target.value); markDirty(); }} placeholder="42.4345" />
-              </div>
-              <div className="form-field">
-                <label>Longitud</label>
-                <input type="number" step="any" value={longitude} onChange={(e) => { setLongitude(e.target.value); markDirty(); }} placeholder="-8.8712" />
-              </div>
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Direccion postal"
-            description="La direccion fisica del recurso."
-          >
-            <div className="form-row">
-              <div className="form-field">
-                <label>Direccion</label>
-                <input value={addressStreet} onChange={(e) => { setAddressStreet(e.target.value); markDirty(); }} placeholder="Rua do Porto, 1" />
-              </div>
-              <div className="form-field">
-                <label>Codigo postal</label>
-                <input value={addressPostal} onChange={(e) => { setAddressPostal(e.target.value); markDirty(); }} placeholder="36989" />
-              </div>
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Datos de contacto"
-            description="Informacion para que los visitantes puedan contactar o encontrar mas informacion."
-            tip="Si hay varios telefonos o emails, separalos con comas."
-          >
-            <div className="form-row">
-              <div className="form-field">
-                <label>Telefono(s)</label>
-                <input value={telephone} onChange={(e) => { setTelephone(e.target.value); markDirty(); }} placeholder="+34986720075, +34986720076" />
-              </div>
-              <div className="form-field">
-                <label>Email(s)</label>
-                <input value={email} onChange={(e) => { setEmail(e.target.value); markDirty(); }} placeholder="info@ejemplo.gal" />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-field">
-                <label>Web</label>
-                <input value={url} onChange={(e) => { setUrl(e.target.value); markDirty(); }} placeholder="https://turismo.sanxenxo.gal" />
-              </div>
-              <div className="form-field">
-                <label>Horario</label>
-                <input value={openingHours} onChange={(e) => { setOpeningHours(e.target.value); markDirty(); }} placeholder="Mo-Su 09:00-20:00" />
-              </div>
-            </div>
-            <div className="form-field">
-              <label>Redes sociales / enlaces externos</label>
-              <textarea rows={3} value={sameAs} onChange={(e) => { setSameAs(e.target.value); markDirty(); }} placeholder={"https://instagram.com/ejemplo\nhttps://facebook.com/ejemplo"} />
-              <span className="field-hint">Una URL por linea (Instagram, Facebook, TripAdvisor, etc.)</span>
-            </div>
-          </WizardFieldGroup>
-        </>
+        <ResourceWizardStep3Location
+          location={location}
+          onChangeLocation={(next) => {
+            setLocation(next);
+            // Sincronía hacia states legacy para que el paso 7 preview /
+            // completion cards y cualquier otro lector downstream vean los
+            // datos al día sin refactorizarse. La fuente de verdad sigue
+            // siendo `location`; los legacy son espejo.
+            setLatitude(next.lat != null ? String(next.lat) : '');
+            setLongitude(next.lng != null ? String(next.lng) : '');
+            setAddressStreet(next.streetAddress);
+            setAddressPostal(next.postalCode);
+            markDirty();
+          }}
+          contact={contact}
+          onChangeContact={(next) => {
+            setContact(next);
+            // Espejo a legacy (igual rationale). phone/email single-string
+            // se unifican con el formato CSV antiguo del paso 7.
+            setTelephone(next.phone);
+            setEmail(next.email);
+            setUrl(next.web);
+            setSameAs(next.socialLinks.map((l) => l.url).join('\n'));
+            markDirty();
+          }}
+          hoursPlan={hoursPlan}
+          onChangeHoursPlan={(next) => { setHoursPlan(next); markDirty(); }}
+          municipioName={selectedMunicipioName}
+        />
       )}
 
       {/* ================================================================
