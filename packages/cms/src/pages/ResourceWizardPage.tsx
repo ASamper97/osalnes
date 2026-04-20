@@ -14,6 +14,10 @@ import { RichTextEditor } from '@/components/RichTextEditor';
 import TemplatePicker from '@/pages/TemplatePicker';
 import { ImportFromUrlModal } from '@/components/ImportFromUrlModal';
 import MainTypeSelector from '@/components/MainTypeSelector';
+import ResourceWizardStep2Content from '@/pages/ResourceWizardStep2Content';
+import TranslationReadyToast from '@/components/TranslationReadyToast';
+import { useBackgroundTranslation } from '@/lib/useBackgroundTranslation';
+import type { GlStatus } from '@/pages/step2-content.copy';
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
@@ -118,6 +122,11 @@ export function ResourceWizardPage() {
   const [nameGl, setNameGl] = useState('');
   const [descEs, setDescEs] = useState('');
   const [descGl, setDescGl] = useState('');
+  // Paso 2 · t4 — estado del editor GL (empty | translated | edited).
+  // Al cargar un recurso existente con GL poblado, se asume 'edited' (no
+  // podemos saber si vino de IA o fue editado manualmente); es la opción
+  // segura porque no mentimos sobre la procedencia.
+  const [glStatus, setGlStatus] = useState<GlStatus>('empty');
 
   // Step 3: Ubicacion + Contacto
   const [latitude, setLatitude] = useState('');
@@ -433,6 +442,10 @@ export function ResourceWizardPage() {
         setDescEn(r.description?.en || '');
         setDescFr(r.description?.fr || '');
         setDescPt(r.description?.pt || '');
+        // Hidrata el status GL del paso 2 — 'edited' si venía con texto,
+        // 'empty' si no. Nunca 'translated' al cargar: no sabemos si la
+        // traducción vino de la IA o fue editada por el usuario después.
+        setGlStatus((r.description?.gl || '').trim() ? 'edited' : 'empty');
         setSavedId(r.id);
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
@@ -692,6 +705,30 @@ export function ResourceWizardPage() {
     .flatMap((g) => TAGS_BY_GROUP[g] ?? [])
     .map((t) => ({ key: t.key, label: t.label, field: t.field as string }));
 
+  // Paso 2 · t4 — municipio en nombre legible (no ID) para el prompt draft.
+  const selectedMunicipioName =
+    municipalities.find((m) => m.id === municipioId)?.name?.es ?? null;
+
+  // Paso 2 · t4 — hook de traducción automática en background. Se dispara
+  // al abandonar el paso 2 si hay ES y el GL está vacío. El resultado
+  // aparece en el editor GL y un toast notifica desde los pasos 3+.
+  const bgTranslation = useBackgroundTranslation({
+    descriptionEs: descEs,
+    descriptionGl: descGl,
+    setDescriptionGl: (next) => { setDescGl(next); markDirty(); },
+    setGlStatus,
+  });
+
+  // Wrapper del onStepChange del Wizard: intercepta la salida del paso 2
+  // (índice 1) para disparar la traducción background antes de avanzar.
+  // No bloquea la navegación — el hook corre en paralelo.
+  const handleStepChange = useCallback((nextStep: number) => {
+    if (currentStep === 1 && nextStep > 1) {
+      bgTranslation.dispatchIfNeeded();
+    }
+    setCurrentStep(nextStep);
+  }, [currentStep, bgTranslation]);
+
   // ── Render ───────────────────────────────────────────────────
 
   if (loading) return <p>Cargando recurso...</p>;
@@ -744,7 +781,7 @@ export function ResourceWizardPage() {
     <Wizard
       steps={steps}
       currentStep={currentStep}
-      onStepChange={setCurrentStep}
+      onStepChange={handleStepChange}
       onFinish={handleFinish}
       saving={saving}
       title={isNew ? 'Nuevo recurso turistico' : 'Editar recurso'}
@@ -896,70 +933,20 @@ export function ResourceWizardPage() {
           STEP 2 — Contenido (descripciones)
           ================================================================ */}
       {currentStep === 1 && (
-        <>
-          <WizardFieldGroup
-            title="Descripcion en castellano"
-            description="Describe el recurso de forma atractiva e informativa. Esta es la descripcion principal que veran los visitantes."
-            tip="Una buena descripcion tiene entre 100 y 300 palabras, menciona lo que hace unico al recurso y da informacion practica. Usa los botones de la barra superior para dar formato (negrita, listas, titulos...) y el boton 'Mejorar con IA' para que la IA reescriba el texto."
-          >
-            <RichTextEditor
-              value={descEs}
-              onChange={(html) => { setDescEs(html); markDirty(); }}
-              placeholder="Describe el recurso: que es, que lo hace especial, que puede encontrar el visitante..."
-              minHeight={220}
-            />
-            <AiWritingAssistant
-              text={descEs}
-              lang="es"
-              onAccept={(t) => { setDescEs(t); markDirty(); }}
-              translationTargets={[
-                { lang: 'gl', label: 'Gallego', onAccept: (t) => { setDescGl(t); markDirty(); } },
-                { lang: 'en', label: 'Ingles', onAccept: (t) => { setDescEn(t); markDirty(); } },
-                { lang: 'fr', label: 'Frances', onAccept: (t) => { setDescFr(t); markDirty(); } },
-                { lang: 'pt', label: 'Portugues', onAccept: (t) => { setDescPt(t); markDirty(); } },
-              ]}
-            />
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Descripcion en gallego"
-            description="Traduce o adapta la descripcion al gallego. Puedes usar el boton de traduccion automatica como punto de partida."
-          >
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.35rem' }}>
-              <button
-                type="button"
-                className="translate-btn"
-                disabled={!descEs || !!translating}
-                onClick={() => handleTranslate(descEs, 'gl', setDescGl)}
-              >
-                {translating ? 'Traduciendo...' : 'Traducir automaticamente a GL'}
-              </button>
-            </div>
-            <RichTextEditor
-              value={descGl}
-              onChange={(html) => { setDescGl(html); markDirty(); }}
-              placeholder="Descricion do recurso en galego..."
-              minHeight={220}
-            />
-          </WizardFieldGroup>
-
-          <WizardFieldGroup title="Opciones de visibilidad">
-            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={isAccessibleForFree} onChange={(e) => { setIsAccessibleForFree(e.target.checked); markDirty(); }} />
-                Acceso gratuito
-              </label>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={publicAccess} onChange={(e) => { setPublicAccess(e.target.checked); markDirty(); }} />
-                Acceso publico
-              </label>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={visibleOnMap} onChange={(e) => { setVisibleOnMap(e.target.checked); markDirty(); }} />
-                Visible en mapa
-              </label>
-            </div>
-          </WizardFieldGroup>
-        </>
+        <ResourceWizardStep2Content
+          descriptionEs={descEs}
+          onChangeDescriptionEs={(next) => { setDescEs(next); markDirty(); }}
+          descriptionGl={descGl}
+          onChangeDescriptionGl={(next) => { setDescGl(next); markDirty(); }}
+          glStatus={glStatus}
+          onChangeGlStatus={setGlStatus}
+          isBackgroundTranslating={bgTranslation.isInFlight}
+          context={{
+            name: nameEs,
+            mainTypeKey,
+            municipio: selectedMunicipioName,
+          }}
+        />
       )}
 
       {/* ================================================================
@@ -1340,6 +1327,18 @@ export function ResourceWizardPage() {
         </>
       )}
     </Wizard>
+
+    {/* Paso 2 · t4 — Toast "Traducción al gallego lista". Aparece cuando
+        la traducción background termina y el usuario NO está en el paso 2
+        (en el paso 2 sería ruido porque ya ve el GL). */}
+    <TranslationReadyToast
+      visible={bgTranslation.hasPendingReview && currentStep !== 1}
+      onReview={() => {
+        bgTranslation.dismissReview();
+        setCurrentStep(1);
+      }}
+      onDismiss={bgTranslation.dismissReview}
+    />
 
     {/* C6 — Toast del autosave: aparece la primera vez que el wizard
         crea el borrador silencioso al pasar de step 0 a step 1, para
