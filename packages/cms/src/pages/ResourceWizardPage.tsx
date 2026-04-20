@@ -449,11 +449,19 @@ export function ResourceWizardPage() {
         setSavedId(r.id);
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
-        setTagKeys(keys);
+        // Paso 2 · t5 — hidratación legacy→tag: si el recurso tenía
+        // is_accessible_for_free=true en columna legacy, nos aseguramos de
+        // que `caracteristicas.gratuito` esté entre las tags. Al guardar,
+        // el flag se deriva del tag (no vuelve a escribirse desde aquí).
+        const finalKeys = [...keys];
+        if (r.isAccessibleForFree && !finalKeys.includes('caracteristicas.gratuito')) {
+          finalKeys.push('caracteristicas.gratuito');
+        }
+        setTagKeys(finalKeys);
         // Hidratar mainTypeKey desde el primer tag del grupo tipo-de-recurso.*
         // presente en las tags del recurso. Si no hay, queda null — el paso 1
         // forzará a elegir uno antes de avanzar.
-        const mainFromTags = keys.find((k) => k.startsWith('tipo-de-recurso.'));
+        const mainFromTags = finalKeys.find((k) => k.startsWith('tipo-de-recurso.'));
         if (mainFromTags) setMainTypeKey(mainFromTags);
         setLoading(false);
       })
@@ -647,7 +655,14 @@ export function ResourceWizardPage() {
       url: url || null,
       same_as: sameAs ? sameAs.split('\n').map((s) => s.trim()).filter(Boolean) : [],
       opening_hours: openingHours || null,
-      is_accessible_for_free: isAccessibleForFree,
+      // Paso 2 · t5 — acceso_gratuito deriva del tag caracteristicas.gratuito
+      // (fuente única). Se sigue escribiendo la columna legacy en paralelo
+      // hasta que todos los recursos estén migrados y los consumidores
+      // downstream lean solo resource_tags.
+      is_accessible_for_free: tagKeys.includes('caracteristicas.gratuito'),
+      // TODO producto — confirmar con Mancomunidad si `publicAccess` se
+      // mantiene como flag propio o se fusiona con gratuito. No existe tag
+      // `caracteristicas.publico` en el catálogo UNE; mantener state legacy.
       public_access: publicAccess,
       visible_en_mapa: visibleOnMap,
       tourist_types: touristTypes,
@@ -1221,6 +1236,31 @@ export function ResourceWizardPage() {
           ================================================================ */}
       {currentStep === 6 && (
         <>
+        {/* Paso 2 · t5 — opción de publicación (antes estaba en el paso 2
+            como "Visible en mapa", ahora vive junto a la revisión final
+            porque es una decisión editorial, no una característica del
+            recurso). Persiste en recurso_turistico.visible_en_mapa. */}
+        <WizardFieldGroup
+          title="Opciones de publicación"
+          tip="Decide si este recurso debe aparecer en el mapa público del portal. Puedes cambiarlo después en cualquier momento."
+        >
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+            <input
+              type="checkbox"
+              checked={visibleOnMap}
+              onChange={(e) => { setVisibleOnMap(e.target.checked); markDirty(); }}
+              style={{ marginTop: '0.2rem' }}
+            />
+            <span>
+              <strong>Visible en el mapa público</strong>
+              <br />
+              <span style={{ color: 'var(--cms-text-light)', fontSize: '0.85rem' }}>
+                Si lo dejas marcado, este recurso aparecerá como pin en el mapa de recursos turísticos de la web.
+              </span>
+            </span>
+          </label>
+        </WizardFieldGroup>
+
         <AiQualityScore
           resourceData={{
             nameEs, nameGl, descEs, descGl, rdfType,
