@@ -739,6 +739,63 @@ textarea:focus-visible {
 }
 .pid-chip--incomplete .pid-chip__dot { background: #dc2626; }
 
+/* ── PendingTasksBanner — bloque superior contextual al rol (Lote 3a) ─── */
+.pending-tasks {
+  margin-bottom: 1.25rem;
+}
+.pending-tasks__card {
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+}
+.pending-tasks__card--editor {
+  border-left-color: #2563eb;
+  background: #eff6ff;
+}
+.pending-tasks__card--validador {
+  border-left-color: #ea580c;
+  background: #fff7ed;
+}
+.pending-tasks__card--admin {
+  border-left-color: #6b7280;
+  background: #f8fafc;
+}
+.pending-tasks__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.pending-tasks__icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.pending-tasks__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+.pending-tasks__line {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: #334155;
+}
+.pending-tasks__line strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+.pending-tasks__hint {
+  color: #64748b;
+}
+.pending-tasks__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 /* ==========================================================================
    Alerts
    ========================================================================== */

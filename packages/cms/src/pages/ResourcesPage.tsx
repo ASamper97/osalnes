@@ -16,6 +16,7 @@ import {
 import { useNotifications } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { loadResourcesPidSummary, pidStatus, type PidSummary, type PidStatus } from '@/lib/resource-tags';
+import { PendingTasksBanner } from '@/components/PendingTasksBanner';
 
 const PID_STATUS_LABEL: Record<PidStatus, string> = {
   ready: 'Listo PID',
@@ -184,6 +185,18 @@ export function ResourcesPage() {
     loadResources();
   }, [loadResources]);
 
+  // Sync ?status= URL param (usado por PendingTasksBanner para llevar al
+  // editor/validador directo a su cola). Se ejecuta una vez al mount y
+  // cuando cambie la query; no pisa filtros posteriores del propio usuario.
+  useEffect(() => {
+    const qStatus = searchParams.get('status');
+    if (qStatus && qStatus !== filterStatus) {
+      setFilterStatus(qStatus);
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   useEffect(() => {
     api.getTypologies().then(setTypologies).catch(() => {});
     api.getMunicipalities().then(setMunicipalities).catch(() => {});
@@ -326,6 +339,10 @@ export function ResourcesPage() {
           + Nuevo recurso
         </button>
       </div>
+
+      {/* Lote 3a — bloque "Pendiente de tu atención" contextual al rol.
+          Se oculta solo cuando no hay nada pendiente o el rol es consulta. */}
+      <PendingTasksBanner />
 
       {error && <div className="alert alert-error">{error}</div>}
 
