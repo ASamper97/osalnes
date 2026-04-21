@@ -16,6 +16,10 @@ import { rateLimit } from '../_shared/rate-limit.ts';
 import { formatError } from '../_shared/errors.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+// Paso 5 · t3 — endpoint multimodal para `genAltText`. Usamos gemini-1.5-flash
+// porque soporta input de imagen y texto en una misma request. La acción de
+// texto plano (improve / translate / …) sigue usando gemini-2.5-flash.
+const GEMINI_VISION_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 const CONTEXT_SALNES = `O Salnés es una comarca de 8 municipios en las Rías Baixas de Galicia (España): Cambados, Sanxenxo, O Grove, Vilagarcía de Arousa, Vilanova de Arousa, A Illa de Arousa, Meaño, Meis y Ribadumia. Famosa por el vino Albariño (DO Rías Baixas), mariscos excepcionales, playas de arena fina, patrimonio cultural (pazos, iglesias románicas), la Festa do Albariño, Pazo de Fefiñáns, la Isla de A Toxa, y una gastronomía de primer nivel (marisco fresco, pulpo, empanada gallega).`;
 
@@ -171,6 +175,21 @@ Reglas:
 Responde EXCLUSIVAMENTE con JSON válido (sin markdown, sin texto extra):
 {"suggestions":[{"tagKey":"caracteristicas.bandera-azul","labelEs":"Bandera azul","reason":"La descripción menciona certificación Q de calidad y bandera azul."}]}
 Si no hay sugerencias: {"suggestions":[]}`,
+
+  // Acción `genAltText` (paso 5 · t3). Genera alt text WCAG 2.1 AA §1.1.1 a
+  // partir de una imagen real (multimodal, Gemini Vision) + contexto del
+  // recurso. Temperatura 0.4 — equilibrio entre precisión (no inventar) y
+  // variedad (no repetir la misma frase genérica en una galería).
+  genAltText: `Describes imágenes turísticas para generar alt text accesible (WCAG 2.1 AA §1.1.1).
+
+Reglas:
+1. Describe SOLO lo que ves: elementos visuales concretos, colores dominantes, composición, personas si las hay.
+2. 15-30 palabras en castellano.
+3. NO empieces con "La imagen muestra…", "Foto de…" ni similares. Ve directo.
+4. NO inventes datos no visibles: no digas nombres de sitios, fechas históricas, atributos que no se aprecian.
+5. Usa el contexto solo para DESAMBIGUAR lo que ves (saber que es una playa te ayuda a describir la arena; no a inventar que es "A Lanzada").
+6. Si en la imagen hay texto visible importante, inclúyelo entrecomillado.
+7. Responde con el texto alt EXCLUSIVAMENTE, sin prefijo, sin comillas, sin explicaciones.`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -191,15 +210,23 @@ Deno.serve(async (req: Request) => {
     requireRole(user, 'admin', 'editor', 'tecnico');
 
     const apiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!apiKey) {
-      return json({ error: 'GEMINI_API_KEY not configured', mock: true, result: getMockResult(req) }, 200, req);
-    }
 
     const body = await req.json();
     const { action, text, from, to, context, lang } = body;
 
     if (!action || !ACTION_PROMPTS[action]) {
       return json({ error: `Invalid action. Valid: ${Object.keys(ACTION_PROMPTS).join(', ')}` }, 400, req);
+    }
+
+    // Paso 5 · t3 — `genAltText` tiene un flujo multimodal distinto al resto
+    // (Gemini Vision con input texto + imagen base64). Lo atendemos aquí en
+    // rama temprana para no enredar el switch genérico text-only de abajo.
+    if (action === 'genAltText') {
+      return await handleGenAltText(body, req, apiKey);
+    }
+
+    if (!apiKey) {
+      return json({ error: 'GEMINI_API_KEY not configured', mock: true, result: getMockResult(req) }, 200, req);
     }
 
     const systemPrompt = ACTION_PROMPTS[action];
@@ -430,6 +457,128 @@ function humanizeTypeKey(k: string): string {
     'tipo-de-recurso.leyenda':           'leyenda o tradición local',
   };
   return map[k] ?? 'recurso turístico';
+}
+
+// Paso 5 · t3 — handler multimodal para `genAltText`. Fetches the image,
+// sends it to Gemini Vision junto al system prompt + contexto del recurso,
+// y devuelve el alt text saneado. Si no hay GEMINI_API_KEY o la descarga /
+// llamada a Gemini falla, devuelve un mock sin romper el frontend ("Imagen
+// de {name} en {municipio}") y marca `mock: true` en la respuesta.
+// deno-lint-ignore no-explicit-any
+async function handleGenAltText(body: any, req: Request, apiKey: string | undefined): Promise<Response> {
+  const start = Date.now();
+  const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl : '';
+  const ctx = body.resourceContext || {};
+  const name = typeof ctx.name === 'string' ? ctx.name : 'recurso';
+  const typeLabel = typeof ctx.typeLabel === 'string' ? ctx.typeLabel : null;
+  const municipio = typeof ctx.municipio === 'string' ? ctx.municipio : null;
+
+  if (!imageUrl) {
+    return json({ error: 'Missing imageUrl' }, 400, req);
+  }
+
+  const mockAlt = `Imagen de ${name}${municipio ? ` en ${municipio}` : ''}.`;
+
+  if (!apiKey) {
+    return json({
+      action: 'genAltText',
+      result: mockAlt,
+      tokens_used: 0,
+      duration_ms: Date.now() - start,
+      model: 'mock',
+      mock: true,
+    }, 200, req);
+  }
+
+  // 1) Descargar la imagen y convertir a base64. El bucket resource-images
+  // es público (migración 023 · tarea 1), así que no hacen falta creds.
+  let imageBase64: string;
+  let imageMime: string;
+  try {
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error(`image fetch failed: ${imgRes.status}`);
+    imageMime = imgRes.headers.get('content-type') ?? 'image/jpeg';
+    const imgBuf = await imgRes.arrayBuffer();
+    // btoa no acepta binarios grandes en una sola pasada; iteramos por chunks
+    // de 8KiB para evitar "Maximum call stack size exceeded" con imágenes
+    // grandes (>256KB).
+    const bytes = new Uint8Array(imgBuf);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    imageBase64 = btoa(binary);
+  } catch (err) {
+    console.error('[ai-writer/genAltText] image fetch error:', err);
+    return json({
+      action: 'genAltText',
+      result: mockAlt,
+      tokens_used: 0,
+      duration_ms: Date.now() - start,
+      model: 'mock',
+      mock: true,
+      error: 'image_fetch_failed',
+    }, 200, req);
+  }
+
+  // 2) Construcción del contexto para el user message (el system prompt
+  // ya está en ACTION_PROMPTS.genAltText).
+  const userMessage = `Contexto del recurso:
+  - Tipo: ${typeLabel ?? 'recurso turístico'}
+  - Nombre: ${name}
+  - Ubicación: ${municipio ?? 'O Salnés'}`;
+
+  // 3) Llamada a Gemini Vision multimodal.
+  const res = await fetch(`${GEMINI_VISION_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: ACTION_PROMPTS.genAltText }] },
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: userMessage },
+          { inline_data: { mime_type: imageMime, data: imageBase64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 100,
+        topP: 0.9,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('[ai-writer/genAltText] Gemini error:', res.status, errText);
+    return json({
+      action: 'genAltText',
+      result: mockAlt,
+      tokens_used: 0,
+      duration_ms: Date.now() - start,
+      model: 'mock',
+      mock: true,
+      error: 'gemini_failed',
+    }, 200, req);
+  }
+
+  const data = await res.json();
+  const rawAlt = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  // Saneado: quitar comillas externas y colapsar saltos de línea.
+  const cleanAlt = rawAlt
+    .replace(/^["'«»]+|["'«»]+$/g, '')
+    .replace(/\s*\n+\s*/g, ' ')
+    .trim();
+
+  return json({
+    action: 'genAltText',
+    result: cleanAlt || mockAlt,
+    tokens_used: data.usageMetadata?.totalTokenCount || 0,
+    duration_ms: Date.now() - start,
+    model: 'gemini-1.5-flash',
+  }, 200, req);
 }
 
 async function getMockResult(req: Request): Promise<unknown> {
