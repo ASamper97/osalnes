@@ -29,6 +29,14 @@
     "./data/osalnes-geo": {
       "types": "./dist/data/osalnes-geo.d.ts",
       "default": "./dist/data/osalnes-geo.js"
+    },
+    "./data/cuisine-catalog": {
+      "types": "./dist/data/cuisine-catalog.d.ts",
+      "default": "./dist/data/cuisine-catalog.js"
+    },
+    "./data/establishment-fields": {
+      "types": "./dist/data/establishment-fields.d.ts",
+      "default": "./dist/data/establishment-fields.js"
     }
   },
   "scripts": {

@@ -26,6 +26,7 @@ import EstablishmentDetails, {
 import SuggestTagsButton from '../components/SuggestTagsButton';
 import TagSelector from '../components/TagSelector';
 import { hasAnyEstablishmentField } from '@osalnes/shared/data/establishment-fields';
+import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
 import { STEP4_COPY } from './step4-classification.copy';
 
 // ─── Props ─────────────────────────────────────────────────────────────
@@ -130,10 +131,16 @@ export default function ResourceWizardStep4Classification({
               - Render interno con grupos "curaduria-editorial" separado
                 visualmente (requiere que el CSS del grupo tenga
                 className="tag-group tag-group-editorial"). */}
+        {/* Adaptación al contrato real del TagSelector del paso 0:
+            `resourceTypeLabel` es la xlsxLabel (p.ej. "Hotel") que se
+            deriva del value schema.org del mainTag UNE. `value` en vez
+            de `selectedKeys`. includeMunicipio=false porque el municipio
+            ya se pide en el paso 1. */}
         <TagSelector
-          mainTypeKey={mainTypeKey}
-          selectedKeys={selectedTagKeys}
+          resourceTypeLabel={mainTypeKey ? TAGS_BY_KEY[mainTypeKey]?.value ?? null : null}
+          value={selectedTagKeys}
           onChange={onChangeSelectedTagKeys}
+          includeMunicipio={false}
         />
       </section>
     </div>

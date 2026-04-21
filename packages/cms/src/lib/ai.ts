@@ -31,6 +31,10 @@ interface AiRequestBase {
   typeKey?: string | null;
   municipio?: string | null;
   targetLang?: 'es' | 'gl';
+  // Campos extra usados por la acción `suggestTags` (paso 4 · t2).
+  descriptionEs?: string;
+  mainTypeKey?: string | null;
+  existingTagKeys?: string[];
 }
 
 interface AiResponse<T = string> {
@@ -138,6 +142,64 @@ export async function aiDraft(input: {
     targetLang: input.targetLang,
   });
   return typeof res.result === 'string' ? res.result : '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// suggestTags — sugeridor de etiquetas con explicación (paso 4 · t2)
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Una sugerencia individual que devuelve el Edge Function. El `reason` es
+ * la explicación en castellano de por qué la IA propone este tag
+ * (modalidad "explicado", decisión 4-A del usuario).
+ */
+export interface AiTagSuggestion {
+  /** Key del tag, p.ej. "caracteristicas.bandera-azul" */
+  tagKey: string;
+  /** Etiqueta visible en castellano (el Edge la devuelve para que el cliente no tenga que resolverla) */
+  labelEs: string;
+  /** Frase corta que explica por qué la IA propone este tag */
+  reason: string;
+}
+
+export interface AiSuggestTagsInput {
+  /** Descripción del paso 2 en castellano (entrada principal) */
+  descriptionEs: string;
+  /** Tipología principal del paso 1, para contextualizar */
+  mainTypeKey: string | null;
+  /** Municipio opcional para mayor contexto */
+  municipio: string | null;
+  /** Tags ya marcados por el usuario (la IA no los volverá a proponer) */
+  existingTagKeys: string[];
+}
+
+interface SuggestTagsResult {
+  suggestions: AiTagSuggestion[];
+}
+
+/**
+ * Propone etiquetas relevantes basadas en la descripción del recurso.
+ * Devuelve array con hasta 8 sugerencias, cada una con su razón.
+ * Requiere el action `suggestTags` en la edge function (paso 4 · t4).
+ */
+export async function aiSuggestTags(
+  input: AiSuggestTagsInput,
+): Promise<AiTagSuggestion[]> {
+  const res = await callAi<SuggestTagsResult>({
+    action: 'suggestTags',
+    descriptionEs: input.descriptionEs,
+    mainTypeKey: input.mainTypeKey,
+    municipio: input.municipio,
+    existingTagKeys: input.existingTagKeys,
+  });
+  if (
+    res.result &&
+    typeof res.result === 'object' &&
+    Array.isArray((res.result as SuggestTagsResult).suggestions)
+  ) {
+    return (res.result as SuggestTagsResult).suggestions;
+  }
+  return [];
 }
 
 /** Generate SEO title and description */
