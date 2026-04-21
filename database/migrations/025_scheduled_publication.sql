@@ -4,127 +4,110 @@
 --
 -- Cambios:
 --
---   1. publication_status: enum existente ampliado con 'scheduled'
+--   1. estado_editorial: CHECK existente ampliado con 'programado'
 --   2. scheduled_publish_at timestamptz — cuándo publicar automáticamente
---   3. published_at timestamptz — cuándo se publicó de hecho
---   4. published_by uuid — quién lo publicó (o el sistema si cron)
---   5. RPC publish_scheduled_resources() — se llama desde el Edge Function
---      cron cada 15 minutos y publica los programados vencidos.
+--   3. published_at timestamptz — YA EXISTÍA en 001; guard idempotente
+--   4. published_by uuid — quién lo publicó (NULL si lo publicó el cron)
+--   5. RPC publish_scheduled_resources() — llamado por pg_cron (o Edge
+--      Function de fallback) cada 15 minutos; publica los programados
+--      vencidos.
 --
--- Asume que `resources.publication_status` ya existe. Si no, la migración
--- crea el constraint.
+-- Adaptado a la realidad del repo:
+--   - Tabla real es `recurso_turistico` (NO `resources`; error recurrente
+--     de los prompts de rediseño).
+--   - La columna de estado editorial es `estado_editorial` en español,
+--     con CHECK ('borrador', 'revision', 'publicado', 'archivado') desde
+--     la migración 001. Añadimos 'programado' a ese CHECK.
 --
 -- Idempotente.
 -- ==========================================================================
 
 
--- 1) Ampliar publication_status -----------------------------------------
---
--- Si existe como text con CHECK, hay que recrear el CHECK con 'scheduled'.
--- Si existe como ENUM, hay que añadir el valor al enum.
+-- 1) Ampliar CHECK de estado_editorial con 'programado' -------------------
 
 do $$
 begin
-  -- Caso A: publication_status es text con CHECK
   if exists (
-    select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='publication_status'
-      and data_type='text'
+    select 1 from information_schema.table_constraints
+    where table_schema='public' and table_name='recurso_turistico'
+      and constraint_name='recurso_turistico_estado_editorial_check'
   ) then
-    -- Borrar el check viejo si existe y recrear con 'scheduled' incluido
-    if exists (
-      select 1 from information_schema.table_constraints
-      where table_schema='public' and table_name='resources'
-        and constraint_name='resources_publication_status_check'
-    ) then
-      alter table public.resources drop constraint resources_publication_status_check;
-    end if;
-
-    alter table public.resources
-      add constraint resources_publication_status_check
-      check (publication_status in ('draft', 'scheduled', 'published', 'archived'));
+    alter table public.recurso_turistico drop constraint recurso_turistico_estado_editorial_check;
   end if;
 
-  -- Caso B: es un enum (comprobar y añadir valor si no existe)
-  if exists (
-    select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace
-    where t.typname='publication_status_enum' and n.nspname='public'
-  ) then
-    if not exists (
-      select 1 from pg_enum e
-      join pg_type t on t.oid=e.enumtypid
-      where t.typname='publication_status_enum' and e.enumlabel='scheduled'
-    ) then
-      alter type public.publication_status_enum add value if not exists 'scheduled';
-    end if;
-  end if;
+  alter table public.recurso_turistico
+    add constraint recurso_turistico_estado_editorial_check
+    check (estado_editorial in ('borrador', 'revision', 'programado', 'publicado', 'archivado'));
 end $$;
 
 
--- 2) Columnas nuevas ----------------------------------------------------
+-- 2) Columnas nuevas ------------------------------------------------------
 
 do $$
 begin
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='scheduled_publish_at'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='scheduled_publish_at'
   ) then
-    alter table public.resources add column scheduled_publish_at timestamptz;
-    comment on column public.resources.scheduled_publish_at is
+    alter table public.recurso_turistico add column scheduled_publish_at timestamptz;
+    comment on column public.recurso_turistico.scheduled_publish_at is
       'Fecha/hora en que el recurso debe publicarse automáticamente. NULL si no está programado. El cron publish-scheduled lo mira cada 15 min.';
   end if;
 
+  -- `published_at` ya existe desde 001; este IF sirve para repos que
+  -- pudieran haberla borrado en el camino.
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='published_at'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='published_at'
   ) then
-    alter table public.resources add column published_at timestamptz;
-    comment on column public.resources.published_at is
-      'Fecha/hora real en la que el recurso pasó a estado published. Distinta de scheduled_publish_at si hubo retrasos del cron.';
+    alter table public.recurso_turistico add column published_at timestamptz;
   end if;
+  comment on column public.recurso_turistico.published_at is
+    'Fecha/hora real en la que el recurso pasó a estado publicado. Distinta de scheduled_publish_at si hubo retrasos del cron.';
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='published_by'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='published_by'
   ) then
-    alter table public.resources add column published_by uuid references auth.users(id) on delete set null;
-    comment on column public.resources.published_by is
+    alter table public.recurso_turistico add column published_by uuid references auth.users(id) on delete set null;
+    comment on column public.recurso_turistico.published_by is
       'Quién publicó el recurso. NULL si lo publicó el sistema (cron de programados).';
   end if;
 end $$;
 
 
--- 3) Consistencia: scheduled_publish_at solo tiene sentido si status='scheduled'
+-- 3) Consistencia: scheduled_publish_at solo con estado 'programado' ------
 
 do $$
 begin
   if not exists (
     select 1 from information_schema.table_constraints
-    where table_schema='public' and table_name='resources'
-      and constraint_name='resources_scheduled_publish_at_coherent'
+    where table_schema='public' and table_name='recurso_turistico'
+      and constraint_name='recurso_turistico_scheduled_publish_at_coherent'
   ) then
-    alter table public.resources
-      add constraint resources_scheduled_publish_at_coherent
+    alter table public.recurso_turistico
+      add constraint recurso_turistico_scheduled_publish_at_coherent
       check (
-        (publication_status = 'scheduled' and scheduled_publish_at is not null)
-        or (publication_status <> 'scheduled')
+        (estado_editorial = 'programado' and scheduled_publish_at is not null)
+        or (estado_editorial <> 'programado')
       );
   end if;
 end $$;
 
 
--- 4) Índice para el cron (busca rapido los vencidos) --------------------
+-- 4) Índice para el cron (busca rápido los vencidos) ----------------------
 
-create index if not exists idx_resources_scheduled_pending
-  on public.resources (scheduled_publish_at)
-  where publication_status = 'scheduled';
+create index if not exists idx_recurso_turistico_scheduled_pending
+  on public.recurso_turistico (scheduled_publish_at)
+  where estado_editorial = 'programado';
 
 
--- 5) RPC publish_scheduled_resources() ----------------------------------
+-- 5) RPC publish_scheduled_resources() ------------------------------------
 --
--- Llamado desde el Edge Function cron cada 15 minutos. Devuelve cuántos
--- recursos publicó. SECURITY DEFINER para que el cron pueda actualizar
--- aunque no esté autenticado como un usuario concreto.
+-- Llamado desde pg_cron (opción A elegida) cada 15 minutos. Devuelve
+-- cuántos recursos publicó. SECURITY DEFINER para que pueda actualizar
+-- sin estar autenticado como un usuario concreto. El Edge Function
+-- `publish-scheduled` queda disponible como fallback sin desplegar.
 
 create or replace function public.publish_scheduled_resources()
 returns integer
@@ -136,16 +119,16 @@ declare
 begin
   with to_publish as (
     select id
-    from public.resources
-    where publication_status = 'scheduled'
+    from public.recurso_turistico
+    where estado_editorial = 'programado'
       and scheduled_publish_at is not null
       and scheduled_publish_at <= now()
     for update skip locked
   )
-  update public.resources r
-  set publication_status = 'published',
+  update public.recurso_turistico r
+  set estado_editorial = 'publicado',
       published_at = now(),
-      published_by = null,  -- null = publicado por el sistema
+      published_by = null,  -- null = publicado por el sistema (cron)
       scheduled_publish_at = null
   from to_publish
   where r.id = to_publish.id;
@@ -156,4 +139,4 @@ end;
 $$;
 
 comment on function public.publish_scheduled_resources() is
-  'Publica todos los recursos en estado scheduled cuya fecha ya venció. Llamado por el Edge Function cron publish-scheduled cada 15 min. Devuelve el número de recursos publicados.';
+  'Publica todos los recursos en estado programado cuya fecha ya venció. Llamado por pg_cron cada 15 min. Devuelve el número de recursos publicados.';
