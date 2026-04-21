@@ -1,0 +1,460 @@
+/* ──────────────────────────────────────────────────────────────────────
+ * Paso 4 · Clasificación — estilos
+ * ────────────────────────────────────────────────────────────────────── */
+
+.step4-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1100px;
+}
+
+.step4-header h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
+}
+.step4-header p {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+  max-width: 780px;
+}
+
+/* ── Datos del establecimiento ── */
+.step4-establishment {
+  padding: 1.1rem 1.2rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.step4-establishment > header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.2rem;
+}
+.step4-establishment > header p {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.step4-establishment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.9rem;
+}
+
+.step4-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.step4-field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.step4-field input,
+.step4-field select {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fff;
+}
+.step4-field input:focus,
+.step4-field select:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+.step4-field .field-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.step4-field-cuisine {
+  grid-column: 1 / -1;
+}
+
+/* ── CuisineSelector ── */
+.cuisine-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.cuisine-selected {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.cuisine-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  color: #0c4a6e;
+  font-weight: 500;
+}
+.cuisine-chip.is-selected {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+.cuisine-chip-remove {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  border-radius: 50%;
+}
+.cuisine-chip-remove:hover {
+  opacity: 1;
+}
+
+.cuisine-search {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+.cuisine-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.cuisine-group-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+.cuisine-group-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.3rem;
+}
+
+.cuisine-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.55rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.cuisine-option:hover {
+  background: #f1f5f9;
+}
+.cuisine-option.is-checked {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+  font-weight: 500;
+}
+.cuisine-option input[type='checkbox'] {
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.cuisine-low-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  color: #475569;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cuisine-low-toggle:hover {
+  background: #fff;
+  border-style: solid;
+}
+
+.cuisine-empty {
+  font-style: italic;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+/* ── Sección tags ── */
+.step4-tags-section {
+  padding: 1.1rem 1.2rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.step4-tags-section > header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.2rem;
+}
+.step4-tags-section > header p {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── SuggestTagsButton ── */
+.suggest-tags {
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(99, 102, 241, 0.05));
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.suggest-tags-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.suggest-tags-intro h4 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #6b21a8;
+  margin: 0 0 0.15rem;
+}
+.suggest-tags-intro p {
+  font-size: 0.8rem;
+  margin: 0;
+  line-height: 1.45;
+  max-width: 560px;
+}
+.suggest-tags-disabled-hint {
+  font-size: 0.78rem;
+  font-style: italic;
+  margin: 0;
+}
+.suggest-tags-error {
+  padding: 0.5rem 0.7rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* Panel de sugerencias */
+.suggest-tags-panel {
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.suggest-tags-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.suggest-tags-panel-head h5 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #6b21a8;
+  margin: 0 0 0.15rem;
+}
+.suggest-tags-panel-head p {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0;
+}
+.suggest-tags-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 0.3rem;
+}
+.suggest-tags-close:hover {
+  color: #0f172a;
+}
+
+.suggest-tags-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.suggest-tag-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+.suggest-tag-body {
+  flex: 1;
+  min-width: 220px;
+}
+.suggest-tag-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.2rem;
+}
+.suggest-tag-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #475569;
+  line-height: 1.45;
+  font-style: italic;
+}
+.suggest-tag-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.suggest-tag-already {
+  font-size: 0.78rem;
+  color: #15803d;
+  font-weight: 500;
+  padding: 0.3rem 0.55rem;
+  background: #f0fdf4;
+  border-radius: 5px;
+  border: 1px solid #bbf7d0;
+}
+
+.suggest-tags-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e9d5ff;
+}
+
+.suggest-tags-empty {
+  margin: 0;
+  padding: 0.5rem 0;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* ── Separador Curaduría editorial (decisión 3-B) ── */
+/*
+ * Estilo para el grupo "curaduria-editorial" dentro del TagSelector.
+ * Se aplica si el TagSelector añade className="tag-group-editorial" al
+ * contenedor del grupo. Si no lo hace, adaptar en la integración.
+ */
+.tag-group-editorial {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 2px dashed #e2e8f0;
+  position: relative;
+}
+.tag-group-editorial::before {
+  content: 'Uso interno del equipo del CMS';
+  position: absolute;
+  top: -0.65rem;
+  left: 0.75rem;
+  padding: 0 0.5rem;
+  background: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Botones utilitarios ── */
+.btn-ai-primary {
+  background: #7c3aed;
+  color: #fff;
+  border: 1px solid #7c3aed;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+.btn-ai-primary:hover:not(:disabled) {
+  background: #6d28d9;
+}
+.btn-ai-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Utilidades ── */
+.muted {
+  color: #64748b;
+}
+
+/* ── Responsive ── */
+@media (max-width: 760px) {
+  .step4-establishment-grid {
+    grid-template-columns: 1fr;
+  }
+  .suggest-tags-intro {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .suggest-tags-intro > button {
+    align-self: flex-end;
+  }
+  .suggest-tag-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
