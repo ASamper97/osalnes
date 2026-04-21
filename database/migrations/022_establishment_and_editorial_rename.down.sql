@@ -18,10 +18,10 @@ drop index if exists idx_resources_serves_cuisine;
 drop index if exists idx_resources_accommodation_rating;
 
 -- 3) Quitar constraint
-alter table public.resources
+alter table public.recurso_turistico
   drop constraint if exists resources_accommodation_rating_range;
 
 -- 4) Quitar columnas (PÉRDIDA DE DATOS)
-alter table public.resources drop column if exists serves_cuisine;
-alter table public.resources drop column if exists occupancy;
-alter table public.resources drop column if exists accommodation_rating;
+alter table public.recurso_turistico drop column if exists serves_cuisine;
+alter table public.recurso_turistico drop column if exists occupancy;
+alter table public.recurso_turistico drop column if exists accommodation_rating;
