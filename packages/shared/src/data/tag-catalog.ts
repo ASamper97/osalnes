@@ -635,6 +635,57 @@ export const TAGS: Tag[] = [
     value: "\"pilgrimAccommodation\"",
     pidExportable: true,
   },
+  // ── Accesibilidad (5 tags nuevos del paso 4 · t3) ──
+  // Decisión 5-A del usuario: viven en el grupo existente `caracteristicas`
+  // junto al resto de amenities. El vocabulario schema.org usa
+  // LocationFeatureSpecification para estos indicadores; mapeamos al
+  // `value` estándar del amenityFeature para export PID (UNE 178503 §7.6
+  // + WCAG 2.1 AA + PNE 178502 puntos 34, 40-42, 81-91).
+  {
+    key: "caracteristicas.accesible-silla-ruedas",
+    groupKey: "caracteristicas",
+    label: "accesible en silla de ruedas",
+    field: "amenityFeature",
+    value: "\"wheelchairAccessible\"",
+    pidExportable: true,
+    notes: "El recurso tiene al menos un acceso e itinerario interior practicable para personas con movilidad reducida.",
+  },
+  {
+    key: "caracteristicas.aseo-adaptado",
+    groupKey: "caracteristicas",
+    label: "aseo adaptado",
+    field: "amenityFeature",
+    value: "\"accessibleRestroom\"",
+    pidExportable: true,
+    notes: "Dispone al menos de un aseo accesible operativo para personas con discapacidad.",
+  },
+  {
+    key: "caracteristicas.aparcamiento-reservado",
+    groupKey: "caracteristicas",
+    label: "plaza de aparcamiento reservada",
+    field: "amenityFeature",
+    value: "\"accessibleParking\"",
+    pidExportable: true,
+    notes: "Dispone de plaza de aparcamiento reservada para personas con discapacidad, conectada con un itinerario accesible al recurso.",
+  },
+  {
+    key: "caracteristicas.perro-guia-permitido",
+    groupKey: "caracteristicas",
+    label: "perros guía permitidos",
+    field: "amenityFeature",
+    value: "\"guideDogsAllowed\"",
+    pidExportable: true,
+    notes: "Permite el acceso a perros guía acompañando a personas con discapacidad visual.",
+  },
+  {
+    key: "caracteristicas.bucle-magnetico",
+    groupKey: "caracteristicas",
+    label: "bucle magnético",
+    field: "amenityFeature",
+    value: "\"hearingLoop\"",
+    pidExportable: true,
+    notes: "Dispone de bucle magnético para personas con audífono o implante coclear (comunicación asistida).",
+  },
   // ── Municipio ──
   {
     key: "municipio.sanxenxo",
