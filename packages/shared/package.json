@@ -41,6 +41,14 @@
     "./data/media": {
       "types": "./dist/data/media.d.ts",
       "default": "./dist/data/media.js"
+    },
+    "./data/seo": {
+      "types": "./dist/data/seo.d.ts",
+      "default": "./dist/data/seo.js"
+    },
+    "./data/seo-audit": {
+      "types": "./dist/data/seo-audit.d.ts",
+      "default": "./dist/data/seo-audit.js"
     }
   },
   "scripts": {

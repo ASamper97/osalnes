@@ -27,11 +27,11 @@ interface AiRequestBase {
   lang?: string;
   context?: Record<string, unknown>;
   // Campos extra usados por la acción `draft` (paso 2 · t2). El edge
-  // function `ai-writer` los lee directamente del body.
+  // function `ai-writer` los lee directamente del body. targetLang se
+  // comparte con `translateResource` del paso 6 (widening a EN/FR/PT).
   name?: string;
   typeKey?: string | null;
   municipio?: string | null;
-  targetLang?: 'es' | 'gl';
   // Campos extra usados por la acción `suggestTags` (paso 4 · t2/t4).
   descriptionEs?: string;
   mainTypeKey?: string | null;
@@ -52,6 +52,13 @@ interface AiRequestBase {
     typeLabel: string | null;
     municipio: string | null;
   };
+  // Campos extra usados por las acciones del paso 6 (generateSeo /
+  // suggestKeywords / translateResource). Los 3 leen `descriptionEs` del
+  // paso 2 como entrada principal; generateSeo y translateResource
+  // además necesitan `resourceName` y target lang.
+  resourceName?: string;
+  targetLang?: 'es' | 'gl' | 'en' | 'fr' | 'pt';
+  typeLabel?: string | null;
 }
 
 interface AiResponse<T = string> {
@@ -293,7 +300,111 @@ export async function aiGenAltText(input: AiGenAltTextInput): Promise<string> {
   return typeof res.result === 'string' ? res.result.trim() : '';
 }
 
-/** Generate SEO title and description */
+// ─────────────────────────────────────────────────────────────────────────
+// Paso 6 · t2 — 3 acciones SEO (generateSeo, suggestKeywords, translateResource)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface AiGenerateSeoInput {
+  descriptionEs: string;
+  resourceName: string;
+  /** Idioma objetivo del SEO: 'es' o 'gl' */
+  lang: 'es' | 'gl';
+  typeLabel?: string | null;
+  municipio?: string | null;
+}
+
+export interface AiGeneratedSeo {
+  title: string;
+  description: string;
+}
+
+/**
+ * Genera título + descripción SEO optimizados para un idioma base (ES o GL)
+ * a partir de la descripción del paso 2. Requiere el action `generateSeo`
+ * en el edge function (paso 6 · t3).
+ */
+export async function aiGenerateSeo(input: AiGenerateSeoInput): Promise<AiGeneratedSeo> {
+  const res = await callAi<AiGeneratedSeo>({
+    action: 'generateSeo',
+    descriptionEs: input.descriptionEs,
+    resourceName: input.resourceName,
+    targetLang: input.lang,
+    typeLabel: input.typeLabel ?? null,
+    municipio: input.municipio ?? null,
+  });
+  if (res.result && typeof res.result === 'object') {
+    const r = res.result as AiGeneratedSeo;
+    return {
+      title: (r.title ?? '').trim(),
+      description: (r.description ?? '').trim(),
+    };
+  }
+  return { title: '', description: '' };
+}
+
+/**
+ * Propone 5-8 keywords a partir de la descripción ES del paso 2. Requiere
+ * el action `suggestKeywords` en el edge function (paso 6 · t3).
+ */
+export async function aiSuggestKeywords(descriptionEs: string): Promise<string[]> {
+  const res = await callAi<{ keywords: string[] }>({
+    action: 'suggestKeywords',
+    descriptionEs,
+  });
+  if (res.result && typeof res.result === 'object' && Array.isArray((res.result as { keywords: unknown }).keywords)) {
+    return ((res.result as { keywords: string[] }).keywords ?? [])
+      .filter((k) => typeof k === 'string' && k.trim().length > 0)
+      .map((k) => k.trim());
+  }
+  return [];
+}
+
+export interface AiTranslateResourceInput {
+  resourceName: string;
+  descriptionEs: string;
+  /** Idioma destino (en/fr/pt) */
+  targetLang: 'en' | 'fr' | 'pt';
+}
+
+export interface AiTranslationResult {
+  name: string;
+  description: string;
+}
+
+/**
+ * Traduce nombre + descripción corta del recurso a EN/FR/PT. Distinto de
+ * `aiTranslate` legacy (que traduce textos largos palabra por palabra):
+ * este action está optimizado para generar la ficha en el idioma destino
+ * manteniendo tono turístico. Requiere el action `translateResource` en
+ * el edge function (paso 6 · t3).
+ */
+export async function aiTranslateResource(
+  input: AiTranslateResourceInput,
+): Promise<AiTranslationResult> {
+  const res = await callAi<AiTranslationResult>({
+    action: 'translateResource',
+    resourceName: input.resourceName,
+    descriptionEs: input.descriptionEs,
+    targetLang: input.targetLang,
+  });
+  if (res.result && typeof res.result === 'object') {
+    const r = res.result as AiTranslationResult;
+    return {
+      name: (r.name ?? '').trim(),
+      description: (r.description ?? '').trim(),
+    };
+  }
+  return { name: '', description: '' };
+}
+
+/**
+ * Generate SEO title + description (ES+GL en una sola llamada).
+ *
+ * DEPRECATED (paso 6 · t2) — la interfaz nueva es `aiGenerateSeo` (un
+ * idioma por llamada, shape `{title, description}`). Mantenemos esta
+ * firma legacy hasta que T4 borre el componente `AiSeoGenerator` y el
+ * bloque legacy del paso 6 del wizard.
+ */
 export interface SeoResult {
   title_es: string;
   desc_es: string;
@@ -301,7 +412,7 @@ export interface SeoResult {
   desc_gl: string;
 }
 
-export async function aiGenerateSeo(context: {
+export async function aiGenerateSeoLegacy(context: {
   name: string;
   description: string;
   type: string;

@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import type { SeoReport } from '@osalnes/shared/data/seo-audit';
+import type { SeoReport, SeoCheck } from '@osalnes/shared/data/seo-audit';
 import { STEP6_COPY } from '../pages/step6-seo.copy';
 
 const COPY = STEP6_COPY.audit;
@@ -59,8 +59,8 @@ export default function SeoAuditPanel({ report }: SeoAuditPanelProps) {
       {expanded && (
         <ul className="seo-audit-checks" role="list">
           {report.checks
-            .filter((c) => c.weight > 0) // ocultar los "skip" con weight 0
-            .map((check) => (
+            .filter((c: SeoCheck) => c.weight > 0) // ocultar los "skip" con weight 0
+            .map((check: SeoCheck) => (
               <li key={check.key} className={`seo-check seo-check-${check.status}`}>
                 <div className="seo-check-status" aria-label={COPY.statusLabels[check.status]}>
                   {check.status === 'pass' && '✓'}

@@ -17,7 +17,7 @@ import {
   SEO_LIMITS,
   countVisibleChars,
   isValidSlug,
-} from './seo';
+} from './seo.js';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────
 
@@ -419,10 +419,10 @@ function checkKeywordsInDescription(seo: ResourceSeo, ctx: AuditContext, weight:
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  const normalizedKw = seo.keywords.map((k) =>
+  const normalizedKw = seo.keywords.map((k: string) =>
     k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
   );
-  const matches = normalizedKw.filter((k) => desc.includes(k)).length;
+  const matches = normalizedKw.filter((k: string) => desc.includes(k)).length;
   const pct = matches / normalizedKw.length;
 
   if (pct < 0.5) {

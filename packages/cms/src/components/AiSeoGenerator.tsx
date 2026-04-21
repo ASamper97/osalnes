@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { aiGenerateSeo, type SeoResult } from '@/lib/ai';
+import { aiGenerateSeoLegacy, type SeoResult } from '@/lib/ai';
 
 /**
  * AiSeoGenerator — Genera titulo y descripcion SEO con IA
@@ -24,7 +24,7 @@ export function AiSeoGenerator({ name, description, type, municipality, onApply 
     setError(null);
     setResult(null);
     try {
-      const seo = await aiGenerateSeo({ name, description, type, municipality });
+      const seo = await aiGenerateSeoLegacy({ name, description, type, municipality });
       setResult(seo);
     } catch (err: any) {
       setError(err.message);
