@@ -3,7 +3,7 @@
 -- ==========================================================================
 --
 -- Cambios:
---
+--1
 --   1. seo_by_lang JSONB — título + descripción por idioma ({es:{...}, gl:{...}})
 --   2. translations JSONB — traducciones adicionales EN/FR/PT
 --   3. keywords text[] — palabras clave

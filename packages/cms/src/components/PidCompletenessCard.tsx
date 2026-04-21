@@ -1,140 +1,117 @@
 /**
- * PidCompletenessCard — tarjeta de resumen semántico para el paso 7 del wizard
+ * PidCompletenessCard — detalles técnicos PID (plegada por defecto)
  *
- * Se añade al grid de CompletionCards del paso "Revisión" y muestra:
- *   - Cuántas etiquetas hay por campo PID (type, touristType, amenityFeature…)
- *   - Si el recurso alcanza el mínimo semántico (≥1 type + ≥1 municipio)
- *   - Botón para saltar al paso 4 y ajustar
+ * Decisión 3-B del usuario: mantener contadores pero explicar cada grupo
+ * en su contexto.
  *
- * No hace llamada al backend; calcula todo en cliente a partir de las tag_keys
- * seleccionadas y el catálogo.
+ * Plegada por defecto para no abrumar al funcionario normal. Solo se
+ * expande si el responsable técnico quiere ver el detalle.
  */
 
-import { useMemo } from 'react';
-import {
-  TAGS_BY_KEY,
-  type TagField,
-} from '@osalnes/shared/data/tag-catalog';
+import { useState } from 'react';
+import { STEP7_COPY } from '../pages/step7-review.copy';
 
-export interface PidCompletenessCardProps {
-  /** Claves de etiquetas actualmente seleccionadas */
-  selectedKeys: string[];
-  /** Callback para navegar al paso de clasificación */
-  onEdit?: () => void;
+const COPY = STEP7_COPY.pidCard;
+
+export interface PidGroup {
+  /** Clave del grupo para lookup en COPY.groupLabels */
+  key:
+    | 'schemaType'
+    | 'mainType'
+    | 'amenities'
+    | 'accessibility'
+    | 'municipio'
+    | 'gastronomy'
+    | 'editorial';
+  count: number;
+  isMandatory: boolean;
+  /** Si es obligatorio, ¿está rellenado? */
+  isFilled?: boolean;
 }
 
-const FIELD_ORDER: TagField[] = [
-  'type',
-  'touristType',
-  'amenityFeature',
-  'accessibility',
-  'addressLocality',
-  'cuisine',
-  'editorial',
-  'cms',
-];
-
-const FIELD_LABEL: Record<TagField, string> = {
-  type: 'Tipo schema.org',
-  touristType: 'Tipología turística',
-  amenityFeature: 'Servicios / amenities',
-  accessibility: 'Accesibilidad',
-  addressLocality: 'Municipio',
-  cuisine: 'Gastronomía',
-  editorial: 'Editorial (solo CMS)',
-  cms: 'Flags CMS',
-};
+export interface PidCompletenessCardProps {
+  groups: PidGroup[];
+  /** Total de etiquetas exportables al PID (sin curaduría editorial) */
+  totalExportable: number;
+}
 
 export default function PidCompletenessCard({
-  selectedKeys,
-  onEdit,
+  groups,
+  totalExportable,
 }: PidCompletenessCardProps) {
-  const breakdown = useMemo(() => {
-    const counts: Record<TagField, { total: number; pid: number }> = {
-      type: { total: 0, pid: 0 },
-      touristType: { total: 0, pid: 0 },
-      amenityFeature: { total: 0, pid: 0 },
-      accessibility: { total: 0, pid: 0 },
-      addressLocality: { total: 0, pid: 0 },
-      cuisine: { total: 0, pid: 0 },
-      editorial: { total: 0, pid: 0 },
-      cms: { total: 0, pid: 0 },
-    };
-    for (const k of selectedKeys) {
-      const t = TAGS_BY_KEY[k];
-      if (!t) continue;
-      counts[t.field].total += 1;
-      if (t.pidExportable) counts[t.field].pid += 1;
-    }
-    return counts;
-  }, [selectedKeys]);
+  const [expanded, setExpanded] = useState(false);
 
-  const hasType = breakdown.type.total >= 1;
-  const hasLocality = breakdown.addressLocality.total >= 1;
-  const minimumMet = hasType && hasLocality;
-
-  const pidTotal = FIELD_ORDER.reduce(
-    (acc, f) => (f === 'editorial' || f === 'cms' ? acc : acc + breakdown[f].pid),
-    0,
-  );
-
-  const status = !minimumMet
-    ? ('incomplete' as const)
-    : pidTotal < 5
-    ? ('partial' as const)
-    : ('ready' as const);
-
-  const statusLabel =
-    status === 'ready' ? 'Listo para PID' : status === 'partial' ? 'Mejorable' : 'Incompleto';
+  // Bug fix de la captura original: mandatory filled debe verse como OK
+  const mandatoryUnfilled = groups.filter((g) => g.isMandatory && !g.isFilled);
+  const hasIncomplete = mandatoryUnfilled.length > 0;
 
   return (
-    <div
-      className={`completion-card pid-completeness pid-completeness--${status}`}
-      role="region"
-      aria-label="Completitud semántica para PID"
-    >
-      <header className="pid-completeness-head">
-        <h4>Completitud semántica PID</h4>
-        <span className={`pid-completeness-status pid-completeness-status--${status}`}>
-          {statusLabel}
-        </span>
-      </header>
+    <section className={`pid-card ${hasIncomplete ? 'pid-card-incomplete' : ''}`}>
+      <button
+        type="button"
+        className="pid-card-toggle"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="pid-card-toggle-head">
+          <span className="pid-card-icon" aria-hidden>📋</span>
+          <div>
+            <h4>{COPY.title}</h4>
+            <p className="muted">{COPY.subtitle}</p>
+          </div>
+        </div>
+        <div className="pid-card-toggle-meta">
+          {hasIncomplete && (
+            <span className="pid-badge pid-badge-incomplete">
+              {mandatoryUnfilled.length} obligatorio{mandatoryUnfilled.length === 1 ? '' : 's'} sin rellenar
+            </span>
+          )}
+          <span className="pid-card-chevron" aria-hidden>
+            {expanded ? '▼' : '▶'}
+          </span>
+        </div>
+      </button>
 
-      <dl className="pid-completeness-grid">
-        {FIELD_ORDER.filter((f) => f !== 'cms').map((f) => {
-          const c = breakdown[f];
-          const isMin = f === 'type' || f === 'addressLocality';
-          const missing = isMin && c.total === 0;
-          return (
-            <div
-              key={f}
-              className={`pid-completeness-row${missing ? ' pid-completeness-row--missing' : ''}`}
-            >
-              <dt>{FIELD_LABEL[f]}</dt>
-              <dd>
-                <strong>{c.total}</strong>
-                {f !== 'editorial' && c.total > 0 && (
-                  <span className="pid-completeness-pid-count">
-                    · {c.pid} PID
-                  </span>
-                )}
-                {missing && <span className="pid-completeness-required">obligatorio</span>}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
+      {expanded && (
+        <div className="pid-card-body">
+          <ul className="pid-groups" role="list">
+            {groups.map((g) => (
+              <li key={g.key} className="pid-group">
+                <div className="pid-group-row">
+                  <div className="pid-group-name">
+                    {COPY.groupLabels[g.key]}
+                    {g.isMandatory && (
+                      <span
+                        className={`pid-badge ${
+                          g.isFilled ? 'pid-badge-filled' : 'pid-badge-mandatory'
+                        }`}
+                      >
+                        {g.isFilled ? '✓ ' + COPY.mandatoryLabel : COPY.mandatoryLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="pid-group-count">
+                    {g.isMandatory
+                      ? g.isFilled
+                        ? '✓'
+                        : '—'
+                      : g.count}
+                  </div>
+                </div>
+                <p className="pid-group-hint muted">{COPY.groupHints[g.key]}</p>
+              </li>
+            ))}
+          </ul>
 
-      <footer className="pid-completeness-foot">
-        <span>
-          <strong>{pidTotal}</strong> etiquetas exportables a PID en total
-        </span>
-        {onEdit && (
-          <button type="button" className="btn-link" onClick={onEdit}>
-            Editar clasificación
-          </button>
-        )}
-      </footer>
-    </div>
+          <footer className="pid-card-footer">
+            <span className="muted">
+              {COPY.exportableTotal
+                .replace('{count}', String(totalExportable))
+                .replace(/\{plural\}/g, totalExportable === 1 ? '' : 's')}
+            </span>
+          </footer>
+        </div>
+      )}
+    </section>
   );
 }
