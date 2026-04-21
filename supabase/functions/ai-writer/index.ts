@@ -248,6 +248,29 @@ Reglas:
 
 Responde EXCLUSIVAMENTE con JSON válido:
 {"name":"...","description":"..."}`,
+
+  // Acción `suggestImprovements` (paso 7b · t3). Sugerencias concretas
+  // y accionables sobre el recurso entero, repartidas por paso del
+  // wizard. Temperatura 0.6 — creatividad acotada para evitar
+  // sugerencias genéricas pero manteniendo variedad.
+  suggestImprovements: `Eres consultor SEO y editorial especializado en turismo local gallego. Lees el estado de un recurso turístico y devuelves sugerencias concretas y accionables para mejorarlo antes de publicarlo.
+
+Reglas:
+1. Entre 3 y 8 sugerencias ESPECÍFICAS y ACCIONABLES. No genéricas como "mejora el SEO". Ejemplos correctos:
+   - "Añade si hay aparcamiento cercano — los visitantes lo preguntan mucho."
+   - "Menciona cómo llegar desde la N-550."
+   - "El horario de invierno no está claro; añádelo."
+2. Cada sugerencia debe decir QUÉ añadir/cambiar, no solo que algo falta.
+3. Prioridad \`high\` solo para cosas que impactan seriamente al visitante.
+4. Prioridad \`medium\` para mejoras de calidad.
+5. Prioridad \`low\` para pulidos opcionales.
+6. Máximo 25 palabras por sugerencia, en castellano, frases directas.
+7. Reparte entre los 6 pasos del wizard (identification/content/location/classification/multimedia/seo) según donde aplique cada una.
+8. NO inventes datos sobre el recurso: usa solo lo que te dan.
+
+Responde EXCLUSIVAMENTE con JSON válido (sin markdown):
+{"suggestions":[{"stepRef":"content","text":"...","priority":"high"}]}
+Si el recurso está bien, devuelve array vacío: {"suggestions":[]}`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -467,6 +490,63 @@ ${descriptionEs.trim()}
         break;
       }
 
+      case 'suggestImprovements': {
+        // Paso 7b · t3 — sugerencias concretas por paso. Snapshot del
+        // recurso entero construido por el wizard padre. Requisito
+        // mínimo: descripción suficiente para poder analizar.
+        const snap = body.snapshot as {
+          name?: string;
+          typeLabel?: string | null;
+          municipio?: string | null;
+          descriptionEs?: string;
+          descriptionGl?: string;
+          hasCoordinates?: boolean;
+          hasContactInfo?: boolean;
+          hasHours?: boolean;
+          tagCount?: number;
+          imageCount?: number;
+          imagesWithoutAltCount?: number;
+          seoTitleEs?: string;
+          seoDescriptionEs?: string;
+          keywords?: string[];
+          translationCount?: number;
+        } | undefined;
+        if (!snap || !snap.descriptionEs || snap.descriptionEs.trim().length < 50) {
+          // Sin descripción suficiente, cortamos en seco y devolvemos
+          // array vacío dentro del shape estándar `result`.
+          return json({
+            action: 'suggestImprovements',
+            result: { suggestions: [] },
+            tokens_used: 0,
+            duration_ms: 0,
+            model: 'short-circuit',
+          }, 200, req);
+        }
+        const kw = Array.isArray(snap.keywords) ? snap.keywords : [];
+        userMessage = `Recurso:
+  - Nombre: ${snap.name ?? '(sin nombre)'}
+  - Tipo: ${snap.typeLabel ?? 'sin tipología'}
+  - Municipio: ${snap.municipio ?? 'sin municipio'}
+  - Descripción (ES, ${(snap.descriptionEs ?? '').length} chars): """
+${(snap.descriptionEs ?? '').trim() || '(vacía)'}
+"""
+  - Descripción (GL, ${(snap.descriptionGl ?? '').length} chars): """
+${(snap.descriptionGl ?? '').trim() || '(vacía)'}
+"""
+  - Coordenadas: ${snap.hasCoordinates ? 'sí' : 'no'}
+  - Información de contacto (teléfono/email/web): ${snap.hasContactInfo ? 'sí' : 'no'}
+  - Horarios definidos: ${snap.hasHours ? 'sí' : 'no'}
+  - Número de etiquetas: ${snap.tagCount ?? 0}
+  - Fotos: ${snap.imageCount ?? 0} (${snap.imagesWithoutAltCount ?? 0} sin descripción alt)
+  - Título SEO: "${snap.seoTitleEs || '(vacío)'}"
+  - Descripción SEO: "${snap.seoDescriptionEs || '(vacía)'}"
+  - Keywords: ${kw.length > 0 ? kw.join(', ') : '(ninguna)'}
+  - Traducciones a otros idiomas: ${snap.translationCount ?? 0}
+
+Genera las sugerencias siguiendo las reglas del system prompt.`;
+        break;
+      }
+
       default:
         userMessage = text;
     }
@@ -490,7 +570,9 @@ ${descriptionEs.trim()}
                   ? 0.5  // paso 6 · t3 — creatividad controlada para título/desc
                   : action === 'translateResource'
                     ? 0.4  // paso 6 · t3 — traducción fluida pero fiel
-                    : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+                    : action === 'suggestImprovements'
+                      ? 0.6  // paso 7b · t3 — creatividad acotada, sugerencias variadas
+                      : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
           maxOutputTokens: action === 'validate'
             ? 1024
             : action === 'suggestTags'
@@ -513,7 +595,7 @@ ${descriptionEs.trim()}
 
     // Parse JSON responses for structured actions
     let result: unknown = rawResult;
-    if (['seo', 'validate', 'categorize', 'suggestTags', 'generateSeo', 'suggestKeywords', 'translateResource'].includes(action)) {
+    if (['seo', 'validate', 'categorize', 'suggestTags', 'generateSeo', 'suggestKeywords', 'translateResource', 'suggestImprovements'].includes(action)) {
       try {
         // Extract JSON from markdown code blocks if present
         const jsonMatch = rawResult.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, rawResult];
@@ -724,6 +806,15 @@ async function getMockResult(req: Request): Promise<unknown> {
       return {
         name: `[${target}] ${name}`,
         description: `[${target}] Mock translation — configura GEMINI_API_KEY para traducción real.`,
+      };
+    }
+    if (action === 'suggestImprovements') {
+      return {
+        suggestions: [
+          { stepRef: 'content',    text: '[mock] Amplía la descripción con detalles prácticos (aparcamiento, acceso).', priority: 'high' },
+          { stepRef: 'seo',        text: '[mock] Incluye el nombre del municipio en el título SEO.', priority: 'medium' },
+          { stepRef: 'multimedia', text: '[mock] Añade alt text descriptivo a las fotos sin descripción.', priority: 'medium' },
+        ],
       };
     }
     return 'Modo demo: configura GEMINI_API_KEY para activar la IA';

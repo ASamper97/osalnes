@@ -308,10 +308,10 @@ function StatusBadge({
   publishedAt: string | null;
 }) {
   const label = (() => {
-    if (status === 'scheduled' && scheduledAt) {
+    if (status === 'programado' && scheduledAt) {
       return STEP7_COPY.statusBadge.scheduled.replace('{date}', formatScheduleForDisplay(scheduledAt));
     }
-    if (status === 'published' && publishedAt) {
+    if (status === 'publicado' && publishedAt) {
       return STEP7_COPY.statusBadge.published.replace('{date}', formatScheduleForDisplay(publishedAt));
     }
     return PUBLICATION_STATUS_LABELS[status];

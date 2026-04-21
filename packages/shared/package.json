@@ -53,6 +53,10 @@
     "./data/quality-engine": {
       "types": "./dist/data/quality-engine.d.ts",
       "default": "./dist/data/quality-engine.js"
+    },
+    "./data/publication-status": {
+      "types": "./dist/data/publication-status.d.ts",
+      "default": "./dist/data/publication-status.js"
     }
   },
   "scripts": {

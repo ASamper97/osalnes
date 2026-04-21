@@ -59,6 +59,27 @@ interface AiRequestBase {
   resourceName?: string;
   targetLang?: 'es' | 'gl' | 'en' | 'fr' | 'pt';
   typeLabel?: string | null;
+  // Campos extra usados por `suggestImprovements` (paso 7b · t3). El
+  // snapshot es un resumen del recurso construido por el componente
+  // padre (ResourceWizardPage) para que la IA genere sugerencias
+  // concretas por paso.
+  snapshot?: {
+    name: string;
+    typeLabel: string | null;
+    municipio: string | null;
+    descriptionEs: string;
+    descriptionGl: string;
+    hasCoordinates: boolean;
+    hasContactInfo: boolean;
+    hasHours: boolean;
+    tagCount: number;
+    imageCount: number;
+    imagesWithoutAltCount: number;
+    seoTitleEs: string;
+    seoDescriptionEs: string;
+    keywords: string[];
+    translationCount: number;
+  };
 }
 
 interface AiResponse<T = string> {
@@ -564,6 +585,65 @@ export interface BatchResponse {
   skipped: number;
   duration_ms: number;
   results: BatchResultItem[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Paso 7b · t3 — suggestImprovements (sugerencias IA concretas por paso)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface AiSuggestImprovementsInput {
+  snapshot: NonNullable<AiRequestBase['snapshot']>;
+}
+
+/**
+ * Una sugerencia individual devuelta por el Edge Function. El `stepRef`
+ * es una QualityStep (`identification/content/location/...`) para que el
+ * componente pueda saltar al paso afectado con un clic.
+ */
+export interface AiImprovementSuggestion {
+  stepRef: 'identification' | 'content' | 'location' | 'classification' | 'multimedia' | 'seo';
+  text: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Pide a la IA sugerencias concretas de mejora para el recurso (paso 7b).
+ * A diferencia del motor local `auditResource` (que dice "descripción
+ * corta, 12 palabras"), la IA genera sugerencias de contenido ("añade
+ * cómo llegar, menciona aparcamiento cercano, el horario de invierno
+ * no está claro").
+ *
+ * Requiere el action `suggestImprovements` en el edge function
+ * (paso 7b · t3) y consume el snapshot construido por el wizard padre.
+ */
+export async function aiSuggestImprovements(
+  input: AiSuggestImprovementsInput,
+): Promise<AiImprovementSuggestion[]> {
+  const res = await callAi<{ suggestions: AiImprovementSuggestion[] }>({
+    action: 'suggestImprovements',
+    snapshot: input.snapshot,
+  });
+  if (
+    res.result &&
+    typeof res.result === 'object' &&
+    Array.isArray((res.result as { suggestions: unknown }).suggestions)
+  ) {
+    const arr = (res.result as { suggestions: unknown[] }).suggestions;
+    // Filtrado defensivo: la IA a veces inventa stepRef; validamos el
+    // set de valores permitidos.
+    const allowed = new Set(['identification', 'content', 'location', 'classification', 'multimedia', 'seo']);
+    const allowedPrio = new Set(['high', 'medium', 'low']);
+    return arr.filter((s): s is AiImprovementSuggestion => {
+      if (!s || typeof s !== 'object') return false;
+      const o = s as Record<string, unknown>;
+      return (
+        typeof o.stepRef === 'string' && allowed.has(o.stepRef) &&
+        typeof o.text === 'string' && o.text.trim().length > 0 &&
+        typeof o.priority === 'string' && allowedPrio.has(o.priority)
+      );
+    });
+  }
+  return [];
 }
 
 export const BATCH_MAX_SIZE = 15;

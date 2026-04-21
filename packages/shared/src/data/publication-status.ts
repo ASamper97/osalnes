@@ -1,38 +1,49 @@
 /**
  * Estado de publicación del recurso
  *
- * Alineado con el enum (o CHECK) de la tabla `resources`. La migración
- * 025 añade 'scheduled' al conjunto existente ('draft', 'published',
- * 'archived').
+ * Alineado con el CHECK de `recurso_turistico.estado_editorial` (schema
+ * en español desde la migración 001). La migración 025 añade
+ * 'programado' al conjunto existente ('borrador', 'revision',
+ * 'publicado', 'archivado').
  */
 
-export type PublicationStatus = 'draft' | 'scheduled' | 'published' | 'archived';
+export type PublicationStatus =
+  | 'borrador'
+  | 'revision'
+  | 'programado'
+  | 'publicado'
+  | 'archivado';
 
 export const PUBLICATION_STATUS_LABELS: Record<PublicationStatus, string> = {
-  draft: 'Borrador',
-  scheduled: 'Programado',
-  published: 'Publicado',
-  archived: 'Archivado',
+  borrador: 'Borrador',
+  revision: 'Revisión',
+  programado: 'Programado',
+  publicado: 'Publicado',
+  archivado: 'Archivado',
 };
 
 /** Color badge según el estado */
 export const PUBLICATION_STATUS_COLORS: Record<PublicationStatus, string> = {
-  draft: 'gray',
-  scheduled: 'blue',
-  published: 'green',
-  archived: 'dim',
+  borrador: 'gray',
+  revision: 'amber',
+  programado: 'blue',
+  publicado: 'green',
+  archivado: 'dim',
 };
 
 /** ¿Desde qué estado puedo ir a qué otro? */
 export function canTransition(from: PublicationStatus, to: PublicationStatus): boolean {
-  // Draft → {scheduled, published, archived}
-  if (from === 'draft') return to !== 'draft';
-  // Scheduled → {draft, published, archived}
-  if (from === 'scheduled') return to !== 'scheduled';
-  // Published → {draft (despublicar), archived}
-  if (from === 'published') return to === 'draft' || to === 'archived';
-  // Archived → {draft}
-  if (from === 'archived') return to === 'draft';
+  if (from === to) return false;
+  // Borrador → cualquier otro estado no-borrador
+  if (from === 'borrador') return true;
+  // Revisión → publicado | borrador | archivado
+  if (from === 'revision') return to === 'publicado' || to === 'borrador' || to === 'archivado';
+  // Programado → borrador | publicado | archivado
+  if (from === 'programado') return to === 'borrador' || to === 'publicado' || to === 'archivado';
+  // Publicado → borrador (despublicar) | archivado
+  if (from === 'publicado') return to === 'borrador' || to === 'archivado';
+  // Archivado → borrador (reactivar)
+  if (from === 'archivado') return to === 'borrador';
   return false;
 }
 
