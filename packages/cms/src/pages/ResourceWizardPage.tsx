@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { saveResourceTags, loadResourceTags } from '@/lib/resource-tags';
-import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
+import { Wizard, WizardFieldGroup, type WizardStepDef } from '@/components/Wizard';
 // Paso 5 · t5 — los uploaders legacy (MediaUploader / DocumentUploader /
 // RelationsManager) ya no se usan en el wizard: el paso 5 rediseñado
 // (ResourceWizardStep5Multimedia) monta los nuevos ImagesBlock /
@@ -13,7 +13,9 @@ import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 // Paso 6 · t4 — AiSeoGenerator (legacy, generaba ES+GL en una sola
 // llamada con action `seo`) ya no se usa: lo reemplaza
 // ResourceWizardStep6Seo con llamadas `generateSeo` por idioma.
-import { AiQualityScore } from '@/components/AiQualityScore';
+// Paso 7a · t3 — AiQualityScore (componente legacy del paso 7 que llamaba
+// al motor de calidad via IA) ya no se usa: lo reemplaza el motor local
+// ResourceQualityEngine que audita offline sin coste Gemini.
 import { RichTextEditor } from '@/components/RichTextEditor';
 import TemplatePicker from '@/pages/TemplatePicker';
 import { ImportFromUrlModal } from '@/components/ImportFromUrlModal';
@@ -30,7 +32,10 @@ import { emptyPlanByKind, validatePlan } from '@osalnes/shared/data/opening-hour
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
-import PidCompletenessCard from '@/components/PidCompletenessCard';
+// Paso 7a · t3 — PidCompletenessCard (componente legacy con signature
+// {selectedKeys, onEdit}) ya no se usa: el paso 7 rediseñado monta el
+// nuevo PidCompletenessCard con `{groups, totalExportable}` dentro de
+// `ResourceWizardStep7Review`.
 import ResourceWizardStep4Classification from '@/pages/ResourceWizardStep4Classification';
 import type { EstablishmentData } from '@/components/EstablishmentDetails';
 import '@/pages/step4-classification.css';
@@ -1456,13 +1461,10 @@ export function ResourceWizardPage() {
 
   const currentTypology = typologies.find((t) => t.typeCode === rdfType);
   const resourceTypeLabel = currentTypology?.name?.es ?? null;
-  // Subset del catálogo UNE 178503 que aplica a la tipología actual. Se
-  // pasa a AiQualityScore → aiCategorize → edge function como catálogo
-  // permitido, para reducir alucinaciones (el modelo solo puede elegir
-  // entre estas claves).
-  const applicableTags = getWizardGroupsForType(resourceTypeLabel)
-    .flatMap((g) => TAGS_BY_GROUP[g] ?? [])
-    .map((t) => ({ key: t.key, label: t.label, field: t.field as string }));
+  // Paso 7a · t3 — `applicableTags` del antiguo AiQualityScore ya no se
+  // computa aquí; el motor local ResourceQualityEngine opera offline sin
+  // catálogo previo. Si en el futuro se necesita para el sugeridor de
+  // tags (aiCategorize), recomputar a demanda en el consumidor.
 
   // Paso 2 · t4 — municipio en nombre legible (no ID) para el prompt draft.
   const selectedMunicipioName =
