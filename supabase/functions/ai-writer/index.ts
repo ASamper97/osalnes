@@ -148,6 +148,29 @@ Reglas:
 - Para gallego: usa gallego real (galego real, non castelán galeguizado).
 - Devuelve SOLO el texto del borrador, sin títulos ni comillas ni
   introducciones tipo "Aquí tienes…".`,
+
+  // Acción `suggestTags` (paso 4 · t4). Modalidad "explicado" (decisión
+  // 4-A del usuario): cada sugerencia viene con una razón corta que cita
+  // qué parte de la descripción la justifica. Temperatura baja (0.3) —
+  // queremos clasificación basada en evidencia, no creatividad.
+  suggestTags: `Eres un asistente que clasifica recursos turísticos para un CMS municipal.
+Recibes una descripción de un recurso y un catálogo de etiquetas disponibles.
+Tu tarea: proponer las etiquetas del catálogo que MEJOR describen el recurso,
+con una razón corta para cada una que cite la evidencia en la descripción.
+
+Reglas:
+1. Propón entre 3 y 8 etiquetas. Menos si el texto es ambiguo, más si es rico.
+2. SOLO etiquetas que tengan EVIDENCIA clara en la descripción. No supongas.
+3. Para cada etiqueta, escribe una razón corta (máximo 20 palabras, en
+   castellano) citando qué parte de la descripción la justifica.
+4. Si no hay ninguna etiqueta con evidencia clara, devuelve array vacío.
+5. NO propongas etiquetas de accesibilidad salvo que la descripción lo
+   mencione explícitamente (rampa, silla de ruedas, aseo adaptado, etc.).
+6. NO propongas etiquetas del grupo "curaduria-editorial" (son internas).
+
+Responde EXCLUSIVAMENTE con JSON válido (sin markdown, sin texto extra):
+{"suggestions":[{"tagKey":"caracteristicas.bandera-azul","labelEs":"Bandera azul","reason":"La descripción menciona certificación Q de calidad y bandera azul."}]}
+Si no hay sugerencias: {"suggestions":[]}`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -265,6 +288,51 @@ ${langHint}`;
         break;
       }
 
+      case 'suggestTags': {
+        // Paso 4 · t4 — sugeridor con explicación. El cliente envía:
+        //   descriptionEs       (texto del paso 2)
+        //   mainTypeKey         (tipo-de-recurso.* del paso 1)
+        //   municipio           (nombre legible del paso 1)
+        //   existingTagKeys     (tags ya marcados — no volver a proponer)
+        //   availableTags?      (subset del catálogo del grupo mainType;
+        //                        si no viene, el prompt funciona pero el
+        //                        modelo puede inventar keys, el validador
+        //                        del cliente las descarta).
+        const descriptionEs = (body.descriptionEs as string | undefined) || '';
+        const mainTypeKey = body.mainTypeKey as string | null | undefined;
+        const municipio = body.municipio as string | null | undefined;
+        const existingTagKeys = Array.isArray(body.existingTagKeys)
+          ? (body.existingTagKeys as string[])
+          : [];
+        const availableTags = Array.isArray(body.availableTags)
+          ? (body.availableTags as Array<{ key: string; labelEs?: string; label?: string; groupKey?: string; description?: string }>)
+          : [];
+        const typeLabel = mainTypeKey ? humanizeTypeKey(mainTypeKey) : 'recurso turístico';
+        const municipioHint = municipio
+          ? `en ${municipio}, comarca de O Salnés`
+          : 'en O Salnés';
+        // Filtramos tags ya marcados para que el modelo no los repita.
+        const existingSet = new Set(existingTagKeys);
+        const candidateTags = availableTags.filter((t) => t.key && !existingSet.has(t.key));
+        const tagsList = candidateTags
+          .map((t) => {
+            const label = t.labelEs || t.label || '';
+            const desc = t.description ? ` — ${t.description}` : '';
+            return `  - ${t.key}: "${label}"${desc}`;
+          })
+          .join('\n');
+        userMessage = `Recurso:
+  - Tipo: ${typeLabel}
+  - Ubicación: ${municipioHint}
+  - Descripción: """
+${descriptionEs.trim()}
+"""
+
+Catálogo de etiquetas disponibles (NO propongas ninguna que no esté aquí):
+${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
+        break;
+      }
+
       default:
         userMessage = text;
     }
@@ -280,10 +348,14 @@ ${langHint}`;
         generationConfig: {
           temperature: action === 'translate'
             ? 0.2
-            : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+            : action === 'suggestTags'
+              ? 0.3  // paso 4 · t4 — baja para precisión, no creatividad
+              : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
           maxOutputTokens: action === 'validate'
             ? 1024
-            : action === 'draft' ? 400 : 512,
+            : action === 'suggestTags'
+              ? 1200
+              : action === 'draft' ? 400 : 512,
           topP: 0.9,
         },
       }),
@@ -301,7 +373,7 @@ ${langHint}`;
 
     // Parse JSON responses for structured actions
     let result: unknown = rawResult;
-    if (['seo', 'validate', 'categorize'].includes(action)) {
+    if (['seo', 'validate', 'categorize', 'suggestTags'].includes(action)) {
       try {
         // Extract JSON from markdown code blocks if present
         const jsonMatch = rawResult.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, rawResult];

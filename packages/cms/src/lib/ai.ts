@@ -9,7 +9,8 @@
  */
 
 import { getAuthHeaders } from './api';
-import { TAGS_BY_KEY } from '@osalnes/shared/data/tag-catalog';
+import { TAGS_BY_KEY, TAGS_BY_GROUP } from '@osalnes/shared/data/tag-catalog';
+import { getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -31,10 +32,17 @@ interface AiRequestBase {
   typeKey?: string | null;
   municipio?: string | null;
   targetLang?: 'es' | 'gl';
-  // Campos extra usados por la acción `suggestTags` (paso 4 · t2).
+  // Campos extra usados por la acción `suggestTags` (paso 4 · t2/t4).
   descriptionEs?: string;
   mainTypeKey?: string | null;
   existingTagKeys?: string[];
+  availableTags?: Array<{
+    key: string;
+    labelEs: string;
+    groupKey: string;
+    groupLabel: string;
+    description?: string;
+  }>;
 }
 
 interface AiResponse<T = string> {
@@ -177,6 +185,44 @@ interface SuggestTagsResult {
   suggestions: AiTagSuggestion[];
 }
 
+/** Grupos que nunca se sugieren automáticamente (se controlan en otros pasos). */
+const SUGGEST_TAGS_EXCLUDED_GROUPS = new Set([
+  'tipo-de-recurso', // se fija en paso 1
+  'municipio', // se fija en paso 1
+  'curaduria-editorial', // curaduría humana, no IA
+]);
+
+/**
+ * Construye el catálogo de tags candidatos a enviar a la IA, filtrando
+ * por grupos aplicables al tipo del recurso y excluyendo los ya marcados.
+ */
+function buildAvailableTagsCatalog(
+  mainTypeKey: string | null,
+  existingTagKeys: string[],
+): NonNullable<AiRequestBase['availableTags']> {
+  const resourceTypeLabel = mainTypeKey ? (TAGS_BY_KEY[mainTypeKey]?.value ?? null) : null;
+  const applicableGroups = getWizardGroupsForType(resourceTypeLabel);
+  const groupSet = new Set(applicableGroups);
+  const existingSet = new Set(existingTagKeys);
+
+  const out: NonNullable<AiRequestBase['availableTags']> = [];
+  for (const [groupKey, tags] of Object.entries(TAGS_BY_GROUP)) {
+    if (!groupSet.has(groupKey)) continue;
+    if (SUGGEST_TAGS_EXCLUDED_GROUPS.has(groupKey)) continue;
+    for (const tag of tags) {
+      if (existingSet.has(tag.key)) continue;
+      out.push({
+        key: tag.key,
+        labelEs: tag.label,
+        groupKey: tag.groupKey,
+        groupLabel: groupKey,
+        description: tag.notes,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Propone etiquetas relevantes basadas en la descripción del recurso.
  * Devuelve array con hasta 8 sugerencias, cada una con su razón.
@@ -185,12 +231,14 @@ interface SuggestTagsResult {
 export async function aiSuggestTags(
   input: AiSuggestTagsInput,
 ): Promise<AiTagSuggestion[]> {
+  const availableTags = buildAvailableTagsCatalog(input.mainTypeKey, input.existingTagKeys);
   const res = await callAi<SuggestTagsResult>({
     action: 'suggestTags',
     descriptionEs: input.descriptionEs,
     mainTypeKey: input.mainTypeKey,
     municipio: input.municipio,
     existingTagKeys: input.existingTagKeys,
+    availableTags,
   });
   if (
     res.result &&
