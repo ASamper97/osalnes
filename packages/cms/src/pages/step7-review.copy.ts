@@ -1,10 +1,6 @@
 /**
- * Copy del Paso 7 — "Revisión" (paso 7a)
- *
- * Principios:
- *   - Todas las tildes correctas.
- *   - Tono positivo: "así de bien va", no "estas son las cosas mal".
- *   - Los mensajes de error dan acción concreta ("ve al paso N").
+ * Copy del Paso 7 — versión 7b (incluye 7a + añadidos para programación,
+ * historial e IA sugerencias concretas).
  */
 
 export const STEP7_COPY = {
@@ -19,10 +15,10 @@ export const STEP7_COPY = {
       'Revisa el resumen de calidad arriba. Te da una nota general del 0 al 100.',
       'Cada tarjeta de paso muestra si está completa, mejorable o con errores.',
       'Pulsa "Editar" en cualquier tarjeta para volver al paso y corregir.',
-      'Cuando estés listo, elige publicar o guardar como borrador.',
+      'Pide sugerencias a la IA para mejorar el recurso con consejos concretos.',
+      'Cuando estés listo, elige publicar ahora, programar la publicación o guardar como borrador.',
     ],
-    note:
-      'Si intentas publicar con errores críticos, te avisaremos antes de hacerlo.',
+    note: 'Si intentas publicar con errores críticos, te avisaremos antes de hacerlo.',
     toggleHide: 'Ocultar esta ayuda',
     toggleShow: '¿Cómo funciona esta pantalla?',
   },
@@ -76,12 +72,10 @@ export const STEP7_COPY = {
       schemaType: 'Derivado automáticamente de la tipología del paso 1.',
       mainType: 'Etiquetas de segmento turístico.',
       amenities: 'Servicios y características del recurso.',
-      accessibility:
-        'Describe facilidades para personas con discapacidad. Importante pero opcional.',
+      accessibility: 'Describe facilidades para personas con discapacidad. Importante pero opcional.',
       municipio: 'Asignado en el paso 1. Obligatorio para el PID.',
       gastronomy: 'Solo aplica a restaurantes y bodegas. Normal que esté a 0 en otros tipos.',
-      editorial:
-        'Uso interno del CMS (recursos destacados, colecciones). No se exporta al PID.',
+      editorial: 'Uso interno del CMS (recursos destacados, colecciones). No se exporta al PID.',
     },
     exportableTotal: '{count} etiqueta{plural} exportable{plural} al PID en total',
   },
@@ -90,10 +84,8 @@ export const STEP7_COPY = {
     title: 'Opciones de publicación',
     visibleOnMap: {
       label: 'Visible en el mapa público',
-      hint:
-        'Si lo dejas marcado, este recurso aparecerá como punto en el mapa de recursos turísticos de la web.',
-      note:
-        'Decide si este recurso debe aparecer en el mapa público. Puedes cambiarlo después en cualquier momento.',
+      hint: 'Si lo dejas marcado, este recurso aparecerá como punto en el mapa de recursos turísticos de la web.',
+      note: 'Decide si este recurso debe aparecer en el mapa público. Puedes cambiarlo después en cualquier momento.',
     },
     indexableHint: 'Indexación en buscadores: ver paso 6.',
   },
@@ -121,10 +113,47 @@ export const STEP7_COPY = {
     confirmWarningsButton: 'Publicar de todos modos',
     confirmErrorsButton: 'Publicar pese a los errores',
     cancelButton: 'Volver a corregir',
+    // ── Nuevo en 7b ──
+    modeNow: 'Publicar ahora',
+    modeScheduled: 'Programar publicación',
+    confirmScheduleButton: 'Programar publicación',
+    scheduleNoDate: 'Elige una fecha y hora para programar.',
+    schedulePastDate: 'La fecha debe ser al menos 1 minuto en el futuro.',
+  },
+
+  // ── Nuevo en 7b · Sugerencias IA ──
+  improvements: {
+    title: 'Sugerencias de la IA para este recurso',
+    subtitle: 'La IA lee el recurso completo y propone mejoras concretas y accionables por paso.',
+    requestButton: '✨ Pedir sugerencias',
+    requestButtonAgain: '✨ Volver a pedir',
+    loadingLabel: '✨ Analizando…',
+    emptyContent: 'Añade una descripción en el paso 2 para que la IA pueda analizar el recurso.',
+    emptyResult: 'La IA no ha encontrado mejoras que sugerir. El recurso parece bastante completo.',
+    errorGeneric: 'No se han podido generar sugerencias. Inténtalo más tarde.',
+    goToStepButton: 'Ir al paso',
+  },
+
+  // ── Nuevo en 7b · Historial ──
+  auditLog: {
+    title: 'Historial de cambios',
+    subtitle: 'Quién editó qué y cuándo.',
+    loading: 'Cargando historial…',
+    empty: 'Sin cambios registrados todavía.',
+    error: 'No se pudo cargar el historial.',
+  },
+
+  // ── Nuevo en 7b · Estado actual ──
+  statusBadge: {
+    draft: 'Borrador',
+    scheduled: 'Programado para {date}',
+    published: 'Publicado {date}',
+    archived: 'Archivado',
   },
 
   errors: {
     saveDraft: 'No se ha podido guardar el borrador. Inténtalo de nuevo.',
     publish: 'No se ha podido publicar. Inténtalo de nuevo.',
+    schedule: 'No se ha podido programar la publicación. Inténtalo de nuevo.',
   },
 } as const;

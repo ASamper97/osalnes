@@ -1,19 +1,11 @@
 /**
- * ResourceWizardStep7Review — Paso 7 del wizard (7a)
+ * ResourceWizardStep7Review — versión 7b
  *
- * Orquesta el resumen final:
- *   1. HelpBlock
- *   2. ScoreDashboard (global score grande)
- *   3. Grid de 6 StepCards con checkmarks honestos
- *   4. PidCompletenessCard (plegada por defecto)
- *   5. Opciones de publicación (checkbox "visible en mapa")
- *   6. Botones: guardar borrador / publicar
- *   7. PublishModal de confirmación si hay problemas
- *
- * Orden según decisión 2-A del usuario: resumen arriba, publicación abajo.
- *
- * El motor de calidad se ejecuta con `useMemo` cada vez que cambia el
- * snapshot, sin llamadas IA.
+ * Amplía la versión del paso 7a con:
+ *   - Selector modo publicación en el modal (ahora vs programar)
+ *   - Panel de sugerencias IA (antes del dashboard de score)
+ *   - Panel historial de cambios (plegable, al final)
+ *   - Badge de estado actual (draft / scheduled / published)
  */
 
 import { useMemo, useState } from 'react';
@@ -22,34 +14,21 @@ import ScoreDashboard from '../components/ScoreDashboard';
 import StepCard from '../components/StepCard';
 import PidCompletenessCard, { type PidGroup } from '../components/PidCompletenessCard';
 import PublishModal from '../components/PublishModal';
+import ImprovementSuggestions, {
+  type ImprovementSuggestion,
+} from '../components/ImprovementSuggestions';
+import AuditLogPanel, { type AuditEntry } from '../components/AuditLogPanel';
 import {
   auditResource,
   type QualityStep,
   type ResourceSnapshot,
 } from '@osalnes/shared/data/quality-engine';
+import {
+  type PublicationStatus,
+  PUBLICATION_STATUS_LABELS,
+  formatScheduleForDisplay,
+} from '@osalnes/shared/data/publication-status';
 import { STEP7_COPY } from './step7-review.copy';
-
-// ─── Props ─────────────────────────────────────────────────────────────
-
-export interface ResourceWizardStep7ReviewProps {
-  /** Snapshot completo del recurso (estado del wizard) */
-  snapshot: ResourceSnapshot;
-
-  /** Saltar al paso N para editar */
-  onGoToStep: (step: QualityStep) => void;
-
-  /** Cambiar el estado "visible en mapa público" */
-  onChangeVisibleOnMap: (next: boolean) => void;
-
-  /** Persistir como borrador */
-  onSaveDraft: () => Promise<void>;
-
-  /** Publicar (cambia publication_status → published) */
-  onPublish: () => Promise<void>;
-
-  /** Callback al pulsar anterior */
-  onPrevious: () => void;
-}
 
 const STEPS: QualityStep[] = [
   'identification',
@@ -60,12 +39,47 @@ const STEPS: QualityStep[] = [
   'seo',
 ];
 
+export interface ResourceWizardStep7ReviewProps {
+  snapshot: ResourceSnapshot;
+
+  /** Estado de publicación actual (7b) */
+  publicationStatus: PublicationStatus;
+  /** Fecha programada si aplica (7b) */
+  scheduledPublishAt: string | null;
+  /** Fecha de última publicación si la hubo (7b) */
+  publishedAt: string | null;
+
+  onGoToStep: (step: QualityStep) => void;
+  onChangeVisibleOnMap: (next: boolean) => void;
+  onSaveDraft: () => Promise<void>;
+
+  /** Publicar inmediatamente */
+  onPublishNow: () => Promise<void>;
+
+  /** Programar publicación en una fecha UTC ISO (7b) */
+  onSchedulePublish: (utcIso: string) => Promise<void>;
+
+  /** Solicitar sugerencias IA (7b) */
+  onRequestAiSuggestions: () => Promise<ImprovementSuggestion[]>;
+
+  /** Cargar historial desde audit_log (7b) */
+  onLoadAuditLog: () => Promise<AuditEntry[]>;
+
+  onPrevious: () => void;
+}
+
 export default function ResourceWizardStep7Review({
   snapshot,
+  publicationStatus,
+  scheduledPublishAt,
+  publishedAt,
   onGoToStep,
   onChangeVisibleOnMap,
   onSaveDraft,
-  onPublish,
+  onPublishNow,
+  onSchedulePublish,
+  onRequestAiSuggestions,
+  onLoadAuditLog,
   onPrevious,
 }: ResourceWizardStep7ReviewProps) {
   const COPY = STEP7_COPY;
@@ -74,10 +88,9 @@ export default function ResourceWizardStep7Review({
   const [savingDraft, setSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Auditoría reactiva
   const report = useMemo(() => auditResource(snapshot), [snapshot]);
 
-  // ─── Compute PID groups desde snapshot ──────────────────────────────
+  // ─── PID groups desde snapshot (sin cambios vs 7a) ─────────────────
   const pidGroups = useMemo<PidGroup[]>(() => {
     const tagKeys = snapshot.tagKeys;
     const count = (prefix: string) =>
@@ -90,11 +103,7 @@ export default function ResourceWizardStep7Review({
         isMandatory: true,
         isFilled: snapshot.mainTypeKey != null,
       },
-      {
-        key: 'mainType',
-        count: count('tipo-turismo.'),
-        isMandatory: false,
-      },
+      { key: 'mainType', count: count('tipo-turismo.'), isMandatory: false },
       {
         key: 'amenities',
         count: count('caracteristicas.') + count('servicios.'),
@@ -102,9 +111,12 @@ export default function ResourceWizardStep7Review({
       },
       {
         key: 'accessibility',
-        count: count('caracteristicas.accesible-') + count('caracteristicas.aseo-adaptado') +
-               count('caracteristicas.aparcamiento-reservado') + count('caracteristicas.perro-guia-permitido') +
-               count('caracteristicas.bucle-magnetico'),
+        count:
+          count('caracteristicas.accesible-') +
+          count('caracteristicas.aseo-adaptado') +
+          count('caracteristicas.aparcamiento-reservado') +
+          count('caracteristicas.perro-guia-permitido') +
+          count('caracteristicas.bucle-magnetico'),
         isMandatory: false,
       },
       {
@@ -118,20 +130,16 @@ export default function ResourceWizardStep7Review({
         count: snapshot.servesCuisine.length + count('gastronomia.'),
         isMandatory: false,
       },
-      {
-        key: 'editorial',
-        count: count('curaduria-editorial.'),
-        isMandatory: false,
-      },
+      { key: 'editorial', count: count('curaduria-editorial.'), isMandatory: false },
     ];
   }, [snapshot.tagKeys, snapshot.mainTypeKey, snapshot.municipioId, snapshot.servesCuisine]);
 
-  // Total exportable (sin curaduría editorial, que es solo CMS)
-  const totalExportable = useMemo(() => {
-    return snapshot.tagKeys.filter((k) => !k.startsWith('curaduria-editorial.')).length;
-  }, [snapshot.tagKeys]);
+  const totalExportable = useMemo(
+    () => snapshot.tagKeys.filter((k) => !k.startsWith('curaduria-editorial.')).length,
+    [snapshot.tagKeys],
+  );
 
-  // ─── Handlers ─────────────────────────────────────────────────────
+  // ─── Handlers ───────────────────────────────────────────────────────
   const handleSaveDraft = async () => {
     setErrorMsg(null);
     setSavingDraft(true);
@@ -144,19 +152,26 @@ export default function ResourceWizardStep7Review({
     }
   };
 
-  const handlePublishClick = () => {
-    // Modal siempre (decisión 6-A), incluso si está todo limpio
-    setModalOpen(true);
-  };
-
-  const handleConfirmPublish = async () => {
+  const handleConfirmPublishNow = async () => {
     setErrorMsg(null);
     setPublishing(true);
     try {
-      await onPublish();
+      await onPublishNow();
       setModalOpen(false);
     } catch {
       setErrorMsg(COPY.errors.publish);
+      setPublishing(false);
+    }
+  };
+
+  const handleConfirmSchedule = async (utcIso: string) => {
+    setErrorMsg(null);
+    setPublishing(true);
+    try {
+      await onSchedulePublish(utcIso);
+      setModalOpen(false);
+    } catch {
+      setErrorMsg(COPY.errors.schedule);
       setPublishing(false);
     }
   };
@@ -166,6 +181,11 @@ export default function ResourceWizardStep7Review({
       <header className="step7-header">
         <h2>{COPY.header.title}</h2>
         <p>{COPY.header.subtitle}</p>
+        <StatusBadge
+          status={publicationStatus}
+          scheduledAt={scheduledPublishAt}
+          publishedAt={publishedAt}
+        />
       </header>
 
       <HelpBlock
@@ -175,17 +195,22 @@ export default function ResourceWizardStep7Review({
         toggleShowLabel={COPY.helpBlock.toggleShow}
       >
         <ul>
-          {COPY.helpBlock.bullets.map((b) => (
-            <li key={b}>{b}</li>
-          ))}
+          {COPY.helpBlock.bullets.map((b) => <li key={b}>{b}</li>)}
         </ul>
         <p className="help-block-note">{COPY.helpBlock.note}</p>
       </HelpBlock>
 
-      {/* ═══════════ 1. Score dashboard ═══════════ */}
+      {/* 1. Dashboard global */}
       <ScoreDashboard report={report} />
 
-      {/* ═══════════ 2. Grid de tarjetas por paso ═══════════ */}
+      {/* 2. Sugerencias IA (nuevo 7b) */}
+      <ImprovementSuggestions
+        onRequestSuggestions={onRequestAiSuggestions}
+        onGoToStep={onGoToStep}
+        hasEnoughContent={snapshot.descriptionEs.trim().length > 50}
+      />
+
+      {/* 3. Grid de tarjetas por paso */}
       <div className="step7-cards-grid">
         {STEPS.map((step) => (
           <StepCard
@@ -198,13 +223,12 @@ export default function ResourceWizardStep7Review({
         ))}
       </div>
 
-      {/* ═══════════ 3. PID (plegada) ═══════════ */}
+      {/* 4. PID (plegada) */}
       <PidCompletenessCard groups={pidGroups} totalExportable={totalExportable} />
 
-      {/* ═══════════ 4. Opciones de publicación ═══════════ */}
+      {/* 5. Opciones de publicación */}
       <section className="step7-publish-options">
         <h3>{COPY.publicationOptions.title}</h3>
-
         <label className="step7-visible-check">
           <input
             type="checkbox"
@@ -215,28 +239,22 @@ export default function ResourceWizardStep7Review({
             <span className="step7-visible-check-label">
               {COPY.publicationOptions.visibleOnMap.label}
             </span>
-            <small className="muted">
-              {COPY.publicationOptions.visibleOnMap.hint}
-            </small>
+            <small className="muted">{COPY.publicationOptions.visibleOnMap.hint}</small>
           </div>
         </label>
-
         <p className="step7-visible-note muted">
           💡 {COPY.publicationOptions.visibleOnMap.note}
         </p>
-
         <p className="step7-visible-note muted">
           {COPY.publicationOptions.indexableHint}
         </p>
       </section>
 
       {errorMsg && (
-        <p role="alert" className="step7-error">
-          ⚠️ {errorMsg}
-        </p>
+        <p role="alert" className="step7-error">⚠️ {errorMsg}</p>
       )}
 
-      {/* ═══════════ 5. Acciones ═══════════ */}
+      {/* 6. Acciones */}
       <footer className="step7-actions">
         <button type="button" className="btn btn-ghost" onClick={onPrevious}>
           {COPY.actions.previous}
@@ -253,7 +271,7 @@ export default function ResourceWizardStep7Review({
           <button
             type="button"
             className="btn btn-primary"
-            onClick={handlePublishClick}
+            onClick={() => setModalOpen(true)}
             disabled={publishing || savingDraft}
           >
             {COPY.actions.publish}
@@ -261,15 +279,48 @@ export default function ResourceWizardStep7Review({
         </div>
       </footer>
 
-      {/* ═══════════ Modal de publicación ═══════════ */}
+      {/* 7. Historial de cambios (plegable, nuevo 7b) */}
+      <AuditLogPanel onLoadEntries={onLoadAuditLog} />
+
+      {/* Modal */}
       {modalOpen && (
         <PublishModal
           report={report}
-          onConfirm={handleConfirmPublish}
+          onConfirmPublishNow={handleConfirmPublishNow}
+          onConfirmSchedule={handleConfirmSchedule}
           onCancel={() => !publishing && setModalOpen(false)}
           loading={publishing}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Sub-componente: badge de estado actual ───────────────────────────
+
+function StatusBadge({
+  status,
+  scheduledAt,
+  publishedAt,
+}: {
+  status: PublicationStatus;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+}) {
+  const label = (() => {
+    if (status === 'scheduled' && scheduledAt) {
+      return STEP7_COPY.statusBadge.scheduled.replace('{date}', formatScheduleForDisplay(scheduledAt));
+    }
+    if (status === 'published' && publishedAt) {
+      return STEP7_COPY.statusBadge.published.replace('{date}', formatScheduleForDisplay(publishedAt));
+    }
+    return PUBLICATION_STATUS_LABELS[status];
+  })();
+
+  return (
+    <div className={`step7-status-badge step7-status-badge-${status}`}>
+      <span className="step7-status-badge-dot" aria-hidden />
+      <span>{label}</span>
     </div>
   );
 }

@@ -1,33 +1,45 @@
 /**
- * PublishModal — confirmación antes de publicar (decisión 6-A)
+ * PublishModal — confirmación de publicación (versión 7b)
  *
- * 3 variantes según el estado:
- *   - Clean   (no hay problemas)    → modal corto y verde
- *   - Warnings (solo avisos)        → modal amarillo con listado
- *   - Errors  (hay fails críticos)  → modal rojo, botón de publicar
- *                                      en rojo pesado "Publicar pese a los errores"
+ * AMPLIACIÓN de la versión del paso 7a. Ahora soporta 3 opciones:
+ *   1. Publicar ahora (comportamiento original)
+ *   2. Programar publicación (nuevo · decisión 4-A)
+ *   3. Volver a corregir
  *
- * El usuario siempre puede publicar — somos un CMS municipal, no un
- * gatekeeper. Pero le avisamos con claridad.
+ * Las 3 variantes visuales por estado (clean/warnings/errors) se
+ * mantienen. La opción "programar" aparece con un switch; al activarla
+ * se revela el selector fecha+hora.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { QualityReport } from '@osalnes/shared/data/quality-engine';
+import SchedulePublishPicker from './SchedulePublishPicker';
 import { STEP7_COPY } from '../pages/step7-review.copy';
 
 const COPY = STEP7_COPY.publishModal;
 
 export interface PublishModalProps {
   report: QualityReport;
-  onConfirm: () => void;
+  /** Publicar inmediatamente */
+  onConfirmPublishNow: () => void;
+  /** Programar publicación para una fecha futura */
+  onConfirmSchedule: (utcIso: string) => void;
   onCancel: () => void;
   loading?: boolean;
 }
 
-export default function PublishModal({ report, onConfirm, onCancel, loading = false }: PublishModalProps) {
+export default function PublishModal({
+  report,
+  onConfirmPublishNow,
+  onConfirmSchedule,
+  onCancel,
+  loading = false,
+}: PublishModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<'now' | 'scheduled'>('now');
+  const [scheduleIso, setScheduleIso] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Focus trap básico + cerrar con Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !loading) onCancel();
@@ -64,11 +76,29 @@ export default function PublishModal({ report, onConfirm, onCancel, loading = fa
     errors: COPY.confirmErrorsButton,
   }[variant];
 
-  // Problemas a listar (críticos primero, máx. 6)
   const issues = [
     ...report.checks.filter((c) => c.status === 'fail'),
     ...report.checks.filter((c) => c.status === 'warn'),
   ].slice(0, 6);
+
+  const handleConfirm = () => {
+    setValidationError(null);
+    if (mode === 'now') {
+      onConfirmPublishNow();
+    } else {
+      if (!scheduleIso) {
+        setValidationError(COPY.scheduleNoDate);
+        return;
+      }
+      const scheduleTime = new Date(scheduleIso).getTime();
+      if (scheduleTime < Date.now() + 60000) {
+        // Requiere al menos 1 minuto en el futuro
+        setValidationError(COPY.schedulePastDate);
+        return;
+      }
+      onConfirmSchedule(scheduleIso);
+    }
+  };
 
   return (
     <div
@@ -117,6 +147,46 @@ export default function PublishModal({ report, onConfirm, onCancel, loading = fa
               </ul>
             </>
           )}
+
+          {/* Selector modo: ahora vs programar (decisión 4-A) */}
+          <div className="publish-mode-tabs" role="tablist">
+            <button
+              role="tab"
+              type="button"
+              aria-selected={mode === 'now'}
+              className={`publish-mode-tab ${mode === 'now' ? 'active' : ''}`}
+              onClick={() => setMode('now')}
+              disabled={loading}
+            >
+              ⚡ {COPY.modeNow}
+            </button>
+            <button
+              role="tab"
+              type="button"
+              aria-selected={mode === 'scheduled'}
+              className={`publish-mode-tab ${mode === 'scheduled' ? 'active' : ''}`}
+              onClick={() => setMode('scheduled')}
+              disabled={loading}
+            >
+              ⏰ {COPY.modeScheduled}
+            </button>
+          </div>
+
+          {mode === 'scheduled' && (
+            <div className="publish-mode-scheduled-block">
+              <SchedulePublishPicker
+                value={scheduleIso}
+                onChange={setScheduleIso}
+                disabled={loading}
+              />
+            </div>
+          )}
+
+          {validationError && (
+            <p role="alert" className="publish-modal-validation-error">
+              ⚠️ {validationError}
+            </p>
+          )}
         </div>
 
         <footer className="publish-modal-foot">
@@ -133,10 +203,12 @@ export default function PublishModal({ report, onConfirm, onCancel, loading = fa
             className={`btn ${
               variant === 'errors' ? 'btn-danger' : variant === 'warnings' ? 'btn-warning' : 'btn-primary'
             }`}
-            onClick={onConfirm}
-            disabled={loading}
+            onClick={handleConfirm}
+            disabled={loading || (mode === 'scheduled' && !scheduleIso)}
           >
-            {loading ? 'Publicando…' : confirmLabel}
+            {loading
+              ? mode === 'scheduled' ? 'Programando…' : 'Publicando…'
+              : mode === 'scheduled' ? COPY.confirmScheduleButton : confirmLabel}
           </button>
         </footer>
       </div>
