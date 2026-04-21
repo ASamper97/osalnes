@@ -4,9 +4,11 @@ import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type Cat
 import { supabase } from '@/lib/supabase';
 import { saveResourceTags, loadResourceTags } from '@/lib/resource-tags';
 import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } from '@/components/Wizard';
-import { MediaUploader } from '@/components/MediaUploader';
-import { DocumentUploader } from '@/components/DocumentUploader';
-import { RelationsManager } from '@/components/RelationsManager';
+// Paso 5 · t5 — los uploaders legacy (MediaUploader / DocumentUploader /
+// RelationsManager) ya no se usan en el wizard: el paso 5 rediseñado
+// (ResourceWizardStep5Multimedia) monta los nuevos ImagesBlock /
+// VideosBlock / DocumentsBlock contra las tablas de la migración 023.
+// Relaciones entre recursos quedan pospuestas a iteración futura.
 import { AiWritingAssistant } from '@/components/AiWritingAssistant';
 import { AiSeoGenerator } from '@/components/AiSeoGenerator';
 import { AiQualityScore } from '@/components/AiQualityScore';
@@ -657,15 +659,18 @@ export function ResourceWizardPage() {
 
   // ── C6 — Auto-save tras step 0 ─────────────────────────────────
   //
-  // El paso 4 (Multimedia) necesita un savedId real para asociar las subidas.
-  // Antes de este fix, el usuario tenía que terminar TODO el wizard, guardar
-  // y volver a entrar para añadir fotos — doble pase forzoso.
+  // El paso 5 (Multimedia) necesita un savedId real para asociar imágenes,
+  // vídeos y documentos a un recurso (FK a recurso_turistico · migración
+  // 023). Antes del auto-save, el usuario tenía que terminar TODO el
+  // wizard, guardar y volver a entrar para añadir fotos — doble pase.
   //
-  // Ahora: en cuanto el usuario completa válidamente el paso 0 y avanza al 1,
+  // Ahora: en cuanto el usuario completa válidamente el paso 1 y avanza,
   // creamos un borrador silencioso con los campos mínimos. A partir de ese
-  // momento `savedId` está poblado y MediaUploader funciona en cuanto el
-  // usuario llegue al paso 4. El "Crear recurso" final del paso 6 simplemente
-  // se convierte en un updateResource.
+  // momento `savedId` está poblado y el paso 5 rediseñado puede subir
+  // directo. El "Crear recurso" final del paso 7 se convierte en un
+  // updateResource. Si el auto-save no se disparó (p.ej. el usuario saltó
+  // al paso 5 sin nombre), `handleSaveDraft` del paso 5 (decisión 1-B)
+  // fuerza la creación con slug/nombre fallback.
   //
   // Idempotencia: `autoSavingRef` evita disparar dos creates si el usuario
   // hace doble click. `savedId` evita reentrar si ya existe el borrador.
