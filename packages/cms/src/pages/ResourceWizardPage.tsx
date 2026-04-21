@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, getAuthHeaders, type TypologyItem, type MunicipalityItem, type CategoryItem } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
@@ -48,6 +48,9 @@ import {
   emptyResourceSeo,
 } from '@osalnes/shared/data/seo';
 import '@/pages/step6-seo.css';
+import ResourceWizardStep7Review from '@/pages/ResourceWizardStep7Review';
+import type { QualityStep, ResourceSnapshot } from '@osalnes/shared/data/quality-engine';
+import '@/pages/step7-review.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
@@ -1213,6 +1216,101 @@ export function ResourceWizardPage() {
     markDirty();
   }
 
+  // ── Paso 7a · t2 — Snapshot + handlers del paso 7 (revisión) ──────
+  //
+  // El motor `auditResource` del paso 7a necesita un snapshot plano de
+  // todos los pasos. Aquí unificamos los estados dispersos del wizard
+  // padre con useMemo; las dependencias cubren los 10 estados que se
+  // leen en el motor.
+
+  const resourceSnapshot: ResourceSnapshot = useMemo(() => ({
+    // Paso 1
+    mainTypeKey,
+    nameEs: nameEs ?? '',
+    nameGl: nameGl ?? '',
+    // slug viene del state `seo.slug` (paso 6) con fallback al legacy
+    // `slug` del paso 1 — mismo bridge que en el save payload.
+    slug: seo.slug || slug || '',
+    municipioId: municipioId || null,
+    // selectedMunicipioName está declarado más abajo (deriva de
+    // municipalities.find), así que recomputamos aquí inline para no
+    // caer en un "used before declaration".
+    municipioName:
+      municipalities.find((m) => m.id === municipioId)?.name?.es ?? null,
+
+    // Paso 2
+    descriptionEs: descEs ?? '',
+    descriptionGl: descGl ?? '',
+    accessPublic: publicAccess ?? false,
+    accessFree: isAccessibleForFree ?? false,
+    visibleOnMap: visibleOnMap ?? true,
+
+    // Paso 3 — coordenadas pueden venir del state estructurado nuevo o
+    // del legacy string. Preferimos el estructurado; parseFloat del
+    // legacy si no hay. Dirección y contacto vienen del state nuevo
+    // directamente (paso 3 · t4).
+    latitude: location.lat ?? (latitude ? parseFloat(latitude) : null),
+    longitude: location.lng ?? (longitude ? parseFloat(longitude) : null),
+    streetAddress: location.streetAddress || '',
+    postalCode: location.postalCode || '',
+    contactPhone: contact.phone || '',
+    contactEmail: contact.email || '',
+    contactWeb: contact.web || '',
+    hoursPlan,
+
+    // Paso 4
+    accommodationRating: establishment.rating,
+    occupancy: establishment.occupancy,
+    servesCuisine: establishment.cuisineCodes,
+    tagKeys,
+
+    // Paso 5
+    imageCount: mediaImages.length,
+    primaryImageId: mediaImages.find((i) => i.isPrimary)?.id ?? null,
+    imagesWithoutAltCount: mediaImages.filter(
+      (i) => !i.altText || i.altText.trim().length === 0,
+    ).length,
+    videoCount: mediaVideos.length,
+    documentCount: mediaDocuments.length,
+
+    // Paso 6
+    seo,
+  }), [
+    mainTypeKey, nameEs, nameGl, slug, seo, municipioId, municipalities,
+    descEs, descGl, publicAccess, isAccessibleForFree, visibleOnMap,
+    latitude, longitude, location, contact, hoursPlan,
+    establishment, tagKeys,
+    mediaImages, mediaVideos, mediaDocuments,
+  ]);
+
+  /** Navega al paso correspondiente al hacer clic en "Editar" de una tarjeta.
+   *  currentStep es 0-indexed: identificación=0, contenido=1, ubicación=2,
+   *  clasificación=3, multimedia=4, SEO=5, revisión=6. */
+  function handleGoToStep(step: QualityStep) {
+    const stepIndex: Record<QualityStep, number> = {
+      identification: 0,
+      content: 1,
+      location: 2,
+      classification: 3,
+      multimedia: 4,
+      seo: 5,
+    };
+    setCurrentStep(stepIndex[step]);
+  }
+
+  /** Guarda como borrador desde el paso 7. Reutiliza handleFinish vía wizard legacy. */
+  async function handleSaveDraftStep7(): Promise<void> {
+    // handleFinish persiste todo el recurso (incluye tags + seo + media).
+    // No distingue borrador/publicado todavía — eso llega en paso 7b con
+    // `publish_at` / `published_at`. Para el 7a el botón borrador y el
+    // botón publicar llaman al mismo upsert, y el modal solo confirma.
+    await handleFinish();
+  }
+
+  async function handlePublishStep7(): Promise<void> {
+    await handleFinish();
+  }
+
   // ── Save / Submit ───────────────────────────────────────────
 
   async function handleFinish() {
@@ -1755,138 +1853,38 @@ export function ResourceWizardPage() {
       )}
 
       {/* ================================================================
-          STEP 7 — Revision final
-          ================================================================ */}
+          STEP 7 — Revisión (paso 7a · t2)
+          ================================================================
+          Rediseño: ScoreDashboard global + 6 StepCards con estado honesto
+          + PidCompletenessCard plegada + modal de confirmación al publicar
+          + orden nuevo (resumen arriba, publicación abajo). Sustituye el
+          bloque legacy (AiQualityScore + 6 WizardCompletionCard + PID
+          card inline + bug "Disponible tras guardar" del paso 5). */}
       {currentStep === 6 && (
         <>
-        {/* Paso 2 · t5 — opción de publicación (antes estaba en el paso 2
-            como "Visible en mapa", ahora vive junto a la revisión final
-            porque es una decisión editorial, no una característica del
-            recurso). Persiste en recurso_turistico.visible_en_mapa. */}
-        <WizardFieldGroup
-          title="Opciones de publicación"
-          tip="Decide si este recurso debe aparecer en el mapa público del portal. Puedes cambiarlo después en cualquier momento."
-        >
-          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
-            <input
-              type="checkbox"
-              checked={visibleOnMap}
-              onChange={(e) => { setVisibleOnMap(e.target.checked); markDirty(); }}
-              style={{ marginTop: '0.2rem' }}
-            />
-            <span>
-              <strong>Visible en el mapa público</strong>
-              <br />
-              <span style={{ color: 'var(--cms-text-light)', fontSize: '0.85rem' }}>
-                Si lo dejas marcado, este recurso aparecerá como pin en el mapa de recursos turísticos de la web.
-              </span>
-            </span>
-          </label>
-        </WizardFieldGroup>
-
-        <AiQualityScore
-          resourceData={{
-            nameEs, nameGl, descEs, descGl, rdfType,
-            latitude, longitude, telephone, email, url,
-            seoTitleEs, seoDescEs, nameEn, nameFr, namePt,
-            touristTypes, selectedCategories,
-            municipio: municipalities.find((m) => m.id === municipioId)?.name?.es || '',
-            hasMedia: !!savedId,
-          }}
-          applicableTags={applicableTags}
-          onApplyTagKeys={(keys) => {
-            setTagKeys((prev) => Array.from(new Set([...prev, ...keys])));
-            markDirty();
-          }}
-        />
-        <div className="wizard__completion-grid">
-          <PidCompletenessCard
-            selectedKeys={tagKeys}
-            onEdit={() => setCurrentStep(3)}
+          <ResourceWizardStep7Review
+            snapshot={resourceSnapshot}
+            onGoToStep={handleGoToStep}
+            onChangeVisibleOnMap={(next) => { setVisibleOnMap(next); markDirty(); }}
+            onSaveDraft={handleSaveDraftStep7}
+            onPublish={handlePublishStep7}
+            onPrevious={() => setCurrentStep(5)}
           />
 
-          <WizardCompletionCard
-            title="Identificacion"
-            icon="🏷️"
-            onEdit={() => setCurrentStep(0)}
-            items={[
-              { label: 'Tipologia', value: currentTypology?.name?.es || rdfType, status: 'complete' },
-              { label: 'Nombre (ES)', value: nameEs, status: nameEs ? 'complete' : 'incomplete' },
-              { label: 'Nombre (GL)', value: nameGl, status: nameGl ? 'complete' : 'warning' },
-              { label: 'Slug', value: slug, status: slug ? 'complete' : 'incomplete' },
-              { label: 'Municipio', value: municipalities.find((m) => m.id === municipioId)?.name?.es || '', status: municipioId ? 'complete' : 'warning' },
-            ]}
-          />
-
-          <WizardCompletionCard
-            title="Contenido"
-            icon="✏️"
-            onEdit={() => setCurrentStep(1)}
-            items={[
-              { label: 'Descripcion ES', value: descEs ? `${descEs.split(/\s+/).filter(Boolean).length} palabras` : '', status: descEs ? 'complete' : 'warning' },
-              { label: 'Descripcion GL', value: descGl ? `${descGl.split(/\s+/).filter(Boolean).length} palabras` : '', status: descGl ? 'complete' : 'warning' },
-              { label: 'Acceso gratuito', value: isAccessibleForFree ? 'Si' : 'No', status: 'complete' },
-              { label: 'Visible en mapa', value: visibleOnMap ? 'Si' : 'No', status: 'complete' },
-            ]}
-          />
-
-          <WizardCompletionCard
-            title="Ubicacion y contacto"
-            icon="📍"
-            onEdit={() => setCurrentStep(2)}
-            items={[
-              { label: 'Coordenadas', value: latitude && longitude ? `${latitude}, ${longitude}` : '', status: latitude && longitude ? 'complete' : 'warning' },
-              { label: 'Direccion', value: addressStreet, status: addressStreet ? 'complete' : 'warning' },
-              { label: 'Telefono', value: telephone, status: telephone ? 'complete' : 'warning' },
-              { label: 'Email', value: email, status: email ? 'complete' : 'warning' },
-              { label: 'Web', value: url, status: url ? 'complete' : 'warning' },
-            ]}
-          />
-
-          <WizardCompletionCard
-            title="Clasificacion"
-            icon="⭐"
-            onEdit={() => setCurrentStep(3)}
-            items={[
-              { label: 'Estrellas', value: ratingValue ? '★'.repeat(parseInt(ratingValue)) : '', status: ratingValue ? 'complete' : 'warning' },
-              { label: 'Tipos turismo', value: `${touristTypes.length} seleccionados`, status: touristTypes.length > 0 ? 'complete' : 'warning' },
-              { label: 'Categorias', value: `${selectedCategories.length} seleccionadas`, status: selectedCategories.length > 0 ? 'complete' : 'warning' },
-            ]}
-          />
-
-          <WizardCompletionCard
-            title="SEO e idiomas"
-            icon="🌐"
-            onEdit={() => setCurrentStep(5)}
-            items={[
-              { label: 'SEO titulo ES', value: seoTitleEs, status: seoTitleEs ? 'complete' : 'warning' },
-              { label: 'SEO desc ES', value: seoDescEs ? `${seoDescEs.length} chars` : '', status: seoDescEs ? 'complete' : 'warning' },
-              { label: 'Ingles', value: nameEn ? 'Traducido' : '', status: nameEn ? 'complete' : 'warning' },
-              { label: 'Frances', value: nameFr ? 'Traducido' : '', status: nameFr ? 'complete' : 'warning' },
-              { label: 'Portugues', value: namePt ? 'Traducido' : '', status: namePt ? 'complete' : 'warning' },
-            ]}
-          />
-
-          <WizardCompletionCard
-            title="Multimedia"
-            icon="📸"
-            onEdit={() => setCurrentStep(4)}
-            items={[
-              { label: 'Estado', value: savedId ? 'Disponible' : 'Disponible tras guardar', status: savedId ? 'complete' : 'warning' },
-            ]}
-          />
-        </div>
-
-        {/* Activity timeline — only for existing resources */}
-        {!isNew && savedId && (
-          <div style={{ marginTop: '1.25rem' }}>
-            <ActivityTimeline
-              key={activityRefreshKey}
-              entidadTipo="recurso_turistico"
-              entidadId={savedId}
-            />
-          </div>
-        )}
+          {/* ActivityTimeline se mantiene fuera del componente step7: es una
+              vista del historial editorial del recurso, no forma parte del
+              motor de calidad. Solo tiene sentido cuando ya existe el
+              recurso en BD (!isNew && savedId). El paso 7b lo integrará en
+              un panel propio plegable. */}
+          {!isNew && savedId && (
+            <div style={{ marginTop: '1.25rem' }}>
+              <ActivityTimeline
+                key={activityRefreshKey}
+                entidadTipo="recurso_turistico"
+                entidadId={savedId}
+              />
+            </div>
+          )}
         </>
       )}
     </Wizard>
