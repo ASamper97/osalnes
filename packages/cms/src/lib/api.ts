@@ -231,6 +231,15 @@ export interface ResourceSummary {
   contact_web?: string | null;
   social_links?: unknown[];
   opening_hours_plan?: unknown | null;
+  // Paso 6 · t4 — campos SEO estructurados de la migración 024. Devueltos
+  // en snake_case por ambas edge functions (igual que paso 3); el wizard
+  // los hidrata directo al state `seo: ResourceSeo`.
+  seo_by_lang?: Record<string, unknown> | null;
+  translations?: Record<string, unknown> | null;
+  keywords?: string[] | null;
+  indexable?: boolean | null;
+  og_image_override_path?: string | null;
+  canonical_url?: string | null;
 }
 
 /**
@@ -278,6 +287,13 @@ export interface ResourceInput {
   seo_title?: LocalizedValue;
   seo_description?: LocalizedValue;
   category_ids?: string[];
+  // Paso 6 · t4 — campos SEO estructurados (migración 024).
+  seo_by_lang?: Record<string, unknown>;
+  translations?: Record<string, unknown>;
+  keywords?: string[];
+  indexable?: boolean;
+  og_image_override_path?: string | null;
+  canonical_url?: string | null;
 }
 
 export interface PaginatedResult<T> {

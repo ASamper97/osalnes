@@ -10,7 +10,9 @@ import { Wizard, WizardFieldGroup, WizardCompletionCard, type WizardStepDef } fr
 // VideosBlock / DocumentsBlock contra las tablas de la migración 023.
 // Relaciones entre recursos quedan pospuestas a iteración futura.
 import { AiWritingAssistant } from '@/components/AiWritingAssistant';
-import { AiSeoGenerator } from '@/components/AiSeoGenerator';
+// Paso 6 · t4 — AiSeoGenerator (legacy, generaba ES+GL en una sola
+// llamada con action `seo`) ya no se usa: lo reemplaza
+// ResourceWizardStep6Seo con llamadas `generateSeo` por idioma.
 import { AiQualityScore } from '@/components/AiQualityScore';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import TemplatePicker from '@/pages/TemplatePicker';
@@ -34,8 +36,18 @@ import type { EstablishmentData } from '@/components/EstablishmentDetails';
 import '@/pages/step4-classification.css';
 import ResourceWizardStep5Multimedia from '@/pages/ResourceWizardStep5Multimedia';
 import { getVideoThumbnailUrl, type ImageItem, type VideoItem, type DocumentItem } from '@osalnes/shared/data/media';
-import { aiGenAltText } from '@/lib/ai';
+import { aiGenAltText, aiGenerateSeo, aiSuggestKeywords, aiTranslateResource } from '@/lib/ai';
 import '@/pages/step5-multimedia.css';
+import ResourceWizardStep6Seo from '@/pages/ResourceWizardStep6Seo';
+import {
+  type ResourceSeo,
+  type AnyLang,
+  type AdditionalLang,
+  type TranslationByLang,
+  type SeoByLang,
+  emptyResourceSeo,
+} from '@osalnes/shared/data/seo';
+import '@/pages/step6-seo.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
@@ -262,6 +274,14 @@ export function ResourceWizardPage() {
   const [mediaImages, setMediaImages] = useState<ImageItem[]>([]);
   const [mediaVideos, setMediaVideos] = useState<VideoItem[]>([]);
   const [mediaDocuments, setMediaDocuments] = useState<DocumentItem[]>([]);
+
+  // Paso 6 · t4 — estado SEO estructurado (migración 024). Fuente de verdad
+  // del paso 6 rediseñado: título+descripción por idioma, traducciones EN/
+  // FR/PT, slug, indexable, og image override, keywords, canonical. Se
+  // sincroniza con los 10 campos legacy (seoTitleEs/…/nameEn/…/descEn/…)
+  // al cambiar, para no romper el preview del paso 7 ni la LocalizedValue
+  // name/description que el admin escribe en la tabla `traduccion`.
+  const [seo, setSeo] = useState<ResourceSeo>(emptyResourceSeo());
   // Guia-burros v2 — tags UNE 178503 (catalogo 154×18). Hidratacion desde
   // resource_tags la hace la Tarea 6 en el loader.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
@@ -610,6 +630,39 @@ export function ResourceWizardPage() {
         setHoursPlan(
           (r.opening_hours_plan as OpeningHoursPlan | null) ?? emptyPlanByKind('weekly'),
         );
+        // Paso 6 · t4 — hidratación de seo desde la migración 024 con
+        // fallback al LocalizedValue legacy (seo_title / name.en/fr/pt /
+        // description.en/fr/pt) para recursos creados antes del backfill.
+        const rByLang = (r.seo_by_lang ?? {}) as Partial<Record<AnyLang, SeoByLang>>;
+        const byLang: Partial<Record<AnyLang, SeoByLang>> = { ...rByLang };
+        if (!byLang.es && (r.seoTitle?.es || r.seoDescription?.es)) {
+          byLang.es = { title: r.seoTitle?.es || '', description: r.seoDescription?.es || '' };
+        }
+        if (!byLang.gl && (r.seoTitle?.gl || r.seoDescription?.gl)) {
+          byLang.gl = { title: r.seoTitle?.gl || '', description: r.seoDescription?.gl || '' };
+        }
+        const rTranslations = (r.translations ?? {}) as Partial<Record<AdditionalLang, TranslationByLang>>;
+        const translations: Partial<Record<AdditionalLang, TranslationByLang>> = { ...rTranslations };
+        (['en', 'fr', 'pt'] as AdditionalLang[]).forEach((lang) => {
+          if (translations[lang]) return;
+          const legacyName = r.name?.[lang];
+          const legacyDesc = r.description?.[lang];
+          if (legacyName || legacyDesc) {
+            translations[lang] = {
+              name: legacyName || '',
+              description: legacyDesc || '',
+            };
+          }
+        });
+        setSeo({
+          byLang,
+          translations,
+          slug: r.slug || '',
+          indexable: r.indexable ?? true,
+          ogImageOverridePath: r.og_image_override_path ?? null,
+          keywords: (r.keywords as string[]) ?? [],
+          canonicalUrl: r.canonical_url ?? null,
+        });
         // Paso 2 · t5 — hidratación legacy→tag: si el recurso tenía
         // is_accessible_for_free=true en columna legacy, nos aseguramos de
         // que `caracteristicas.gratuito` esté entre las tags. Al guardar,
@@ -1065,6 +1118,101 @@ export function ResourceWizardPage() {
     markDirty();
   }
 
+  // ── Paso 6 · t4 — Handlers SEO / traducciones / slug / OG image ──
+
+  async function handleGenerateSeoAi(lang: AnyLang): Promise<SeoByLang | null> {
+    // Solo idiomas base tienen generateSeo (decisión del paso 6 · t3). El
+    // resto (EN/FR/PT) pasan por `translateResource` que genera nombre +
+    // descripción corta, no SEO optimizado.
+    if (lang !== 'es' && lang !== 'gl') return null;
+    try {
+      const typeLabel =
+        mainTypeKey && TAGS_BY_KEY[mainTypeKey]
+          ? TAGS_BY_KEY[mainTypeKey].label
+          : null;
+      const res = await aiGenerateSeo({
+        descriptionEs: descEs,
+        resourceName: nameEs,
+        lang,
+        typeLabel,
+        municipio: selectedMunicipioName,
+      });
+      if (!res.title && !res.description) return null;
+      return res;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleSuggestKeywordsAi(descriptionEs: string): Promise<string[]> {
+    try {
+      return await aiSuggestKeywords(descriptionEs);
+    } catch {
+      return [];
+    }
+  }
+
+  async function handleTranslateOne(lang: AdditionalLang): Promise<TranslationByLang | null> {
+    try {
+      const r = await aiTranslateResource({
+        resourceName: nameEs,
+        descriptionEs: descEs,
+        targetLang: lang,
+      });
+      if (!r.name && !r.description) return null;
+      return r;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleTranslateAll(): Promise<Partial<Record<AdditionalLang, TranslationByLang>>> {
+    const langs: AdditionalLang[] = ['en', 'fr', 'pt'];
+    const entries = await Promise.all(
+      langs.map(async (lang) => {
+        const r = await handleTranslateOne(lang);
+        return [lang, r] as const;
+      }),
+    );
+    const out: Partial<Record<AdditionalLang, TranslationByLang>> = {};
+    for (const [lang, r] of entries) if (r) out[lang] = r;
+    return out;
+  }
+
+  async function handleCheckSlugDuplicate(slug: string): Promise<boolean> {
+    const { data, error: rpcErr } = await supabase.rpc('slug_is_available', {
+      p_slug: slug,
+      p_exclude_resource_id: savedId ?? null,
+    });
+    if (rpcErr) throw rpcErr;
+    // RPC devuelve true si el slug está libre → el componente espera `true`
+    // si es duplicado. Invertimos.
+    return data === false;
+  }
+
+  async function handleUploadOgOverride(file: File): Promise<string> {
+    if (!savedId) throw new Error('No resourceId');
+    const uuid = crypto.randomUUID();
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${savedId}/og-${uuid}.${ext}`;
+    const { error: uploadErr } = await supabase.storage
+      .from(IMAGES_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (uploadErr) throw uploadErr;
+    setSeo((prev) => ({ ...prev, ogImageOverridePath: path }));
+    markDirty();
+    return path;
+  }
+
+  async function handleRemoveOgOverride(): Promise<void> {
+    const currentPath = seo.ogImageOverridePath;
+    setSeo((prev) => ({ ...prev, ogImageOverridePath: null }));
+    if (currentPath) {
+      await supabase.storage.from(IMAGES_BUCKET).remove([currentPath]).catch(() => null);
+    }
+    markDirty();
+  }
+
   // ── Save / Submit ───────────────────────────────────────────
 
   async function handleFinish() {
@@ -1079,7 +1227,10 @@ export function ResourceWizardPage() {
     const body = {
       rdf_type: effectiveRdfType,
       rdf_types: rdfTypesSecondary.filter((t) => t !== effectiveRdfType),
-      slug,
+      // Paso 6 · t4 — slug editable desde el paso 6 (decisión 3-B). El
+      // state `seo.slug` manda; si está vacío, cae al legacy `slug` (que
+      // se generó en paso 0 desde el nombre).
+      slug: seo.slug || slug,
       municipio_id: municipioId || null,
       zona_id: zonaId || null,
       // Paso 3 · t4 — lat/lng derivan del state nuevo `location`. Los
@@ -1131,10 +1282,43 @@ export function ResourceWizardPage() {
       accommodation_rating: establishment.rating,
       serves_cuisine: establishment.cuisineCodes,
       occupancy: establishment.occupancy,
-      name: { es: nameEs, gl: nameGl, ...(nameEn && { en: nameEn }), ...(nameFr && { fr: nameFr }), ...(namePt && { pt: namePt }) },
-      description: { es: descEs, gl: descGl, ...(descEn && { en: descEn }), ...(descFr && { fr: descFr }), ...(descPt && { pt: descPt }) },
-      seo_title: { es: seoTitleEs, gl: seoTitleGl },
-      seo_description: { es: seoDescEs, gl: seoDescGl },
+      // Paso 6 · t4 — bridge seo ↔ legacy LocalizedValue. Los campos
+      // `name`/`description` con EN/FR/PT se alimentan de `seo.translations`;
+      // si el editor no tocó el paso 6 o cargó un recurso viejo, caemos al
+      // legacy state. Igual con `seo_title`/`seo_description` ES/GL desde
+      // `seo.byLang`. La edge function admin escribe ambos en paralelo:
+      // `traduccion` table (legacy) + jsonb column (nuevo).
+      name: {
+        es: nameEs,
+        gl: nameGl,
+        ...(seo.translations.en?.name || nameEn ? { en: seo.translations.en?.name || nameEn } : {}),
+        ...(seo.translations.fr?.name || nameFr ? { fr: seo.translations.fr?.name || nameFr } : {}),
+        ...(seo.translations.pt?.name || namePt ? { pt: seo.translations.pt?.name || namePt } : {}),
+      },
+      description: {
+        es: descEs,
+        gl: descGl,
+        ...(seo.translations.en?.description || descEn ? { en: seo.translations.en?.description || descEn } : {}),
+        ...(seo.translations.fr?.description || descFr ? { fr: seo.translations.fr?.description || descFr } : {}),
+        ...(seo.translations.pt?.description || descPt ? { pt: seo.translations.pt?.description || descPt } : {}),
+      },
+      seo_title: {
+        es: seo.byLang.es?.title || seoTitleEs,
+        gl: seo.byLang.gl?.title || seoTitleGl,
+      },
+      seo_description: {
+        es: seo.byLang.es?.description || seoDescEs,
+        gl: seo.byLang.gl?.description || seoDescGl,
+      },
+      // Paso 6 · t4 — campos SEO estructurados (migración 024). Fuente de
+      // verdad nueva; la tabla `traduccion` + `seo_title`/`seo_description`
+      // LocalizedValue se siguen escribiendo arriba hasta el backfill.
+      seo_by_lang: seo.byLang,
+      translations: seo.translations,
+      keywords: seo.keywords,
+      indexable: seo.indexable,
+      og_image_override_path: seo.ogImageOverridePath,
+      canonical_url: seo.canonicalUrl,
       category_ids: selectedCategories,
     };
 
@@ -1525,107 +1709,49 @@ export function ResourceWizardPage() {
       )}
 
       {/* ================================================================
-          STEP 6 — SEO + Traducciones adicionales
-          ================================================================ */}
+          STEP 6 — SEO e idiomas (paso 6 · t4)
+          ================================================================
+          Rediseño completo: preview Google + preview Open Graph + slug
+          editable + indexación + imagen OG + keywords con IA + traducción
+          masiva + auditoría SEO en vivo. Sustituye los 10 campos legacy
+          (4 SEO + 6 traducciones con botones individuales) y el
+          AiSeoGenerator antiguo. */}
       {currentStep === 5 && (
-        <>
-          <AiSeoGenerator
-            name={nameEs}
-            description={descEs}
-            type={currentTypology?.name?.es || rdfType}
-            municipality={municipalities.find((m) => m.id === municipioId)?.name?.es || ''}
-            onApply={(seo: SeoResult) => {
-              setSeoTitleEs(seo.title_es);
-              setSeoTitleGl(seo.title_gl);
-              setSeoDescEs(seo.desc_es);
-              setSeoDescGl(seo.desc_gl);
-              markDirty();
-            }}
-          />
-
-          <WizardFieldGroup
-            title="SEO — Titulo y descripcion para buscadores"
-            description="Estos textos aparecen en los resultados de Google. Un buen SEO atrae mas visitantes."
-            tip="Titulo ideal: menos de 60 caracteres. Descripcion ideal: entre 120 y 160 caracteres. Si los dejas vacios, se usaran el nombre y la descripcion del recurso."
-          >
-            <div className="form-row">
-              <div className="form-field">
-                <label>Titulo SEO (ES)</label>
-                <input value={seoTitleEs} onChange={(e) => { setSeoTitleEs(e.target.value); markDirty(); }} placeholder="Titulo para buscadores" />
-                <span className={`field-hint ${seoTitleEs.length > 60 ? 'field-hint--warn' : ''}`}>{seoTitleEs.length}/60</span>
-              </div>
-              <div className="form-field">
-                <label>Titulo SEO (GL)</label>
-                <input value={seoTitleGl} onChange={(e) => { setSeoTitleGl(e.target.value); markDirty(); }} placeholder="Titulo para buscadores" />
-                <span className={`field-hint ${seoTitleGl.length > 60 ? 'field-hint--warn' : ''}`}>{seoTitleGl.length}/60</span>
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-field">
-                <label>Descripcion SEO (ES)</label>
-                <textarea rows={2} value={seoDescEs} onChange={(e) => { setSeoDescEs(e.target.value); markDirty(); }} placeholder="Descripcion para buscadores (max 160 chars)" maxLength={300} />
-                <span className={`field-hint ${seoDescEs.length > 160 ? 'field-hint--warn' : ''}`}>{seoDescEs.length}/160</span>
-              </div>
-              <div className="form-field">
-                <label>Descripcion SEO (GL)</label>
-                <textarea rows={2} value={seoDescGl} onChange={(e) => { setSeoDescGl(e.target.value); markDirty(); }} placeholder="Descricion para buscadores (max 160 chars)" maxLength={300} />
-                <span className={`field-hint ${seoDescGl.length > 160 ? 'field-hint--warn' : ''}`}>{seoDescGl.length}/160</span>
-              </div>
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Traducciones adicionales"
-            description="Traduce el nombre y la descripcion a ingles, frances y portugues. Usa los botones de traduccion automatica como punto de partida."
-          >
-            <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <div className="form-field">
-                <label>
-                  Nombre (EN)
-                  <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'en', setNameEn)}>Traducir</button>
-                </label>
-                <input value={nameEn} onChange={(e) => { setNameEn(e.target.value); markDirty(); }} placeholder="English name" />
-              </div>
-              <div className="form-field">
-                <label>
-                  Nombre (FR)
-                  <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'fr', setNameFr)}>Traducir</button>
-                </label>
-                <input value={nameFr} onChange={(e) => { setNameFr(e.target.value); markDirty(); }} placeholder="Nom en francais" />
-              </div>
-              <div className="form-field">
-                <label>
-                  Nombre (PT)
-                  <button type="button" className="translate-btn" disabled={!nameEs || !!translating} onClick={() => handleTranslate(nameEs, 'pt', setNamePt)}>Traducir</button>
-                </label>
-                <input value={namePt} onChange={(e) => { setNamePt(e.target.value); markDirty(); }} placeholder="Nome em portugues" />
-              </div>
-            </div>
-            <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <div className="form-field">
-                <label>
-                  Descripcion (EN)
-                  <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'en', setDescEn)}>Traducir</button>
-                </label>
-                <textarea rows={3} value={descEn} onChange={(e) => { setDescEn(e.target.value); markDirty(); }} placeholder="English description" />
-              </div>
-              <div className="form-field">
-                <label>
-                  Descripcion (FR)
-                  <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'fr', setDescFr)}>Traducir</button>
-                </label>
-                <textarea rows={3} value={descFr} onChange={(e) => { setDescFr(e.target.value); markDirty(); }} placeholder="Description en francais" />
-              </div>
-              <div className="form-field">
-                <label>
-                  Descripcion (PT)
-                  <button type="button" className="translate-btn" disabled={!descEs || !!translating} onClick={() => handleTranslate(descEs, 'pt', setDescPt)}>Traducir</button>
-                </label>
-                <textarea rows={3} value={descPt} onChange={(e) => { setDescPt(e.target.value); markDirty(); }} placeholder="Descricao em portugues" />
-              </div>
-            </div>
-          </WizardFieldGroup>
-        </>
+        <ResourceWizardStep6Seo
+          seo={seo}
+          onChange={(next) => {
+            setSeo(next);
+            // Paso 6 · t4 — mirror a legacy state para que LivePreview,
+            // applyTemplate y el guardado actual del name/description
+            // LocalizedValue sigan funcionando. La fuente de verdad es
+            // `seo` pero no borramos los 10 legacy todavía.
+            setSeoTitleEs(next.byLang.es?.title ?? '');
+            setSeoTitleGl(next.byLang.gl?.title ?? '');
+            setSeoDescEs(next.byLang.es?.description ?? '');
+            setSeoDescGl(next.byLang.gl?.description ?? '');
+            setNameEn(next.translations.en?.name ?? '');
+            setNameFr(next.translations.fr?.name ?? '');
+            setNamePt(next.translations.pt?.name ?? '');
+            setDescEn(next.translations.en?.description ?? '');
+            setDescFr(next.translations.fr?.description ?? '');
+            setDescPt(next.translations.pt?.description ?? '');
+            markDirty();
+          }}
+          resourceName={nameEs}
+          descriptionEs={descEs}
+          hasPrimaryImage={mediaImages.some((i) => i.isPrimary)}
+          primaryImageUrl={mediaImages.find((i) => i.isPrimary)?.publicUrl ?? null}
+          ogOverrideUrl={seo.ogImageOverridePath ? getPublicUrl(IMAGES_BUCKET, seo.ogImageOverridePath) : null}
+          isPublished={editorialStatus === 'publicado'}
+          onGenerateSeoAi={handleGenerateSeoAi}
+          onSuggestKeywordsAi={handleSuggestKeywordsAi}
+          onTranslateOne={handleTranslateOne}
+          onTranslateAll={handleTranslateAll}
+          onCheckSlugDuplicate={handleCheckSlugDuplicate}
+          currentResourceId={savedId}
+          onUploadOgOverride={handleUploadOgOverride}
+          onRemoveOgOverride={handleRemoveOgOverride}
+        />
       )}
 
       {/* ================================================================

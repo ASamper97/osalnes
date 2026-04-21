@@ -761,6 +761,16 @@ async function createResource(sb: any, input: any, usuarioId: string, req: Reque
       contact_web: input.contact_web ?? null,
       social_links: input.social_links ?? [],
       opening_hours_plan: input.opening_hours_plan ?? null,
+      // Paso 6 · t4 — campos SEO estructurados (migración 024). Los
+      // legacy seo_title/seo_description (como translations en idiomas
+      // base) se siguen escribiendo en paralelo (via traduccion table)
+      // hasta la limpieza post-backfill.
+      seo_by_lang: input.seo_by_lang ?? {},
+      translations: input.translations ?? {},
+      keywords: input.keywords ?? [],
+      indexable: input.indexable ?? true,
+      og_image_override_path: input.og_image_override_path ?? null,
+      canonical_url: input.canonical_url ?? null,
       estado_editorial: 'borrador',
       created_by: usuarioId,
       updated_by: usuarioId,
@@ -815,6 +825,13 @@ async function updateResource(sb: any, id: string, input: any, usuarioId: string
     'street_address', 'postal_code', 'locality', 'parroquia_text',
     'contact_phone', 'contact_email', 'contact_web',
     'social_links', 'opening_hours_plan',
+    // Paso 6 · t4 — campos SEO estructurados (migración 024).
+    'seo_by_lang', 'translations', 'keywords', 'indexable',
+    'og_image_override_path', 'canonical_url',
+    // slug editable desde paso 6 (decisión 3-B): solo admin en edición;
+    // el wizard ya enviaba slug en create, pero no estaba en el whitelist
+    // de update.
+    'slug',
   ];
 
   for (const f of fields) {
@@ -2496,5 +2513,12 @@ async function mapResourceRow(sb: any, row: Record<string, any>) {
     contact_web: row.contact_web ?? null,
     social_links: row.social_links ?? [],
     opening_hours_plan: row.opening_hours_plan ?? null,
+    // Paso 6 · t4 — campos SEO estructurados (migración 024). snake_case.
+    seo_by_lang: row.seo_by_lang ?? {},
+    translations: row.translations ?? {},
+    keywords: row.keywords ?? [],
+    indexable: row.indexable ?? true,
+    og_image_override_path: row.og_image_override_path ?? null,
+    canonical_url: row.canonical_url ?? null,
   };
 }

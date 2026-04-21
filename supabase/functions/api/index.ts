@@ -629,6 +629,13 @@ async function mapResourceRow(row: Record<string, any>) {
     contact_web: row.contact_web ?? null,
     social_links: row.social_links ?? [],
     opening_hours_plan: row.opening_hours_plan ?? null,
+    // Paso 6 · t4 — campos SEO estructurados (migración 024).
+    seo_by_lang: row.seo_by_lang ?? {},
+    translations: row.translations ?? {},
+    keywords: row.keywords ?? [],
+    indexable: row.indexable ?? true,
+    og_image_override_path: row.og_image_override_path ?? null,
+    canonical_url: row.canonical_url ?? null,
   };
 }
 
