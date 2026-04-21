@@ -26,10 +26,10 @@ import {
   type SeoReport,
   type AuditContext as SeoAuditContext,
   type CheckStatus,
-} from './seo-audit';
-import { type ResourceSeo } from './seo';
-import { validatePlan, type OpeningHoursPlan } from './opening-hours';
-import { hasAnyEstablishmentField, getEstablishmentFields } from './establishment-fields';
+} from './seo-audit.js';
+import { type ResourceSeo } from './seo.js';
+import { validatePlan, type OpeningHoursPlan } from './opening-hours.js';
+import { hasAnyEstablishmentField, getEstablishmentFields } from './establishment-fields.js';
 
 // ─── Tipos públicos ────────────────────────────────────────────────────
 
@@ -391,7 +391,7 @@ function multimediaChecks(snap: ResourceSnapshot): QualityCheck[] {
 
 function adaptSeoChecks(report: SeoReport): QualityCheck[] {
   return report.checks
-    .filter((c) => c.weight > 0)
+    .filter((c: SeoCheck) => c.weight > 0)
     .map((c: SeoCheck): QualityCheck => ({
       key: c.key,
       label: c.label,

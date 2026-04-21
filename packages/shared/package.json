@@ -49,6 +49,10 @@
     "./data/seo-audit": {
       "types": "./dist/data/seo-audit.d.ts",
       "default": "./dist/data/seo-audit.js"
+    },
+    "./data/quality-engine": {
+      "types": "./dist/data/quality-engine.d.ts",
+      "default": "./dist/data/quality-engine.js"
     }
   },
   "scripts": {
