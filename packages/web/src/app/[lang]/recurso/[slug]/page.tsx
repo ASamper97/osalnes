@@ -39,15 +39,44 @@ export async function generateMetadata({
   if (!resource) return { title: 'Not Found' };
 
   const lang = params.lang;
-  const title = resource.seoTitle?.[lang] || resource.name[lang] || resource.name.es;
-  const description = resource.seoDescription?.[lang] || (resource.description[lang] || resource.description.es || '').slice(0, 160);
+  // Paso 6 · t5 — prioridad al campo nuevo `seo_by_lang` (migración 024);
+  // fallback a los LocalizedValue legacy para recursos creados antes del
+  // backfill. Título fallback: nombre del recurso. Descripción fallback:
+  // descripción general truncada a 160.
+  const seoByLang = resource.seo_by_lang ?? {};
+  const seoForLang = seoByLang?.[lang];
+  const title = seoForLang?.title
+    || resource.seoTitle?.[lang]
+    || resource.name[lang]
+    || resource.name.es;
+  const description = seoForLang?.description
+    || resource.seoDescription?.[lang]
+    || (resource.description[lang] || resource.description.es || '').slice(0, 160);
   const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://turismo.osalnes.gal';
+  const keywords = Array.isArray(resource.keywords) && resource.keywords.length > 0
+    ? resource.keywords
+    : undefined;
+  // Indexación: default true si el campo no existe (recursos previos a 024).
+  const indexable = resource.indexable ?? true;
+  // Canonical: si `canonical_url` está rellena (admin), apuntar allí; si
+  // no, a la página en el idioma activo.
+  const canonical = resource.canonical_url || `/${lang}/recurso/${params.slug}`;
+  // og:image: si hay override (migración 024), construimos la URL pública
+  // del bucket resource-images; si no, null. La caída a la imagen primary
+  // del paso 5 queda como deuda abierta: requiere exponer `primary_image_url`
+  // en el response de /resources/by-slug (edge function api).
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const ogImage = resource.og_image_override_path && supabaseUrl
+    ? `${supabaseUrl}/storage/v1/object/public/resource-images/${resource.og_image_override_path}`
+    : undefined;
 
   return {
     title,
     description,
+    keywords,
+    ...(indexable ? {} : { robots: { index: false, follow: false } }),
     alternates: {
-      canonical: `/${lang}/recurso/${params.slug}`,
+      canonical,
       languages: Object.fromEntries(
         ['es', 'gl', 'en', 'fr', 'pt'].map((l) => [l, `/${l}/recurso/${params.slug}`]),
       ),
@@ -57,6 +86,13 @@ export async function generateMetadata({
       description,
       url: `${BASE_URL}/${lang}/recurso/${params.slug}`,
       type: 'article',
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      ...(ogImage ? { images: [ogImage] } : {}),
     },
   };
 }

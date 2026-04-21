@@ -52,6 +52,15 @@ export interface Resource {
   createdAt: string;
   updatedAt: string;
   categoryIds: string[];
+  // Paso 6 · t5 — campos SEO estructurados (migración 024). Se emiten por
+  // el endpoint público /resources/by-slug en snake_case, igual que los
+  // estructurados del paso 3.
+  seo_by_lang?: Record<string, { title?: string; description?: string } | undefined> | null;
+  translations?: Record<string, { name?: string; description?: string } | undefined> | null;
+  keywords?: string[] | null;
+  indexable?: boolean | null;
+  og_image_override_path?: string | null;
+  canonical_url?: string | null;
 }
 
 export interface Typology {
