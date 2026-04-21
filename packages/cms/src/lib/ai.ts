@@ -43,6 +43,15 @@ interface AiRequestBase {
     groupLabel: string;
     description?: string;
   }>;
+  // Campos extra usados por la acción `genAltText` (paso 5 · t2/t3). El
+  // edge function baja la imagen de `imageUrl` (URL pública de Supabase
+  // Storage) y la pasa a Gemini Vision junto con el contexto del recurso.
+  imageUrl?: string;
+  resourceContext?: {
+    name: string;
+    typeLabel: string | null;
+    municipio: string | null;
+  };
 }
 
 interface AiResponse<T = string> {
@@ -248,6 +257,40 @@ export async function aiSuggestTags(
     return (res.result as SuggestTagsResult).suggestions;
   }
   return [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// genAltText — alt text WCAG 2.1 AA con Gemini Vision (paso 5 · t2)
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface AiGenAltTextInput {
+  /** URL pública de la imagen en Supabase Storage */
+  imageUrl: string;
+  /** Contexto del recurso (mejora la precisión del alt) */
+  resourceContext: {
+    name: string;
+    /** Tipología principal legible (ej. "Playa", "Museo", "Restaurante") */
+    typeLabel: string | null;
+    municipio: string | null;
+  };
+}
+
+/**
+ * Genera alt text descriptivo para una imagen usando Gemini Vision
+ * (modalidad `gemini-*-vision`). Devuelve string con la descripción
+ * (15-30 palabras en castellano). Si falla o no hay GEMINI_API_KEY, el
+ * edge function devuelve un mock "Imagen de {name} en {municipio}" para
+ * no romper el frontend. Cumple WCAG 2.1 AA criterio 1.1.1.
+ *
+ * Requiere el action `genAltText` en el edge function (paso 5 · t3).
+ */
+export async function aiGenAltText(input: AiGenAltTextInput): Promise<string> {
+  const res = await callAi<string>({
+    action: 'genAltText',
+    imageUrl: input.imageUrl,
+    resourceContext: input.resourceContext,
+  });
+  return typeof res.result === 'string' ? res.result.trim() : '';
 }
 
 /** Generate SEO title and description */
