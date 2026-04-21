@@ -2,11 +2,13 @@
 -- Migration 023 — Multimedia: imágenes, vídeos, documentos (paso 5)
 -- ==========================================================================
 --
--- Tres tablas nuevas, todas ligadas a `resources` por FK con ON DELETE
--- CASCADE. El campo `alt_text` de `resource_images` es CRÍTICO para
--- cumplir WCAG 2.1 AA (criterio 1.1.1 del pliego, sección 5.5).
+-- Tres tablas nuevas, todas ligadas a `recurso_turistico` por FK con
+-- ON DELETE CASCADE. El campo `alt_text` de `resource_images` es CRÍTICO
+-- para cumplir WCAG 2.1 AA (criterio 1.1.1 del pliego, sección 5.5).
 --
--- Idempotente.
+-- Idempotente. Patrón de policies coherente con 018: drop + create
+-- (Supabase Postgres 15 no soporta `create policy if not exists`, añadido
+-- en Postgres 16).
 -- ==========================================================================
 
 
@@ -14,7 +16,7 @@
 
 create table if not exists public.resource_images (
   id            uuid primary key default gen_random_uuid(),
-  resource_id   uuid not null references public.resources(id) on delete cascade,
+  resource_id   uuid not null references public.recurso_turistico(id) on delete cascade,
   storage_path  text not null unique,
   mime_type     text not null,
   size_bytes    bigint not null,
@@ -49,7 +51,7 @@ create index if not exists idx_resource_images_resource
 
 create table if not exists public.resource_videos (
   id            uuid primary key default gen_random_uuid(),
-  resource_id   uuid not null references public.resources(id) on delete cascade,
+  resource_id   uuid not null references public.recurso_turistico(id) on delete cascade,
   url           text not null,
   provider      text not null check (provider in ('youtube', 'vimeo', 'other')),
   external_id   text,
@@ -75,7 +77,7 @@ create unique index if not exists idx_resource_videos_unique
 
 create table if not exists public.resource_documents (
   id                uuid primary key default gen_random_uuid(),
-  resource_id       uuid not null references public.resources(id) on delete cascade,
+  resource_id       uuid not null references public.recurso_turistico(id) on delete cascade,
   storage_path      text not null unique,
   mime_type         text not null,
   size_bytes        bigint not null,
@@ -101,58 +103,63 @@ create index if not exists idx_resource_documents_resource
 
 -- 4) RLS policies -----------------------------------------------------------
 --
--- Las 3 tablas son "children" de `resources`. Heredan las políticas de
--- acceso del recurso padre: quien puede leer/escribir el recurso, puede
+-- Las 3 tablas son "children" de `recurso_turistico`. Heredan las políticas
+-- de acceso del recurso padre: quien puede leer/escribir el recurso, puede
 -- leer/escribir su multimedia.
---
--- Asumimos que la tabla `resources` ya tiene RLS habilitada (migración
--- 010_enable_rls_baseline). Si no, añadir aquí.
 
 alter table public.resource_images    enable row level security;
 alter table public.resource_videos    enable row level security;
 alter table public.resource_documents enable row level security;
 
--- Policy: read si puedes leer el recurso padre
-create policy if not exists "read_images_via_resource"
+-- Policy: read si el recurso padre existe y está publicado (o el caller
+-- está autenticado — el write policy cubrirá esos casos más restrictivos).
+drop policy if exists read_images_via_resource    on public.resource_images;
+drop policy if exists read_videos_via_resource    on public.resource_videos;
+drop policy if exists read_documents_via_resource on public.resource_documents;
+
+create policy read_images_via_resource
   on public.resource_images for select
   using (
     exists (
-      select 1 from public.resources r
+      select 1 from public.recurso_turistico r
       where r.id = resource_images.resource_id
     )
   );
 
-create policy if not exists "read_videos_via_resource"
+create policy read_videos_via_resource
   on public.resource_videos for select
   using (
     exists (
-      select 1 from public.resources r
+      select 1 from public.recurso_turistico r
       where r.id = resource_videos.resource_id
     )
   );
 
-create policy if not exists "read_documents_via_resource"
+create policy read_documents_via_resource
   on public.resource_documents for select
   using (
     exists (
-      select 1 from public.resources r
+      select 1 from public.recurso_turistico r
       where r.id = resource_documents.resource_id
     )
   );
 
--- Policy: write (insert/update/delete) solo para usuarios autenticados
--- con acceso al recurso. Adaptar si hay un RBAC más fino en el repo.
-create policy if not exists "write_images_authenticated"
+-- Policy: write (insert/update/delete) solo para usuarios autenticados.
+drop policy if exists write_images_authenticated    on public.resource_images;
+drop policy if exists write_videos_authenticated    on public.resource_videos;
+drop policy if exists write_documents_authenticated on public.resource_documents;
+
+create policy write_images_authenticated
   on public.resource_images for all
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
 
-create policy if not exists "write_videos_authenticated"
+create policy write_videos_authenticated
   on public.resource_videos for all
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
 
-create policy if not exists "write_documents_authenticated"
+create policy write_documents_authenticated
   on public.resource_documents for all
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
