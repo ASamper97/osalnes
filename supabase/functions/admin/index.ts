@@ -740,6 +740,8 @@ async function createResource(sb: any, input: any, usuarioId: string, req: Reque
       same_as: input.same_as || [],
       tourist_types: input.tourist_types || [],
       rating_value: input.rating_value || null,
+      // Paso 4 · t5 — clasificación del establecimiento (migración 022).
+      accommodation_rating: input.accommodation_rating ?? null,
       serves_cuisine: input.serves_cuisine || [],
       is_accessible_for_free: input.is_accessible_for_free ?? null,
       public_access: input.public_access ?? null,
@@ -805,6 +807,8 @@ async function updateResource(sb: any, id: string, input: any, usuarioId: string
     'rdf_type', 'rdf_types', 'municipio_id', 'zona_id', 'latitude', 'longitude',
     'address_street', 'address_postal', 'telephone', 'email', 'url',
     'same_as', 'tourist_types', 'rating_value', 'serves_cuisine',
+    // Paso 4 · t5 — campo nuevo migración 022.
+    'accommodation_rating',
     'is_accessible_for_free', 'public_access', 'occupancy',
     'opening_hours', 'extras', 'visible_en_mapa',
     // Paso 3 · t4 — campos estructurados de la migración 021.
@@ -2340,6 +2344,8 @@ async function mapResourceRow(sb: any, row: Record<string, any>) {
       url: row.url, sameAs: row.same_as || [],
     },
     touristTypes: row.tourist_types || [], ratingValue: row.rating_value,
+    // Paso 4 · t5 — clasificación del establecimiento (migración 022).
+    accommodationRating: row.accommodation_rating ?? null,
     servesCuisine: row.serves_cuisine || [],
     isAccessibleForFree: row.is_accessible_for_free,
     publicAccess: row.public_access, occupancy: row.occupancy,

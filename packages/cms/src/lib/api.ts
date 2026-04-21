@@ -205,6 +205,8 @@ export interface ResourceSummary {
   contact: { telephone: string[]; email: string[]; url: string | null; sameAs: string[] };
   touristTypes: string[];
   ratingValue: number | null;
+  /** Paso 4 · t5 — clasificación del establecimiento (hotel stars / tenedores / categoría museo). Migración 022. */
+  accommodationRating: number | null;
   servesCuisine: string[];
   isAccessibleForFree: boolean | null;
   publicAccess: boolean | null;
@@ -252,6 +254,8 @@ export interface ResourceInput {
   same_as?: string[];
   tourist_types?: string[];
   rating_value?: number | null;
+  /** Paso 4 · t5 — clasificación del establecimiento. Migración 022. */
+  accommodation_rating?: number | null;
   serves_cuisine?: string[];
   is_accessible_for_free?: boolean | null;
   public_access?: boolean | null;

@@ -603,6 +603,8 @@ async function mapResourceRow(row: Record<string, any>) {
     },
     touristTypes: row.tourist_types || [],
     ratingValue: row.rating_value,
+    // Paso 4 · t5 — clasificación del establecimiento (migración 022).
+    accommodationRating: row.accommodation_rating ?? null,
     servesCuisine: row.serves_cuisine || [],
     isAccessibleForFree: row.is_accessible_for_free,
     publicAccess: row.public_access,

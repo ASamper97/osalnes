@@ -26,8 +26,10 @@ import { emptyPlanByKind, validatePlan } from '@osalnes/shared/data/opening-hour
 import { LivePreviewPanel } from '@/components/LivePreviewPanel';
 import { EditorialStatusBar, type EditorialState } from '@/components/EditorialStatusBar';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
-import TagSelector from '@/components/TagSelector';
 import PidCompletenessCard from '@/components/PidCompletenessCard';
+import ResourceWizardStep4Classification from '@/pages/ResourceWizardStep4Classification';
+import type { EstablishmentData } from '@/components/EstablishmentDetails';
+import '@/pages/step4-classification.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
@@ -173,9 +175,22 @@ export function ResourceWizardPage() {
   // Legacy: tourist_types y category_ids se siguen escribiendo en paralelo
   // hasta migrar el dato (// TODO legacy).
   const [touristTypes, setTouristTypes] = useState<string[]>([]);
+  // Legacy — ratingValue, servesCuisine, occupancy mantenidos para compat con
+  // import-from-url, applyTemplate y LivePreviewPanel. La fuente de verdad del
+  // paso 4 rediseñado es `establishment` (paso 4 · t5). Al cambiar
+  // establishment se mirror-sync a estos para que el preview siga viendo el
+  // valor al día.
   const [ratingValue, setRatingValue] = useState('');
   const [servesCuisine, setServesCuisine] = useState('');
   const [occupancy, setOccupancy] = useState('');
+  // Paso 4 · t5 — estado nuevo estructurado (migración 022). Fuente de verdad
+  // del paso 4: clasificación del establecimiento condicional al tipo del
+  // paso 1 (estrellas / tenedores / categoría museo + aforo + cocinas UNE).
+  const [establishment, setEstablishment] = useState<EstablishmentData>({
+    rating: null,
+    occupancy: null,
+    cuisineCodes: [],
+  });
   // Guia-burros v2 — tags UNE 178503 (catalogo 154×18). Hidratacion desde
   // resource_tags la hace la Tarea 6 en el loader.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
@@ -246,7 +261,15 @@ export function ResourceWizardPage() {
       if (imported.opening_hours) setOpeningHours(imported.opening_hours);
       if (imported.latitude !== undefined && imported.latitude !== null) setLatitude(imported.latitude.toString());
       if (imported.longitude !== undefined && imported.longitude !== null) setLongitude(imported.longitude.toString());
-      if (imported.rating_value) setRatingValue(imported.rating_value.toString());
+      if (imported.rating_value) {
+        setRatingValue(imported.rating_value.toString());
+        // Paso 4 · t5 — mirror a establishment. Solo aceptamos rangos 1-5
+        // para evitar meter basura en accommodation_rating (CHECK constraint).
+        const r = parseInt(String(imported.rating_value), 10);
+        if (r >= 1 && r <= 5) {
+          setEstablishment((prev) => ({ ...prev, rating: r }));
+        }
+      }
       if (imported.cuisine?.length) setServesCuisine(imported.cuisine.join(', '));
       if (imported.tourist_types?.length) setTouristTypes(imported.tourist_types);
     }
@@ -321,7 +344,15 @@ export function ResourceWizardPage() {
     if (imported.opening_hours) setOpeningHours(imported.opening_hours);
     if (imported.latitude !== undefined && imported.latitude !== null) setLatitude(imported.latitude.toString());
     if (imported.longitude !== undefined && imported.longitude !== null) setLongitude(imported.longitude.toString());
-    if (imported.rating_value) setRatingValue(imported.rating_value.toString());
+    if (imported.rating_value) {
+      setRatingValue(imported.rating_value.toString());
+      // Paso 4 · t5 — mirror a establishment. Solo aceptamos rangos 1-5
+      // para evitar meter basura en accommodation_rating (CHECK constraint).
+      const r = parseInt(String(imported.rating_value), 10);
+      if (r >= 1 && r <= 5) {
+        setEstablishment((prev) => ({ ...prev, rating: r }));
+      }
+    }
     if (imported.cuisine?.length) setServesCuisine(imported.cuisine.join(', '));
     if (imported.tourist_types?.length) setTouristTypes(imported.tourist_types);
 
@@ -466,6 +497,15 @@ export function ResourceWizardPage() {
         setServesCuisine((r.servesCuisine || []).join(', '));
         setSameAs((r.contact?.sameAs || []).join('\n'));
         setOccupancy(r.occupancy?.toString() || '');
+        // Paso 4 · t5 — hidratación de establishment. Prioridad al campo
+        // nuevo `accommodationRating` (migración 022); fallback a `ratingValue`
+        // legacy por si el recurso se creó antes del backfill y la migración
+        // no pudo copiarlo (p.ej. por tipo de dato).
+        setEstablishment({
+          rating: r.accommodationRating ?? r.ratingValue ?? null,
+          occupancy: r.occupancy ?? null,
+          cuisineCodes: r.servesCuisine || [],
+        });
         setNameEn(r.name?.en || '');
         setNameFr(r.name?.fr || '');
         setNamePt(r.name?.pt || '');
@@ -741,8 +781,14 @@ export function ResourceWizardPage() {
       visible_en_mapa: visibleOnMap,
       tourist_types: touristTypes,
       rating_value: ratingValue ? parseInt(ratingValue, 10) : null,
-      serves_cuisine: servesCuisine ? servesCuisine.split(',').map((c) => c.trim()).filter(Boolean) : [],
-      occupancy: occupancy ? parseInt(occupancy, 10) : null,
+      // Paso 4 · t5 — fuente de verdad del paso 4 (migración 022). El
+      // `rating_value` legacy se sigue escribiendo arriba hasta la limpieza
+      // post-backfill (NO es semánticamente equivalente: rating_value es
+      // "review average" schema.org; accommodation_rating es estrellas/
+      // tenedores/categoría del establecimiento).
+      accommodation_rating: establishment.rating,
+      serves_cuisine: establishment.cuisineCodes,
+      occupancy: establishment.occupancy,
       name: { es: nameEs, gl: nameGl, ...(nameEn && { en: nameEn }), ...(nameFr && { fr: nameFr }), ...(namePt && { pt: namePt }) },
       description: { es: descEs, gl: descGl, ...(descEn && { en: descEn }), ...(descFr && { fr: descFr }), ...(descPt && { pt: descPt }) },
       seo_title: { es: seoTitleEs, gl: seoTitleGl },
@@ -1074,52 +1120,35 @@ export function ResourceWizardPage() {
       )}
 
       {/* ================================================================
-          STEP 4 — Clasificacion turistica + Categorias
-          ================================================================ */}
+          STEP 4 — Clasificación turística (paso 4 · t5)
+          ================================================================
+          El bloque "Datos del establecimiento" es condicional a la tipología
+          (hasAnyEstablishmentField). El sugeridor IA usa la descripción ES
+          del paso 2 y el tipo del paso 1. Los tags se siguen guardando en
+          `resource_tags` por el saveResourceTags existente; el componente no
+          cambia esa lógica. */}
       {currentStep === 3 && (
-        <>
-          <WizardFieldGroup
-            title="Clasificacion del establecimiento"
-            description="Estrellas, tenedores o clasificacion oficial del recurso."
-          >
-            <div className="form-row">
-              <div className="form-field">
-                <label>Clasificacion (estrellas/tenedores)</label>
-                <select value={ratingValue} onChange={(e) => { setRatingValue(e.target.value); markDirty(); }}>
-                  <option value="">-- Sin clasificacion --</option>
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n}>{'★'.repeat(n)} ({n})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-field">
-                <label>Aforo</label>
-                <input type="number" min="0" value={occupancy} onChange={(e) => { setOccupancy(e.target.value); markDirty(); }} placeholder="150" />
-              </div>
-            </div>
-            <div className="form-field">
-              <label>Tipo de cocina</label>
-              <input value={servesCuisine} onChange={(e) => { setServesCuisine(e.target.value); markDirty(); }} placeholder="Gallega, Mariscos, Tapas" />
-              <span className="field-hint">Separados por comas (solo para restauracion)</span>
-            </div>
-          </WizardFieldGroup>
-
-          <WizardFieldGroup
-            title="Clasificacion semantica (UNE 178503)"
-            description="Marca todas las etiquetas que apliquen. El catalogo solo muestra los grupos relevantes para el tipo que seleccionaste en el paso 1."
-            tip="Las etiquetas con badge 'PID' se exportan a la Plataforma Inteligente de Destinos. Las marcadas 'cms' son solo editoriales. Cambia la tipologia en el paso 1 para ver otros grupos disponibles."
-          >
-            <TagSelector
-              resourceTypeLabel={resourceTypeLabel}
-              value={tagKeys}
-              onChange={(next) => {
-                setTagKeys(next);
-                markDirty();
-              }}
-              includeMunicipio={false}
-            />
-          </WizardFieldGroup>
-        </>
+        <ResourceWizardStep4Classification
+          mainTypeKey={mainTypeKey}
+          establishment={establishment}
+          onChangeEstablishment={(next) => {
+            setEstablishment(next);
+            // Mirror a legacy state para compat con LivePreviewPanel,
+            // applyTemplate y applyImportedFields (fuente de verdad sigue
+            // siendo `establishment` al guardar).
+            setRatingValue(next.rating != null ? String(next.rating) : '');
+            setOccupancy(next.occupancy != null ? String(next.occupancy) : '');
+            setServesCuisine(next.cuisineCodes.join(', '));
+            markDirty();
+          }}
+          selectedTagKeys={tagKeys}
+          onChangeSelectedTagKeys={(next) => {
+            setTagKeys(next);
+            markDirty();
+          }}
+          descriptionEs={descEs}
+          municipio={selectedMunicipioName}
+        />
       )}
 
       {/* ================================================================
