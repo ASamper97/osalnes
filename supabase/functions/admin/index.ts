@@ -1785,7 +1785,7 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
     // 1. Fetch published resources
     const { data: resources, error } = await sb
       .from('recurso_turistico')
-      .select('id, uri, rdf_type, slug, latitude, longitude, address_street, address_postal, telephone, email, url, tourist_types, rating_value, serves_cuisine, opening_hours, extras, municipio_id, created_at, updated_at')
+      .select('id, uri, rdf_type, slug, latitude, longitude, address_street, address_postal, telephone, email, url, tourist_types, rating_value, accommodation_rating, serves_cuisine, occupancy, opening_hours, extras, municipio_id, created_at, updated_at')
       .eq('estado_editorial', 'publicado')
       .order('updated_at', { ascending: false });
 
@@ -1819,6 +1819,27 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
       const { data: mt } = await sb.from('traduccion').select('entidad_id, valor')
         .eq('entidad_tipo', 'municipio').eq('campo', 'name').eq('idioma', 'es').in('entidad_id', muniIds);
       for (const m of mt || []) muniMap[m.entidad_id] = m.valor;
+    }
+
+    // 3b. Paso 4 · t6 — batch-fetch de tags UNE 178503 para el mapeo PID.
+    //     La columna `field` es discriminante del destino PID:
+    //       amenityFeature → schema.org amenityFeature[]
+    //       accessibility  → schema.org amenityFeature[] (LocationFeatureSpec)
+    //       cuisine        → schema.org servesCuisine[]
+    //       touristType    → schema.org touristType[]
+    //     `pid_exportable = true` excluye automáticamente los tags del grupo
+    //     `curaduria-editorial` (field='editorial', pid_exportable=false).
+    const pidTagsByResource: Record<string, Array<{ field: string; value: string }>> = {};
+    if (ids.length > 0) {
+      const { data: tagRows } = await sb
+        .from('resource_tags')
+        .select('resource_id, field, value')
+        .eq('pid_exportable', true)
+        .in('resource_id', ids);
+      for (const t of tagRows || []) {
+        (pidTagsByResource[t.resource_id] = pidTagsByResource[t.resource_id] || [])
+          .push({ field: t.field, value: t.value });
+      }
     }
 
     // 4. Build export data
@@ -1862,9 +1883,34 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
           if (row.email?.length > 0) node.email = row.email[0];
           if (row.url) node.sameAs = row.url;
           if (row.tourist_types?.length > 0) node.touristType = row.tourist_types;
-          if (row.rating_value) node.starRating = { '@type': 'Rating', ratingValue: row.rating_value };
+          // Paso 4 · t6 — starRating desde accommodation_rating (migración
+          // 022), con fallback al legacy rating_value hasta la limpieza
+          // post-backfill. rating_value es, en rigor, review average en
+          // schema.org, así que al migrar todos los datos a
+          // accommodation_rating podremos quitar el fallback.
+          const starRatingValue = row.accommodation_rating ?? row.rating_value;
+          if (starRatingValue) {
+            node.starRating = { '@type': 'Rating', ratingValue: starRatingValue };
+          }
+          if (row.occupancy != null) node.occupancy = row.occupancy;
           if (row.serves_cuisine?.length > 0) node.servesCuisine = row.serves_cuisine;
           if (row.opening_hours) node.openingHours = row.opening_hours;
+
+          // Paso 4 · t6 — amenityFeature desde tags UNE 178503.
+          //   field='amenityFeature' → { @type:'LocationFeatureSpecification', name }
+          //   field='accessibility'  → idem pero con 'accessibility:' como prefijo
+          //                            semántico (el consumidor PID lo distingue
+          //                            por el prefijo del name).
+          const pidTags = pidTagsByResource[row.id] || [];
+          const amenities = pidTags
+            .filter((t) => t.field === 'amenityFeature' || t.field === 'accessibility')
+            .map((t) => ({
+              '@type': 'LocationFeatureSpecification',
+              name: t.field === 'accessibility' ? `accessibility:${t.value}` : t.value,
+              value: true,
+            }));
+          if (amenities.length > 0) node.amenityFeature = amenities;
+
           node['pid:dtiCode'] = 'osalnes';
           node['pid:lastUpdated'] = row.updated_at;
 
@@ -1878,6 +1924,10 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
             municipio: muniMap[row.municipio_id] || row.municipio_id,
             telephone: row.telephone, email: row.email, url: row.url,
             tourist_types: row.tourist_types, rating_value: row.rating_value,
+            // Paso 4 · t6 — campos nuevos del establecimiento (migración 022).
+            accommodation_rating: row.accommodation_rating,
+            occupancy: row.occupancy,
+            serves_cuisine: row.serves_cuisine,
             created_at: row.created_at, updated_at: row.updated_at,
           });
         }

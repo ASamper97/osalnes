@@ -660,7 +660,7 @@ async function exportJsonLd(url: URL, req: Request) {
     .select(`
       id, uri, rdf_type, slug, latitude, longitude,
       address_street, address_postal, telephone, email, url,
-      tourist_types, rating_value, serves_cuisine, opening_hours,
+      tourist_types, rating_value, accommodation_rating, serves_cuisine, opening_hours,
       is_accessible_for_free, public_access, occupancy,
       municipio_id, published_at, updated_at
     `)
@@ -702,6 +702,23 @@ async function exportJsonLd(url: URL, req: Request) {
     for (const m of munis || []) { muniMap[m.id] = m.slug; }
   }
 
+  // Paso 4 · t6 — batch-fetch de tags PID-exportables para amenityFeature.
+  //   Los tags con field='amenityFeature' o 'accessibility' mapean al array
+  //   schema.org `amenityFeature[]`. `pid_exportable = true` excluye los
+  //   tags del grupo `curaduria-editorial` (uso interno CMS).
+  const pidTagsByResource: Record<string, Array<{ field: string; value: string }>> = {};
+  if (ids.length > 0) {
+    const { data: tagRows } = await sb
+      .from('resource_tags')
+      .select('resource_id, field, value')
+      .eq('pid_exportable', true)
+      .in('resource_id', ids);
+    for (const t of tagRows || []) {
+      (pidTagsByResource[t.resource_id] = pidTagsByResource[t.resource_id] || [])
+        .push({ field: t.field, value: t.value });
+    }
+  }
+
   // Build graph
   // deno-lint-ignore no-explicit-any
   const graph = rows.map((r: any) => {
@@ -739,13 +756,28 @@ async function exportJsonLd(url: URL, req: Request) {
     }
     if (r.telephone?.length) item.telephone = r.telephone.length === 1 ? r.telephone[0] : r.telephone;
     if (r.email?.length) item.email = r.email.length === 1 ? r.email[0] : r.email;
-    if (r.rating_value) item.starRating = { '@type': 'Rating', ratingValue: r.rating_value };
+    // Paso 4 · t6 — starRating desde accommodation_rating (migración 022),
+    // fallback al legacy rating_value (hasta backfill post-limpieza).
+    const starRatingValue = r.accommodation_rating ?? r.rating_value;
+    if (starRatingValue) item.starRating = { '@type': 'Rating', ratingValue: starRatingValue };
+    if (r.occupancy != null) item.occupancy = r.occupancy;
     if (r.tourist_types?.length) item.touristType = r.tourist_types;
     if (r.serves_cuisine?.length) item.servesCuisine = r.serves_cuisine;
     if (r.opening_hours) item.openingHours = r.opening_hours;
     if (r.is_accessible_for_free !== null) item.isAccessibleForFree = r.is_accessible_for_free;
     if (r.published_at) item.datePublished = r.published_at;
     if (r.updated_at) item.dateModified = r.updated_at;
+
+    // Paso 4 · t6 — amenityFeature desde tags UNE 178503.
+    const pidTags = pidTagsByResource[r.id] || [];
+    const amenities = pidTags
+      .filter((t) => t.field === 'amenityFeature' || t.field === 'accessibility')
+      .map((t) => ({
+        '@type': 'LocationFeatureSpecification',
+        name: t.field === 'accessibility' ? `accessibility:${t.value}` : t.value,
+        value: true,
+      }));
+    if (amenities.length > 0) item.amenityFeature = amenities;
 
     return item;
   });
