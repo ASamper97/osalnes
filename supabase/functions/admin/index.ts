@@ -1842,6 +1842,45 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
       }
     }
 
+    // 3c. Paso 5 · t6 — batch-fetch de imágenes y vídeos para el mapeo
+    //     `hasMultimedia` (UNE 178503 §10.1.13). Documentos se exponen en la
+    //     web pública como descargas y no se exportan al PID.
+    const imagesByResource: Record<string, Array<{ storage_path: string; alt_text: string | null; is_primary: boolean; sort_order: number }>> = {};
+    const videosByResource: Record<string, Array<{ url: string; title: string | null; thumbnail_url: string | null; sort_order: number }>> = {};
+    if (ids.length > 0) {
+      const [{ data: imgRows }, { data: vidRows }] = await Promise.all([
+        sb.from('resource_images')
+          .select('resource_id, storage_path, alt_text, is_primary, sort_order')
+          .in('resource_id', ids)
+          .order('sort_order', { ascending: true }),
+        sb.from('resource_videos')
+          .select('resource_id, url, title, thumbnail_url, sort_order')
+          .in('resource_id', ids)
+          .order('sort_order', { ascending: true }),
+      ]);
+      for (const img of imgRows || []) {
+        (imagesByResource[img.resource_id] = imagesByResource[img.resource_id] || []).push({
+          storage_path: img.storage_path,
+          alt_text: img.alt_text ?? null,
+          is_primary: !!img.is_primary,
+          sort_order: img.sort_order ?? 0,
+        });
+      }
+      for (const v of vidRows || []) {
+        (videosByResource[v.resource_id] = videosByResource[v.resource_id] || []).push({
+          url: v.url,
+          title: v.title ?? null,
+          thumbnail_url: v.thumbnail_url ?? null,
+          sort_order: v.sort_order ?? 0,
+        });
+      }
+    }
+
+    // Helper: URL pública del bucket resource-images (público por migración 023).
+    function imagePublicUrl(path: string): string {
+      return sb.storage.from('resource-images').getPublicUrl(path).data.publicUrl as string;
+    }
+
     // 4. Build export data
     let ok = 0;
     let errors = 0;
@@ -1910,6 +1949,47 @@ async function processExportJob(sb: any, jobId: string, tipo: string) {
               value: true,
             }));
           if (amenities.length > 0) node.amenityFeature = amenities;
+
+          // Paso 5 · t6 — hasMultimedia UNE 178503 §10.1.13.
+          //   image    → ImageObject principal (is_primary=true) + galería.
+          //   video    → VideoObject[] con contentUrl (URL externa).
+          //   alt_text → caption/description de cada ImageObject (WCAG).
+          const imgs = imagesByResource[row.id] || [];
+          if (imgs.length > 0) {
+            const sorted = [...imgs].sort((a, b) => {
+              if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+              return a.sort_order - b.sort_order;
+            });
+            const imageObjects = sorted.map((img) => {
+              const obj: Record<string, unknown> = {
+                '@type': 'ImageObject',
+                contentUrl: imagePublicUrl(img.storage_path),
+                url: imagePublicUrl(img.storage_path),
+              };
+              if (img.alt_text) {
+                obj.caption = img.alt_text;
+                obj.description = img.alt_text;
+              }
+              return obj;
+            });
+            node.image = imageObjects.length === 1 ? imageObjects[0] : imageObjects;
+          }
+
+          const vids = videosByResource[row.id] || [];
+          if (vids.length > 0) {
+            node.video = vids
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((v) => {
+                const obj: Record<string, unknown> = {
+                  '@type': 'VideoObject',
+                  contentUrl: v.url,
+                  embedUrl: v.url,
+                };
+                if (v.title) obj.name = v.title;
+                if (v.thumbnail_url) obj.thumbnailUrl = v.thumbnail_url;
+                return obj;
+              });
+          }
 
           node['pid:dtiCode'] = 'osalnes';
           node['pid:lastUpdated'] = row.updated_at;
