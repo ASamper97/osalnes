@@ -25,65 +25,65 @@ do $$
 begin
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='seo_by_lang'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='seo_by_lang'
   ) then
-    alter table public.resources add column seo_by_lang jsonb not null default '{}'::jsonb;
-    comment on column public.resources.seo_by_lang is
+    alter table public.recurso_turistico add column seo_by_lang jsonb not null default '{}'::jsonb;
+    comment on column public.recurso_turistico.seo_by_lang is
       'SEO por idioma: {es:{title,description}, gl:{...}, en:{...}, fr:{...}, pt:{...}}. Se mapea a meta title/description y og:title/og:description.';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='translations'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='translations'
   ) then
-    alter table public.resources add column translations jsonb not null default '{}'::jsonb;
-    comment on column public.resources.translations is
+    alter table public.recurso_turistico add column translations jsonb not null default '{}'::jsonb;
+    comment on column public.recurso_turistico.translations is
       'Traducciones adicionales EN/FR/PT del nombre y descripción corta. {en:{name,description}, fr:{...}, pt:{...}}. No incluye ES/GL (son idiomas base).';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='keywords'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='keywords'
   ) then
-    alter table public.resources add column keywords text[] not null default '{}';
-    comment on column public.resources.keywords is
+    alter table public.recurso_turistico add column keywords text[] not null default '{}';
+    comment on column public.recurso_turistico.keywords is
       'Palabras clave del recurso. Se usan para el buscador interno y como meta keywords (aunque Google las ignora).';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='indexable'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='indexable'
   ) then
-    alter table public.resources add column indexable boolean not null default true;
-    comment on column public.resources.indexable is
+    alter table public.recurso_turistico add column indexable boolean not null default true;
+    comment on column public.recurso_turistico.indexable is
       'Si es false, la web pública renderiza <meta name="robots" content="noindex,nofollow">. Default true.';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='og_image_override_path'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='og_image_override_path'
   ) then
-    alter table public.resources add column og_image_override_path text;
-    comment on column public.resources.og_image_override_path is
+    alter table public.recurso_turistico add column og_image_override_path text;
+    comment on column public.recurso_turistico.og_image_override_path is
       'Path en Storage bucket resource-images de una imagen específica para compartir en redes. Si es NULL, se usa la imagen principal del paso 5 (resource_images con is_primary=true).';
   end if;
 
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='canonical_url'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='canonical_url'
   ) then
-    alter table public.resources add column canonical_url text;
-    comment on column public.resources.canonical_url is
+    alter table public.recurso_turistico add column canonical_url text;
+    comment on column public.recurso_turistico.canonical_url is
       'URL canónica opcional. Si se rellena, la web pública la usa como <link rel="canonical">. Solo admin.';
   end if;
 
   -- Asegurar que slug existe (viene de migraciones antiguas, pero por seguridad)
   if not exists (
     select 1 from information_schema.columns
-    where table_schema='public' and table_name='resources' and column_name='slug'
+    where table_schema='public' and table_name='recurso_turistico' and column_name='slug'
   ) then
-    alter table public.resources add column slug text;
-    comment on column public.resources.slug is
+    alter table public.recurso_turistico add column slug text;
+    comment on column public.recurso_turistico.slug is
       'Parte URL-friendly de la dirección del recurso (/recurso/{slug}). Único dentro del CMS.';
   end if;
 end $$;
@@ -91,17 +91,17 @@ end $$;
 
 -- 2) Índice único sobre slug (si no existe ya) ------------------------------
 
-create unique index if not exists idx_resources_slug_unique
-  on public.resources (slug)
+create unique index if not exists idx_recurso_turistico_slug_unique
+  on public.recurso_turistico (slug)
   where slug is not null and slug != '';
 
 -- Índice para el JSONB de SEO (búsquedas por lang)
-create index if not exists idx_resources_seo_by_lang
-  on public.resources using gin (seo_by_lang);
+create index if not exists idx_recurso_turistico_seo_by_lang
+  on public.recurso_turistico using gin (seo_by_lang);
 
 -- Índice GIN sobre keywords para buscador interno
-create index if not exists idx_resources_keywords
-  on public.resources using gin (keywords);
+create index if not exists idx_recurso_turistico_keywords
+  on public.recurso_turistico using gin (keywords);
 
 
 -- 3) RPC: comprobar si un slug está disponible ------------------------------
@@ -115,7 +115,7 @@ language sql
 stable
 as $$
   select not exists (
-    select 1 from public.resources
+    select 1 from public.recurso_turistico
     where slug = p_slug
       and (p_exclude_resource_id is null or id != p_exclude_resource_id)
   );
