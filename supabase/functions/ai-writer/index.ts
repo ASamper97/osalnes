@@ -190,6 +190,64 @@ Reglas:
 5. Usa el contexto solo para DESAMBIGUAR lo que ves (saber que es una playa te ayuda a describir la arena; no a inventar que es "A Lanzada").
 6. Si en la imagen hay texto visible importante, inclúyelo entrecomillado.
 7. Responde con el texto alt EXCLUSIVAMENTE, sin prefijo, sin comillas, sin explicaciones.`,
+
+  // Acción `generateSeo` (paso 6 · t3). Título + descripción SEO para un
+  // idioma base (ES o GL). Temperatura 0.5 — creatividad controlada.
+  generateSeo: `Eres experto SEO para turismo local en Galicia.
+
+${CONTEXT_SALNES}
+
+Tarea: generar título SEO y meta descripción optimizados para Google, en el idioma indicado por el usuario.
+
+Reglas para el TÍTULO SEO:
+  1. Entre 30 y 60 caracteres. Nunca más de 60.
+  2. Incluir nombre del recurso + ubicación o tipo (ej. "Pazo de Fefiñáns | Cambados").
+  3. Directo, sin mayúsculas innecesarias ni exclamaciones.
+
+Reglas para la DESCRIPCIÓN SEO:
+  1. Entre 120 y 160 caracteres. Nunca más de 160.
+  2. Resume la esencia del recurso en 1-2 frases naturales.
+  3. Terminar con llamada suave a la acción ("Visítalo...", "Descubre...") si cabe.
+  4. NO repetir el título literalmente.
+
+Para gallego: usa galego real (non castelán galeguizado). Topónimos gallegos mantienen su forma oficial.
+
+Responde EXCLUSIVAMENTE con JSON válido (sin markdown):
+{"title":"...","description":"..."}`,
+
+  // Acción `suggestKeywords` (paso 6 · t3). Extrae 5-8 keywords de la
+  // descripción del paso 2. Temperatura 0.3 — extracción, no creatividad.
+  suggestKeywords: `Extraes palabras clave de descripciones turísticas para el CMS O Salnés.
+
+Reglas:
+  1. Entre 5 y 8 keywords.
+  2. Minúsculas, sin tildes, una o dos palabras cada una.
+  3. SOLO términos que aparezcan o se puedan inferir claramente del texto.
+  4. Incluye tipo de recurso, ubicación y características singulares ("albariño", "mariscos", "mirador", "bandera azul").
+  5. NO inventes términos genéricos ("turismo", "galicia") si no aportan valor distintivo.
+
+Responde EXCLUSIVAMENTE con JSON válido:
+{"keywords":["...","..."]}`,
+
+  // Acción `translateResource` (paso 6 · t3). Traduce nombre + descripción
+  // corta del recurso a EN/FR/PT. Temperatura 0.4 — traducción fluida pero
+  // fiel. Distinto de `translate` legacy, que hace traducción literal.
+  translateResource: `Eres traductor profesional especializado en turismo.
+
+${CONTEXT_SALNES}
+
+Tarea: traducir el nombre y una descripción corta del recurso al idioma indicado.
+
+Reglas:
+  1. Nombres propios (topónimos, monumentos, denominación de origen) se mantienen sin traducir.
+  2. La descripción debe ser una versión resumida de 2-3 frases (máx 300 caracteres), no traducción literal palabra por palabra.
+  3. Tono turístico, natural y acogedor, adaptado a las convenciones del idioma destino.
+  4. Para inglés: vocabulario turístico internacional (stunning, charming, nestled, boasting).
+  5. Para francés: estilo turístico elegante.
+  6. Para portugués: portugués europeo.
+
+Responde EXCLUSIVAMENTE con JSON válido:
+{"name":"...","description":"..."}`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -360,6 +418,55 @@ ${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
         break;
       }
 
+      case 'generateSeo': {
+        // Paso 6 · t3 — título + descripción SEO para un idioma base.
+        const resourceName = (body.resourceName as string | undefined) || '';
+        const descriptionEs = (body.descriptionEs as string | undefined) || '';
+        const lang = (body.targetLang as 'es' | 'gl' | undefined) || 'es';
+        const typeLabel = (body.typeLabel as string | null | undefined) ?? null;
+        const municipio = (body.municipio as string | null | undefined) ?? null;
+        const langLabel = lang === 'es' ? 'castellano' : 'gallego';
+        const typeHint = typeLabel ? `Tipo: ${typeLabel}.` : '';
+        const muniHint = municipio ? `Ubicación: ${municipio}.` : '';
+        userMessage = `Recurso:
+  - Nombre: ${resourceName}
+  - ${typeHint}
+  - ${muniHint}
+  - Descripción original (castellano): """
+${descriptionEs.trim()}
+"""
+
+Genera el título y la descripción SEO en ${langLabel}.`;
+        break;
+      }
+
+      case 'suggestKeywords': {
+        // Paso 6 · t3 — 5-8 keywords extraídas de la descripción del paso 2.
+        const descriptionEs = (body.descriptionEs as string | undefined) || '';
+        userMessage = `Descripción:
+"""
+${descriptionEs.trim()}
+"""`;
+        break;
+      }
+
+      case 'translateResource': {
+        // Paso 6 · t3 — traducción breve de nombre + descripción a EN/FR/PT.
+        const resourceName = (body.resourceName as string | undefined) || '';
+        const descriptionEs = (body.descriptionEs as string | undefined) || '';
+        const targetLang = (body.targetLang as 'en' | 'fr' | 'pt' | undefined) || 'en';
+        const langFull = langName(targetLang);
+        userMessage = `Traduce al ${langFull}:
+
+Nombre original (castellano): ${resourceName}
+
+Descripción original (castellano):
+"""
+${descriptionEs.trim()}
+"""`;
+        break;
+      }
+
       default:
         userMessage = text;
     }
@@ -377,7 +484,13 @@ ${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
             ? 0.2
             : action === 'suggestTags'
               ? 0.3  // paso 4 · t4 — baja para precisión, no creatividad
-              : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+              : action === 'suggestKeywords'
+                ? 0.3  // paso 6 · t3 — extracción literal, no invención
+                : action === 'generateSeo'
+                  ? 0.5  // paso 6 · t3 — creatividad controlada para título/desc
+                  : action === 'translateResource'
+                    ? 0.4  // paso 6 · t3 — traducción fluida pero fiel
+                    : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
           maxOutputTokens: action === 'validate'
             ? 1024
             : action === 'suggestTags'
@@ -400,7 +513,7 @@ ${tagsList || '(el cliente no envió catálogo; devuelve array vacío)'}`;
 
     // Parse JSON responses for structured actions
     let result: unknown = rawResult;
-    if (['seo', 'validate', 'categorize', 'suggestTags'].includes(action)) {
+    if (['seo', 'validate', 'categorize', 'suggestTags', 'generateSeo', 'suggestKeywords', 'translateResource'].includes(action)) {
       try {
         // Extract JSON from markdown code blocks if present
         const jsonMatch = rawResult.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, rawResult];
@@ -583,12 +696,35 @@ async function handleGenAltText(body: any, req: Request, apiKey: string | undefi
 
 async function getMockResult(req: Request): Promise<unknown> {
   try {
-    const { action } = await req.clone().json();
+    const body = await req.clone().json();
+    const action = body.action;
     if (action === 'validate') {
       return { score: 65, level: 'mejorable', issues: ['Modo demo — conecta GEMINI_API_KEY para evaluación real'], suggestions: [], missing_fields: [], seo_ready: false, translation_quality: 'ausente' };
     }
     if (action === 'seo') {
       return { title_es: 'Título SEO de ejemplo', desc_es: 'Descripción SEO de ejemplo para modo demo', title_gl: 'Título SEO de exemplo', desc_gl: 'Descrición SEO de exemplo para modo demo' };
+    }
+    // Paso 6 · t3 — mocks plausibles para las 3 acciones SEO cuando no hay
+    // GEMINI_API_KEY. Mantienen el shape esperado por el cliente (callAi
+    // lee `res.result`) para que la UI del paso 6 no se rompa en demo.
+    if (action === 'generateSeo') {
+      const name = (body.resourceName as string | undefined) || 'Recurso';
+      const muni = (body.municipio as string | undefined) || 'O Salnés';
+      return {
+        title: `${name} | ${muni}`,
+        description: `Descubre ${name}, uno de los lugares más especiales de O Salnés. [modo demo]`,
+      };
+    }
+    if (action === 'suggestKeywords') {
+      return { keywords: ['o salnes', 'galicia', 'turismo', 'rias baixas'] };
+    }
+    if (action === 'translateResource') {
+      const name = (body.resourceName as string | undefined) || 'Recurso';
+      const target = (body.targetLang as string | undefined) || 'en';
+      return {
+        name: `[${target}] ${name}`,
+        description: `[${target}] Mock translation — configura GEMINI_API_KEY para traducción real.`,
+      };
     }
     return 'Modo demo: configura GEMINI_API_KEY para activar la IA';
   } catch {
