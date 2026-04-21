@@ -55,6 +55,9 @@ import {
 import '@/pages/step6-seo.css';
 import ResourceWizardStep7Review from '@/pages/ResourceWizardStep7Review';
 import type { QualityStep, ResourceSnapshot } from '@osalnes/shared/data/quality-engine';
+import type { PublicationStatus } from '@osalnes/shared/data/publication-status';
+import type { AuditEntry } from '@/components/AuditLogPanel';
+import { aiSuggestImprovements, type AiImprovementSuggestion } from '@/lib/ai';
 import '@/pages/step7-review.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
@@ -185,9 +188,13 @@ export function ResourceWizardPage() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   // Live preview panel
   const [previewOpen, setPreviewOpen] = useState(false);
-  // Editorial state
+  // Editorial state. Paso 7b · t4 — `editorialStatus` y `publicationStatus`
+  // representan el mismo dato (recurso_turistico.estado_editorial). Mantenemos
+  // `editorialStatus` para no romper el EditorialStatusBar/handleStatusTransition
+  // legacy, y añadimos `scheduledPublishAt` al bloque.
   const [editorialStatus, setEditorialStatus] = useState<EditorialState>('borrador');
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [scheduledPublishAt, setScheduledPublishAt] = useState<string | null>(null);
   // Forces ActivityTimeline to refetch after a status transition
   const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
@@ -618,6 +625,10 @@ export function ResourceWizardPage() {
         setSavedId(r.id);
         setEditorialStatus((r.status as EditorialState) || 'borrador');
         setPublishedAt(r.publishedAt || null);
+        // Paso 7b · t4 — scheduled_publish_at viene en snake_case del mapper
+        // admin (el wizard lo hidrata así directamente, igual que paso 3).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setScheduledPublishAt(((r as any).scheduled_publish_at as string | null | undefined) ?? null);
         // Paso 3 · t4 — hidratación de los 3 estados estructurados nuevos.
         // Prioridad al campo estructurado (migración 021) con fallback a
         // los campos legacy (compat mientras hay recursos sin backfill).
@@ -1305,15 +1316,121 @@ export function ResourceWizardPage() {
 
   /** Guarda como borrador desde el paso 7. Reutiliza handleFinish vía wizard legacy. */
   async function handleSaveDraftStep7(): Promise<void> {
-    // handleFinish persiste todo el recurso (incluye tags + seo + media).
-    // No distingue borrador/publicado todavía — eso llega en paso 7b con
-    // `publish_at` / `published_at`. Para el 7a el botón borrador y el
-    // botón publicar llaman al mismo upsert, y el modal solo confirma.
     await handleFinish();
   }
 
-  async function handlePublishStep7(): Promise<void> {
-    await handleFinish();
+  // ── Paso 7b · t4 — Handlers de publicación programada + IA + historial ──
+  //
+  // Los 3 primeros escriben directo a `recurso_turistico` vía supabase-js.
+  // Las tres columnas (estado_editorial, scheduled_publish_at,
+  // published_at, published_by) están en el whitelist de admin pero aquí
+  // no pasamos por admin porque necesitamos un round-trip rápido sin
+  // traducir el body entero. policy RLS `authenticated` permite el UPDATE.
+
+  async function handlePublishNow(): Promise<void> {
+    if (!savedId) {
+      // Sin recurso guardado aún, primero persistimos para obtener id
+      // (handleFinish crea el borrador).
+      await handleFinish();
+    }
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id ?? null;
+    const publishedAtIso = new Date().toISOString();
+    const { error: updErr } = await supabase
+      .from('recurso_turistico')
+      .update({
+        estado_editorial: 'publicado',
+        published_at: publishedAtIso,
+        published_by: userId,
+        scheduled_publish_at: null,
+      })
+      .eq('id', savedId);
+    if (updErr) throw updErr;
+    setEditorialStatus('publicado');
+    setPublishedAt(publishedAtIso);
+    setScheduledPublishAt(null);
+    setActivityRefreshKey((k) => k + 1);
+  }
+
+  async function handleSchedulePublish(utcIso: string): Promise<void> {
+    if (!savedId) {
+      await handleFinish();
+    }
+    const { error: updErr } = await supabase
+      .from('recurso_turistico')
+      .update({
+        estado_editorial: 'programado',
+        scheduled_publish_at: utcIso,
+      })
+      .eq('id', savedId);
+    if (updErr) throw updErr;
+    setEditorialStatus('programado');
+    setScheduledPublishAt(utcIso);
+    setActivityRefreshKey((k) => k + 1);
+  }
+
+  async function handleRequestAiSuggestions(): Promise<AiImprovementSuggestion[]> {
+    const typeLabel =
+      mainTypeKey && TAGS_BY_KEY[mainTypeKey]
+        ? TAGS_BY_KEY[mainTypeKey].label
+        : null;
+    return aiSuggestImprovements({
+      snapshot: {
+        name: nameEs || '',
+        typeLabel,
+        municipio:
+          municipalities.find((m) => m.id === municipioId)?.name?.es ?? null,
+        descriptionEs: descEs || '',
+        descriptionGl: descGl || '',
+        hasCoordinates:
+          (location.lat != null && location.lng != null) ||
+          (!!latitude && !!longitude),
+        hasContactInfo: !!(contact.phone || contact.email || contact.web),
+        hasHours: !!hoursPlan,
+        tagCount: tagKeys.length,
+        imageCount: mediaImages.length,
+        imagesWithoutAltCount: mediaImages.filter(
+          (i) => !i.altText || i.altText.trim().length === 0,
+        ).length,
+        seoTitleEs: seo.byLang.es?.title ?? '',
+        seoDescriptionEs: seo.byLang.es?.description ?? '',
+        keywords: seo.keywords,
+        translationCount: Object.keys(seo.translations).length,
+      },
+    });
+  }
+
+  /**
+   * Carga últimas entradas del historial para el panel del paso 7b. La
+   * tabla `log_cambios` (migración 001) usa valores Spanish en `accion`
+   * y `usuario_id → usuario(id).email`. El AuditLogPanel ya entiende
+   * las claves en Spanish tras t3.
+   *
+   * Si la tabla no existe o la RLS bloquea, caemos a array vacío: el
+   * panel muestra "Sin cambios registrados" sin romper la pantalla.
+   */
+  async function handleLoadAuditLog(): Promise<AuditEntry[]> {
+    if (!savedId) return [];
+    const { data, error: logErr } = await supabase
+      .from('log_cambios')
+      .select('id, created_at, accion, cambios, usuario:usuario_id(email)')
+      .eq('entidad_tipo', 'recurso_turistico')
+      .eq('entidad_id', savedId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (logErr || !Array.isArray(data)) return [];
+    return data.map((row) => {
+      const r = row as Record<string, unknown>;
+      const cambios = r.cambios as { fields?: string[] } | null;
+      const usuario = r.usuario as { email?: string } | null;
+      return {
+        id: r.id as string,
+        createdAt: r.created_at as string,
+        action: r.accion as string,
+        actor: usuario?.email ?? null,
+        changedFields: Array.isArray(cambios?.fields) ? cambios.fields : null,
+      };
+    });
   }
 
   // ── Save / Submit ───────────────────────────────────────────
@@ -1866,18 +1983,25 @@ export function ResourceWizardPage() {
         <>
           <ResourceWizardStep7Review
             snapshot={resourceSnapshot}
+            publicationStatus={editorialStatus as PublicationStatus}
+            scheduledPublishAt={scheduledPublishAt}
+            publishedAt={publishedAt}
             onGoToStep={handleGoToStep}
             onChangeVisibleOnMap={(next) => { setVisibleOnMap(next); markDirty(); }}
             onSaveDraft={handleSaveDraftStep7}
-            onPublish={handlePublishStep7}
+            onPublishNow={handlePublishNow}
+            onSchedulePublish={handleSchedulePublish}
+            onRequestAiSuggestions={handleRequestAiSuggestions}
+            onLoadAuditLog={handleLoadAuditLog}
             onPrevious={() => setCurrentStep(5)}
           />
 
-          {/* ActivityTimeline se mantiene fuera del componente step7: es una
-              vista del historial editorial del recurso, no forma parte del
-              motor de calidad. Solo tiene sentido cuando ya existe el
-              recurso en BD (!isNew && savedId). El paso 7b lo integrará en
-              un panel propio plegable. */}
+          {/* Paso 7b · t4 — ActivityTimeline queda duplicado con el nuevo
+              `AuditLogPanel` que monta el Step7Review internamente. Se deja
+              fuera de forma condicional: solo se renderiza si NO es new (el
+              panel nuevo es para cambios del recurso guardado, y ActivityTimeline
+              hoy tampoco se muestra en creación). Queda como deuda mover todo
+              el histórico al panel nuevo y quitar ActivityTimeline. */}
           {!isNew && savedId && (
             <div style={{ marginTop: '1.25rem' }}>
               <ActivityTimeline

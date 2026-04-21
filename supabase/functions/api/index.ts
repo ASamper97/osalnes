@@ -636,6 +636,9 @@ async function mapResourceRow(row: Record<string, any>) {
     indexable: row.indexable ?? true,
     og_image_override_path: row.og_image_override_path ?? null,
     canonical_url: row.canonical_url ?? null,
+    // Paso 7b · t4 — publicación programada (migración 025).
+    scheduled_publish_at: row.scheduled_publish_at ?? null,
+    published_by: row.published_by ?? null,
   };
 }
 

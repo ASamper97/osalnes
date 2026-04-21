@@ -31,13 +31,25 @@ export interface AuditLogPanelProps {
   initialEntries?: AuditEntry[];
 }
 
+// Alineado con los valores reales del CHECK de `log_cambios.accion`
+// (migración 001 + 013): crear/modificar/publicar/archivar/eliminar +
+// las acciones extra de workflow (enviar_revision/devolver/reactivar).
+// Se añaden 'programar' y 'publicar_programado' para las acciones del
+// paso 7b aunque el CHECK de 013 no las incluya: el handler del wizard
+// no escribe en log_cambios para estas todavía (las insertaría un
+// trigger futuro), así que estos labels solo aparecen si alguien
+// puebla el log manualmente.
 const ACTION_LABELS: Record<string, { label: string; emoji: string }> = {
-  create: { label: 'Creación del recurso', emoji: '✨' },
-  update: { label: 'Edición', emoji: '✏️' },
-  publish: { label: 'Publicación', emoji: '🚀' },
-  unpublish: { label: 'Despublicación', emoji: '📥' },
-  schedule: { label: 'Programación de publicación', emoji: '⏰' },
-  delete: { label: 'Eliminación', emoji: '🗑️' },
+  crear:               { label: 'Creación del recurso', emoji: '✨' },
+  modificar:           { label: 'Edición', emoji: '✏️' },
+  publicar:            { label: 'Publicación', emoji: '🚀' },
+  archivar:            { label: 'Archivado', emoji: '📥' },
+  eliminar:            { label: 'Eliminación', emoji: '🗑️' },
+  enviar_revision:     { label: 'Enviado a revisión', emoji: '👀' },
+  devolver:            { label: 'Devuelto a borrador', emoji: '↩️' },
+  reactivar:           { label: 'Reactivado', emoji: '🔄' },
+  programar:           { label: 'Programación de publicación', emoji: '⏰' },
+  publicar_programado: { label: 'Publicación automática', emoji: '🤖' },
 };
 
 export default function AuditLogPanel({ onLoadEntries, initialEntries }: AuditLogPanelProps) {

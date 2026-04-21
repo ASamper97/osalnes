@@ -2520,5 +2520,10 @@ async function mapResourceRow(sb: any, row: Record<string, any>) {
     indexable: row.indexable ?? true,
     og_image_override_path: row.og_image_override_path ?? null,
     canonical_url: row.canonical_url ?? null,
+    // Paso 7b · t4 — publicación programada (migración 025). snake_case
+    // coherente con el resto. `published_by` es uuid opcional (NULL si
+    // lo publicó el cron). `published_at` ya salía arriba via publishedAt.
+    scheduled_publish_at: row.scheduled_publish_at ?? null,
+    published_by: row.published_by ?? null,
   };
 }

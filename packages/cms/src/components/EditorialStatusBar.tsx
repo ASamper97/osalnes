@@ -9,38 +9,49 @@ import { useConfirm } from './ConfirmDialog';
  * de transicion segun las reglas definidas.
  */
 
-export const STATES = ['borrador', 'revision', 'publicado', 'archivado'] as const;
+// Paso 7b · t4 — 'programado' añadido tras la migración 025. Se
+// representa en el kanban igual que 'revision' (estado intermedio) pero
+// no tiene transiciones disponibles en el bar: el cron lo pasa a
+// 'publicado' automáticamente y desde el paso 7b el editor puede
+// volverlo a 'borrador' si cambia de opinión.
+export const STATES = ['borrador', 'revision', 'programado', 'publicado', 'archivado'] as const;
 export type EditorialState = typeof STATES[number];
 
 const STATE_LABELS: Record<EditorialState, string> = {
-  borrador: 'Borrador',
-  revision: 'En revision',
-  publicado: 'Publicado',
-  archivado: 'Archivado',
+  borrador:   'Borrador',
+  revision:   'En revision',
+  programado: 'Programado',
+  publicado:  'Publicado',
+  archivado:  'Archivado',
 };
 
 const STATE_ICONS: Record<EditorialState, string> = {
-  borrador: '✏️',
-  revision: '👀',
-  publicado: '🌐',
-  archivado: '📦',
+  borrador:   '✏️',
+  revision:   '👀',
+  programado: '⏰',
+  publicado:  '🌐',
+  archivado:  '📦',
 };
 
 const STATE_DESCRIPTIONS: Record<EditorialState, string> = {
-  borrador: 'En edicion, no visible en la web',
-  revision: 'Pendiente de aprobacion editorial',
-  publicado: 'Visible en la web publica',
-  archivado: 'Retirado, no visible',
+  borrador:   'En edicion, no visible en la web',
+  revision:   'Pendiente de aprobacion editorial',
+  programado: 'Pendiente de publicacion automatica',
+  publicado:  'Visible en la web publica',
+  archivado:  'Retirado, no visible',
 };
 
 export const STATE_TRANSITIONS: Record<EditorialState, { target: EditorialState; label: string; primary?: boolean }[]> = {
-  borrador:  [{ target: 'revision', label: 'Enviar a revision', primary: true }],
-  revision:  [
+  borrador:   [{ target: 'revision', label: 'Enviar a revision', primary: true }],
+  revision:   [
     { target: 'publicado', label: 'Aprobar y publicar', primary: true },
     { target: 'borrador', label: 'Devolver a borrador' },
   ],
-  publicado: [{ target: 'archivado', label: 'Archivar' }],
-  archivado: [{ target: 'borrador', label: 'Reactivar' }],
+  programado: [
+    { target: 'borrador', label: 'Cancelar programación' },
+  ],
+  publicado:  [{ target: 'archivado', label: 'Archivar' }],
+  archivado:  [{ target: 'borrador', label: 'Reactivar' }],
 };
 
 interface EditorialStatusBarProps {
