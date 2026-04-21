@@ -37,6 +37,10 @@
     "./data/establishment-fields": {
       "types": "./dist/data/establishment-fields.d.ts",
       "default": "./dist/data/establishment-fields.js"
+    },
+    "./data/media": {
+      "types": "./dist/data/media.d.ts",
+      "default": "./dist/data/media.js"
     }
   },
   "scripts": {

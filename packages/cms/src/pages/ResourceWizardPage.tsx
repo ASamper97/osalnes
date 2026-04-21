@@ -30,6 +30,10 @@ import PidCompletenessCard from '@/components/PidCompletenessCard';
 import ResourceWizardStep4Classification from '@/pages/ResourceWizardStep4Classification';
 import type { EstablishmentData } from '@/components/EstablishmentDetails';
 import '@/pages/step4-classification.css';
+import ResourceWizardStep5Multimedia from '@/pages/ResourceWizardStep5Multimedia';
+import { getVideoThumbnailUrl, type ImageItem, type VideoItem, type DocumentItem } from '@osalnes/shared/data/media';
+import { aiGenAltText } from '@/lib/ai';
+import '@/pages/step5-multimedia.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
@@ -70,6 +74,62 @@ function slugify(text: string): string {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Paso 5 · t4 — mappers snake_case → camelCase para las 3 tablas media.
+// Mantienen el contrato de los tipos compartidos (ImageItem/VideoItem/
+// DocumentItem) sin exponer los nombres de columnas BD al frontend.
+const IMAGES_BUCKET = 'resource-images';
+const DOCUMENTS_BUCKET = 'resource-documents';
+
+function getPublicUrl(bucket: string, path: string): string {
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
+function mapImageRows(rows: Record<string, unknown>[]): ImageItem[] {
+  return rows.map((r) => ({
+    id: r.id as string,
+    storagePath: r.storage_path as string,
+    publicUrl: getPublicUrl(IMAGES_BUCKET, r.storage_path as string),
+    mimeType: r.mime_type as string,
+    sizeBytes: r.size_bytes as number,
+    width: (r.width as number | null) ?? undefined,
+    height: (r.height as number | null) ?? undefined,
+    altText: (r.alt_text as string | null) ?? null,
+    altSource: (r.alt_source as ImageItem['altSource']) ?? null,
+    isPrimary: !!r.is_primary,
+    sortOrder: (r.sort_order as number | null) ?? 0,
+    createdAt: r.created_at as string,
+  }));
+}
+
+function mapVideoRows(rows: Record<string, unknown>[]): VideoItem[] {
+  return rows.map((r) => ({
+    id: r.id as string,
+    url: r.url as string,
+    provider: r.provider as VideoItem['provider'],
+    externalId: (r.external_id as string | null) ?? null,
+    title: (r.title as string | null) ?? null,
+    thumbnailUrl: (r.thumbnail_url as string | null) ?? null,
+    sortOrder: (r.sort_order as number | null) ?? 0,
+    createdAt: r.created_at as string,
+  }));
+}
+
+function mapDocumentRows(rows: Record<string, unknown>[]): DocumentItem[] {
+  return rows.map((r) => ({
+    id: r.id as string,
+    storagePath: r.storage_path as string,
+    publicUrl: getPublicUrl(DOCUMENTS_BUCKET, r.storage_path as string),
+    mimeType: r.mime_type as string,
+    sizeBytes: r.size_bytes as number,
+    originalFilename: r.original_filename as string,
+    title: r.title as string,
+    kind: r.kind as DocumentItem['kind'],
+    lang: r.lang as DocumentItem['lang'],
+    sortOrder: (r.sort_order as number | null) ?? 0,
+    createdAt: r.created_at as string,
+  }));
+}
 const URL_RE = /^https?:\/\/.+/;
 
 export function ResourceWizardPage() {
@@ -191,6 +251,15 @@ export function ResourceWizardPage() {
     occupancy: null,
     cuisineCodes: [],
   });
+
+  // Paso 5 · t4 — estado multimedia (migración 023). Las 3 tablas
+  // resource_images / resource_videos / resource_documents se escriben
+  // directo desde el cliente vía supabase-js (policy authenticated), sin
+  // pasar por la edge function admin. Para el wizard es snake_case→camelCase
+  // en el mapper, igual que paso 4 con establishment.
+  const [mediaImages, setMediaImages] = useState<ImageItem[]>([]);
+  const [mediaVideos, setMediaVideos] = useState<VideoItem[]>([]);
+  const [mediaDocuments, setMediaDocuments] = useState<DocumentItem[]>([]);
   // Guia-burros v2 — tags UNE 178503 (catalogo 154×18). Hidratacion desde
   // resource_tags la hace la Tarea 6 en el loader.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
@@ -558,6 +627,25 @@ export function ResourceWizardPage() {
       .catch((err) => { setError(err.message); setLoading(false); });
   }, [id, isNew]);
 
+  // Paso 5 · t4 — hidratación del estado multimedia (migración 023).
+  // Dispara al cargar el recurso (edición) y también cuando el auto-save
+  // de step 0 crea `savedId` en creación: en ambos casos tenemos id real y
+  // podemos leer las 3 tablas vía supabase-js con policy authenticated.
+  useEffect(() => {
+    if (!savedId) return;
+    void Promise.all([
+      supabase.from('resource_images').select('*').eq('resource_id', savedId).order('sort_order'),
+      supabase.from('resource_videos').select('*').eq('resource_id', savedId).order('sort_order'),
+      supabase.from('resource_documents').select('*').eq('resource_id', savedId).order('sort_order'),
+    ]).then(([imgRes, vidRes, docRes]) => {
+      setMediaImages(mapImageRows(imgRes.data ?? []));
+      setMediaVideos(mapVideoRows(vidRes.data ?? []));
+      setMediaDocuments(mapDocumentRows(docRes.data ?? []));
+    }).catch((err) => {
+      console.error('[wizard] media hydration failed:', err);
+    });
+  }, [savedId]);
+
   // Warn on unsaved changes
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
@@ -722,6 +810,255 @@ export function ResourceWizardPage() {
       help: 'Revisa todos los datos antes de guardar. Los campos marcados con advertencia deberian completarse para mejorar la calidad del recurso.',
     },
   ];
+
+  // ── Paso 5 · t4 — Handlers multimedia ───────────────────────
+  //
+  // Todos los handlers escriben directo a las 3 tablas media
+  // (resource_images/resource_videos/resource_documents) y a los buckets
+  // Storage correspondientes. RLS: `write_{images,videos,documents}_authenticated`
+  // permite insert/update/delete si el caller está autenticado. El auto-save
+  // de step 0 garantiza que `savedId` existe cuando el usuario llega al paso 5;
+  // si llegara sin él, el componente enseña el panel "Guarda primero".
+
+  async function handleSaveDraft(): Promise<string> {
+    if (savedId) return savedId;
+    // Mínimos para pasar el NOT NULL de rdf_type y slug. Si el usuario aún no
+    // ha rellenado nombre, generamos un slug temporal y un nombre placeholder.
+    // El editor corregirá esos campos cuando vuelva a los pasos 1-2.
+    const mainTagDerivedType = mainTypeKey ? TAGS_BY_KEY[mainTypeKey]?.value : null;
+    const effectiveRdfType = mainTagDerivedType || rdfType || 'TouristAttraction';
+    const fallbackSlug = slug || `borrador-${Date.now()}`;
+    const fallbackName = nameEs || 'Borrador sin nombre';
+    const created = await api.createResource({
+      rdf_type: effectiveRdfType,
+      rdf_types: [],
+      slug: fallbackSlug,
+      municipio_id: municipioId || null,
+      zona_id: zonaId || null,
+      name: { es: fallbackName, gl: nameGl || fallbackName },
+    } as unknown as Parameters<typeof api.createResource>[0]);
+    setSavedId(created.id);
+    navigate(`/resources/${created.id}`, { replace: true });
+    return created.id;
+  }
+
+  // ─── Imágenes ──────────────────────────────────────────────────
+
+  async function handleUploadImage(file: File): Promise<ImageItem> {
+    if (!savedId) throw new Error('No resourceId');
+    const uuid = crypto.randomUUID();
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${savedId}/${uuid}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from(IMAGES_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (uploadErr) throw uploadErr;
+
+    const isPrimary = mediaImages.length === 0;
+    const { data: inserted, error: dbErr } = await supabase
+      .from('resource_images')
+      .insert({
+        resource_id: savedId,
+        storage_path: path,
+        mime_type: file.type,
+        size_bytes: file.size,
+        is_primary: isPrimary,
+        sort_order: mediaImages.length,
+      })
+      .select()
+      .single();
+    if (dbErr) throw dbErr;
+
+    const [item] = mapImageRows([inserted as Record<string, unknown>]);
+    setMediaImages((curr) => [...curr, item]);
+    markDirty();
+    return item;
+  }
+
+  async function handleUpdateImageAlt(
+    imageId: string,
+    altText: string,
+    altSource: ImageItem['altSource'],
+  ): Promise<void> {
+    const { error: dbErr } = await supabase
+      .from('resource_images')
+      .update({ alt_text: altText, alt_source: altSource })
+      .eq('id', imageId);
+    if (dbErr) throw dbErr;
+    setMediaImages((curr) =>
+      curr.map((i) => (i.id === imageId ? { ...i, altText, altSource } : i)),
+    );
+    markDirty();
+  }
+
+  async function handleSetImagePrimary(imageId: string): Promise<void> {
+    const { error: rpcErr } = await supabase.rpc('mark_image_as_primary', {
+      p_image_id: imageId,
+    });
+    if (rpcErr) throw rpcErr;
+    setMediaImages((curr) => curr.map((i) => ({ ...i, isPrimary: i.id === imageId })));
+    markDirty();
+  }
+
+  async function handleRemoveImage(imageId: string): Promise<void> {
+    const target = mediaImages.find((i) => i.id === imageId);
+    const { error: dbErr } = await supabase
+      .from('resource_images')
+      .delete()
+      .eq('id', imageId);
+    if (dbErr) throw dbErr;
+    // Limpieza best-effort en Storage. Si falla no rompemos la UX: el CASCADE
+    // de la tabla ya purgó la fila y el objeto huérfano queda como deuda
+    // (documentada en el checklist T7). El trigger/cron de limpieza física
+    // vive en una iteración futura.
+    if (target?.storagePath) {
+      await supabase.storage.from(IMAGES_BUCKET).remove([target.storagePath]).catch(() => null);
+    }
+    setMediaImages((curr) => curr.filter((i) => i.id !== imageId));
+    markDirty();
+  }
+
+  async function handleGenerateImageAlt(imageId: string): Promise<string | null> {
+    const img = mediaImages.find((i) => i.id === imageId);
+    if (!img?.publicUrl) return null;
+    const typeLabel =
+      mainTypeKey && TAGS_BY_KEY[mainTypeKey]
+        ? TAGS_BY_KEY[mainTypeKey].label
+        : null;
+    let alt: string;
+    try {
+      alt = await aiGenAltText({
+        imageUrl: img.publicUrl,
+        resourceContext: {
+          name: nameEs || 'recurso',
+          typeLabel,
+          municipio: selectedMunicipioName,
+        },
+      });
+    } catch {
+      return null;
+    }
+    if (!alt) return null;
+    await handleUpdateImageAlt(imageId, alt, 'ai');
+    return alt;
+  }
+
+  // ─── Vídeos ────────────────────────────────────────────────────
+
+  async function handleAddVideo(input: {
+    url: string;
+    provider: VideoItem['provider'];
+    externalId: string | null;
+    thumbnailUrl: string | null;
+  }): Promise<VideoItem> {
+    if (!savedId) throw new Error('No resourceId');
+    const thumbnail = input.thumbnailUrl ?? getVideoThumbnailUrl(input.provider, input.externalId);
+    const { data: inserted, error: dbErr } = await supabase
+      .from('resource_videos')
+      .insert({
+        resource_id: savedId,
+        url: input.url,
+        provider: input.provider,
+        external_id: input.externalId,
+        thumbnail_url: thumbnail,
+        sort_order: mediaVideos.length,
+      })
+      .select()
+      .single();
+    if (dbErr) throw dbErr;
+    const [item] = mapVideoRows([inserted as Record<string, unknown>]);
+    setMediaVideos((curr) => [...curr, item]);
+    markDirty();
+    return item;
+  }
+
+  async function handleRemoveVideo(videoId: string): Promise<void> {
+    const { error: dbErr } = await supabase
+      .from('resource_videos')
+      .delete()
+      .eq('id', videoId);
+    if (dbErr) throw dbErr;
+    setMediaVideos((curr) => curr.filter((v) => v.id !== videoId));
+    markDirty();
+  }
+
+  async function handleUpdateVideoTitle(videoId: string, title: string): Promise<void> {
+    const { error: dbErr } = await supabase
+      .from('resource_videos')
+      .update({ title })
+      .eq('id', videoId);
+    if (dbErr) throw dbErr;
+    setMediaVideos((curr) => curr.map((v) => (v.id === videoId ? { ...v, title } : v)));
+    markDirty();
+  }
+
+  // ─── Documentos ────────────────────────────────────────────────
+
+  async function handleUploadDocument(
+    file: File,
+    initial: { title: string; kind: DocumentItem['kind']; lang: DocumentItem['lang'] },
+  ): Promise<DocumentItem> {
+    if (!savedId) throw new Error('No resourceId');
+    const uuid = crypto.randomUUID();
+    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+    const path = `${savedId}/${uuid}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from(DOCUMENTS_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (uploadErr) throw uploadErr;
+
+    const { data: inserted, error: dbErr } = await supabase
+      .from('resource_documents')
+      .insert({
+        resource_id: savedId,
+        storage_path: path,
+        mime_type: file.type,
+        size_bytes: file.size,
+        original_filename: file.name,
+        title: initial.title,
+        kind: initial.kind,
+        lang: initial.lang,
+        sort_order: mediaDocuments.length,
+      })
+      .select()
+      .single();
+    if (dbErr) throw dbErr;
+    const [item] = mapDocumentRows([inserted as Record<string, unknown>]);
+    setMediaDocuments((curr) => [...curr, item]);
+    markDirty();
+    return item;
+  }
+
+  async function handleUpdateDocumentMeta(
+    docId: string,
+    patch: Partial<Pick<DocumentItem, 'title' | 'kind' | 'lang'>>,
+  ): Promise<void> {
+    const { error: dbErr } = await supabase
+      .from('resource_documents')
+      .update(patch)
+      .eq('id', docId);
+    if (dbErr) throw dbErr;
+    setMediaDocuments((curr) =>
+      curr.map((d) => (d.id === docId ? { ...d, ...patch } : d)),
+    );
+    markDirty();
+  }
+
+  async function handleRemoveDocument(docId: string): Promise<void> {
+    const target = mediaDocuments.find((d) => d.id === docId);
+    const { error: dbErr } = await supabase
+      .from('resource_documents')
+      .delete()
+      .eq('id', docId);
+    if (dbErr) throw dbErr;
+    if (target?.storagePath) {
+      await supabase.storage.from(DOCUMENTS_BUCKET).remove([target.storagePath]).catch(() => null);
+    }
+    setMediaDocuments((curr) => curr.filter((d) => d.id !== docId));
+    markDirty();
+  }
 
   // ── Save / Submit ───────────────────────────────────────────
 
@@ -1152,45 +1489,34 @@ export function ResourceWizardPage() {
       )}
 
       {/* ================================================================
-          STEP 5 — Multimedia + Documentos
-          ================================================================ */}
+          STEP 5 — Multimedia (paso 5 · t4)
+          ================================================================
+          Rediseño completo: imágenes con alt IA, vídeos por URL externa
+          (YouTube/Vimeo), documentos PDF con metadata. Las relaciones
+          entre recursos quedan pospuestas a iteración futura (decisión 5
+          del usuario). El botón "Guardar borrador y continuar" (decisión
+          1-B) desbloquea el paso en creación si el auto-save de step 0
+          aún no se disparó. */}
       {currentStep === 4 && (
-        <>
-          {savedId ? (
-            <>
-              <WizardFieldGroup
-                title="Fotografias y videos"
-                description="Sube imagenes y videos del recurso. Puedes arrastrar para reordenar — la primera imagen sera la principal."
-                tip="Las imagenes deberian tener al menos 1200px de ancho para verse bien en la web. Formatos: JPG, PNG, WebP. Videos: MP4."
-              >
-                <MediaUploader recursoId={savedId} />
-              </WizardFieldGroup>
-
-              <WizardFieldGroup
-                title="Documentos descargables"
-                description="Adjunta folletos, PDF informativos, mapas o cualquier documento que el visitante pueda descargar."
-              >
-                <DocumentUploader entidadTipo="recurso_turistico" entidadId={savedId} />
-              </WizardFieldGroup>
-
-              <WizardFieldGroup
-                title="Relaciones con otros recursos"
-                description="Conecta este recurso con otros del portal: cercania, rutas, alternativas..."
-              >
-                <RelationsManager recursoId={savedId} />
-              </WizardFieldGroup>
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📸</div>
-              <h3 style={{ marginBottom: '0.5rem', color: 'var(--cms-text)' }}>Multimedia disponible tras guardar</h3>
-              <p style={{ color: 'var(--cms-text-light)', fontSize: '0.9rem', maxWidth: '440px', margin: '0 auto' }}>
-                Para subir fotos, videos y documentos, primero completa el asistente y guarda el recurso.
-                Despues podras volver a editar y anadir todo el contenido multimedia.
-              </p>
-            </div>
-          )}
-        </>
+        <ResourceWizardStep5Multimedia
+          resourceId={savedId}
+          onSaveDraft={handleSaveDraft}
+          onSkip={() => setCurrentStep(5)}
+          images={mediaImages}
+          videos={mediaVideos}
+          documents={mediaDocuments}
+          onUploadImage={handleUploadImage}
+          onUpdateImageAlt={handleUpdateImageAlt}
+          onSetImagePrimary={handleSetImagePrimary}
+          onRemoveImage={handleRemoveImage}
+          onGenerateImageAlt={handleGenerateImageAlt}
+          onAddVideo={handleAddVideo}
+          onRemoveVideo={handleRemoveVideo}
+          onUpdateVideoTitle={handleUpdateVideoTitle}
+          onUploadDocument={handleUploadDocument}
+          onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onRemoveDocument={handleRemoveDocument}
+        />
       )}
 
       {/* ================================================================
