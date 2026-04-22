@@ -24,8 +24,8 @@
 // ─── Definición de pasos ───────────────────────────────────────────────
 
 export interface WizardStepDef {
-  /** Número de paso (1-7) */
-  number: number;
+  /** Número de paso (1-8) */
+  number: WizardStepNumber;
   /** Clave estable para referenciar (identification, content, etc.) */
   key: WizardStepKey;
   /** Etiqueta visible en castellano */
@@ -38,6 +38,12 @@ export interface WizardStepDef {
   requiresPriorCompletion: boolean;
 }
 
+/**
+ * Número de paso del wizard.
+ * Paso 8 (Revisión) añadido tras el paso 7 Relaciones (pliego 5.1.1).
+ */
+export type WizardStepNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
 export type WizardStepKey =
   | 'identification'  // 1 - obligatorio
   | 'content'         // 2 - obligatorio
@@ -45,7 +51,8 @@ export type WizardStepKey =
   | 'classification'  // 4 - opcional
   | 'multimedia'      // 5 - opcional
   | 'seo'             // 6 - opcional
-  | 'review';         // 7 - revisión final
+  | 'relations'       // 7 - opcional (UNE 178503)
+  | 'review';         // 8 - revisión final
 
 export const WIZARD_STEPS: readonly WizardStepDef[] = [
   { number: 1, key: 'identification', label: 'Identificación', icon: '📝', optional: false, requiresPriorCompletion: false },
@@ -54,7 +61,8 @@ export const WIZARD_STEPS: readonly WizardStepDef[] = [
   { number: 4, key: 'classification', label: 'Clasificación',  icon: '🏷️', optional: true,  requiresPriorCompletion: false },
   { number: 5, key: 'multimedia',     label: 'Multimedia',     icon: '📷', optional: true,  requiresPriorCompletion: false },
   { number: 6, key: 'seo',            label: 'SEO e idiomas',  icon: '🌐', optional: true,  requiresPriorCompletion: false },
-  { number: 7, key: 'review',         label: 'Revisión',       icon: '✅', optional: false, requiresPriorCompletion: false },
+  { number: 7, key: 'relations',      label: 'Relaciones',     icon: '🔗', optional: true,  requiresPriorCompletion: false },
+  { number: 8, key: 'review',         label: 'Revisión',       icon: '✅', optional: false, requiresPriorCompletion: false },
 ] as const;
 
 export const TOTAL_STEPS = WIZARD_STEPS.length;

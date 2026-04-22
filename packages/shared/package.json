@@ -77,6 +77,10 @@
     "./data/rbac": {
       "types": "./dist/data/rbac.d.ts",
       "default": "./dist/data/rbac.js"
+    },
+    "./data/resource-relations": {
+      "types": "./dist/data/resource-relations.d.ts",
+      "default": "./dist/data/resource-relations.js"
     }
   },
   "scripts": {
