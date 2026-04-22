@@ -37,6 +37,15 @@ interface WizardProps {
   finishLabel?: string;
   /** Callback when user cancels */
   onCancel?: () => void;
+  /**
+   * Wizard global · t2 — cuando true, el Wizard no renderiza su propio
+   * header/progress-bar/stepper. El padre (ResourceWizardPage) monta
+   * `<WizardStepper>` + `<AutoSaveIndicator>` arriba y pasa esta flag
+   * para evitar la doble-UI. El stepper legacy (cuadraditos ✓ estáticos
+   * + progress bar del 86%) queda disponible por defecto para el resto
+   * de wizards que aún lo usan.
+   */
+  hideDefaultStepper?: boolean;
 }
 
 export function Wizard({
@@ -50,6 +59,7 @@ export function Wizard({
   subtitle,
   finishLabel = 'Finalizar',
   onCancel,
+  hideDefaultStepper = false,
 }: WizardProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const isFirst = currentStep === 0;
@@ -106,62 +116,68 @@ export function Wizard({
 
   return (
     <div className="wizard">
-      {/* Header */}
-      <div className="wizard__header">
-        <div className="wizard__header-text">
-          <h1 className="wizard__title">{title}</h1>
-          {subtitle && <p className="wizard__subtitle">{subtitle}</p>}
-        </div>
-        {onCancel && (
-          <button type="button" className="btn" onClick={onCancel}>
-            Cancelar
-          </button>
-        )}
-      </div>
+      {/* Header / progress / stepper legacy — se omite cuando el padre
+          (ResourceWizardPage) monta su propio `<WizardStepper>` global
+          encima. Ver wizard-global · t2. */}
+      {!hideDefaultStepper && (
+        <>
+          <div className="wizard__header">
+            <div className="wizard__header-text">
+              <h1 className="wizard__title">{title}</h1>
+              {subtitle && <p className="wizard__subtitle">{subtitle}</p>}
+            </div>
+            {onCancel && (
+              <button type="button" className="btn" onClick={onCancel}>
+                Cancelar
+              </button>
+            )}
+          </div>
 
-      {/* Progress bar */}
-      <div className="wizard__progress">
-        <div className="wizard__progress-bar">
-          <div
-            className="wizard__progress-fill"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-        <span className="wizard__progress-label">
-          Paso {currentStep + 1} de {steps.length} — {progressPercent}%
-        </span>
-      </div>
+          {/* Progress bar */}
+          <div className="wizard__progress">
+            <div className="wizard__progress-bar">
+              <div
+                className="wizard__progress-fill"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <span className="wizard__progress-label">
+              Paso {currentStep + 1} de {steps.length} — {progressPercent}%
+            </span>
+          </div>
 
-      {/* Stepper */}
-      <div className="wizard__stepper">
-        {steps.map((s, i) => {
-          const isCurrent = i === currentStep;
-          const isCompleted = completedSteps[i];
-          const isClickable = i <= currentStep;
+          {/* Stepper */}
+          <div className="wizard__stepper">
+            {steps.map((s, i) => {
+              const isCurrent = i === currentStep;
+              const isCompleted = completedSteps[i];
+              const isClickable = i <= currentStep;
 
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={[
-                'wizard__step-dot',
-                isCurrent && 'wizard__step-dot--active',
-                isCompleted && 'wizard__step-dot--completed',
-                !isClickable && 'wizard__step-dot--locked',
-              ].filter(Boolean).join(' ')}
-              onClick={() => goToStep(i)}
-              disabled={!isClickable}
-              title={s.title}
-            >
-              <span className="wizard__step-icon">
-                {isCompleted ? '✓' : s.icon}
-              </span>
-              <span className="wizard__step-label">{s.title}</span>
-              {s.optional && <span className="wizard__step-optional">opcional</span>}
-            </button>
-          );
-        })}
-      </div>
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={[
+                    'wizard__step-dot',
+                    isCurrent && 'wizard__step-dot--active',
+                    isCompleted && 'wizard__step-dot--completed',
+                    !isClickable && 'wizard__step-dot--locked',
+                  ].filter(Boolean).join(' ')}
+                  onClick={() => goToStep(i)}
+                  disabled={!isClickable}
+                  title={s.title}
+                >
+                  <span className="wizard__step-icon">
+                    {isCompleted ? '✓' : s.icon}
+                  </span>
+                  <span className="wizard__step-label">{s.title}</span>
+                  {s.optional && <span className="wizard__step-optional">opcional</span>}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Step header with contextual help */}
       <div className="wizard__step-header">

@@ -55,10 +55,24 @@ import {
 import '@/pages/step6-seo.css';
 import ResourceWizardStep7Review from '@/pages/ResourceWizardStep7Review';
 import type { QualityStep, ResourceSnapshot } from '@osalnes/shared/data/quality-engine';
+import { auditResource } from '@osalnes/shared/data/quality-engine';
 import type { PublicationStatus } from '@osalnes/shared/data/publication-status';
 import type { AuditEntry } from '@/components/AuditLogPanel';
 import { aiSuggestImprovements, type AiImprovementSuggestion } from '@/lib/ai';
 import '@/pages/step7-review.css';
+// ── Wizard global (transversal) ──────────────────────────────────────
+import WizardStepper from '@/components/WizardStepper';
+import AutoSaveIndicator from '@/components/AutoSaveIndicator';
+import RecoverDraftModal from '@/components/RecoverDraftModal';
+import { useAutoSave, loadLocalAutosave, clearLocalAutosave } from '@/hooks/useAutoSave';
+import { useBeforeUnload } from '@/hooks/useBeforeUnload';
+import {
+  buildStepperState,
+  canNavigateToStep,
+  type NavigationContext,
+  type WizardStepKey,
+} from '@osalnes/shared/data/wizard-navigation';
+import '@/pages/wizard-global.css';
 import type { SeoResult, ImportedResource } from '@/lib/ai';
 import type { ResourceTemplate } from '@/data/resource-templates';
 import { RESOURCE_TYPE_BY_XLSX_LABEL, getWizardGroupsForType } from '@osalnes/shared/data/resource-type-catalog';
@@ -297,6 +311,21 @@ export function ResourceWizardPage() {
   // al cambiar, para no romper el preview del paso 7 ni la LocalizedValue
   // name/description que el admin escribe en la tabla `traduccion`.
   const [seo, setSeo] = useState<ResourceSeo>(emptyResourceSeo());
+
+  // ── Wizard global · t2 — dirty tracking + recuperación sesión previa ──
+  // dirtySteps: set 1-indexed (1..7) de pasos con cambios no guardados.
+  // El efecto de useAutoSave marca el paso actual como dirty cuando
+  // isDirty=true; handleNavigate lo quita al saltar a otro paso (tras
+  // forceSave).
+  const [dirtySteps, setDirtySteps] = useState<Set<number>>(new Set());
+  // recoverState: si al abrir un recurso hay local más reciente que el
+  // servidor, pedimos al usuario recuperar o descartar antes de montar
+  // el wizard.
+  const [recoverState, setRecoverState] = useState<
+    | { kind: 'checking' }
+    | { kind: 'found'; localSavedAt: string; localData: Record<string, unknown> }
+    | { kind: 'none' }
+  >({ kind: 'checking' });
   // Guia-burros v2 — tags UNE 178503 (catalogo 154×18). Hidratacion desde
   // resource_tags la hace la Tarea 6 en el loader.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
@@ -1433,6 +1462,264 @@ export function ResourceWizardPage() {
     });
   }
 
+  // ── Wizard global · t2 — NavigationContext + stepperState ─────────
+  //
+  // `wizard-navigation.ts` usa pasos 1-7 (human). El state local
+  // `currentStep` es 0-indexed (0-6). Convertimos en la frontera.
+
+  const navigationContext: NavigationContext = useMemo(() => {
+    // Derivar pasos completos desde el quality-engine (igual que el
+    // componente Step7). Un paso es 'complete' si su aggregate está en
+    // 'ok' o 'warn' (no 'fail' ni 'empty').
+    const completeSteps = new Set<number>();
+    if (savedId) {
+      const stepKeyToNumber: Record<QualityStep, number> = {
+        identification: 1, content: 2, location: 3,
+        classification: 4, multimedia: 5, seo: 6,
+      };
+      const report = auditResource(resourceSnapshot);
+      for (const [key, agg] of Object.entries(report.byStep)) {
+        if (agg.status === 'ok' || agg.status === 'warn') {
+          completeSteps.add(stepKeyToNumber[key as QualityStep]);
+        }
+      }
+    }
+    // Paso 1 obligatorio: tipología + nombre + municipio.
+    const step1Complete = !!(mainTypeKey && nameEs.trim() && municipioId);
+    // Paso 2 obligatorio: descripción ES con al menos 20 chars útiles.
+    const step2Complete = (descEs ?? '').trim().length >= 20;
+    return {
+      currentStep: currentStep + 1, // 0-indexed → 1-indexed
+      resourceId: savedId,
+      step1Complete,
+      step2Complete,
+      dirtySteps,
+      completeSteps,
+    };
+  }, [
+    currentStep, savedId, mainTypeKey, nameEs, municipioId, descEs,
+    dirtySteps, resourceSnapshot,
+  ]);
+
+  const stepperState = useMemo(
+    () => buildStepperState(navigationContext),
+    [navigationContext],
+  );
+
+  // ── Wizard global · t2 — payload autosave ─────────────────────────
+  //
+  // Snapshot mínimo persistible del wizard. NO toca estado_editorial,
+  // published_at, scheduled_publish_at (esos campos son prerrogativa
+  // de los handlers de publicación del paso 7b). NO toca campos que ya
+  // escribe `handleFinish` via admin edge function (slug, translations
+  // en traduccion table) — el autosave solo guarda los jsonb + campos
+  // escalares directamente accesibles por supabase-js con la policy
+  // authenticated.
+  const autoSavePayload = useMemo(() => ({
+    name_es: nameEs,
+    name_gl: nameGl,
+    desc_es: descEs,
+    desc_gl: descGl,
+    municipio_id: municipioId || null,
+    zona_id: zonaId || null,
+    // establishment (paso 4)
+    accommodation_rating: establishment.rating,
+    occupancy: establishment.occupancy,
+    serves_cuisine: establishment.cuisineCodes,
+    // seo (paso 6)
+    slug: seo.slug || slug || '',
+    seo_by_lang: seo.byLang,
+    translations: seo.translations,
+    keywords: seo.keywords,
+    indexable: seo.indexable,
+    og_image_override_path: seo.ogImageOverridePath,
+    canonical_url: seo.canonicalUrl,
+    // visibility / access
+    visible_en_mapa: visibleOnMap,
+    // location (paso 3 estructurado)
+    latitude: location.lat,
+    longitude: location.lng,
+    street_address: location.streetAddress || null,
+    postal_code: location.postalCode || null,
+    locality: location.locality || null,
+    parroquia_text: location.parroquia || null,
+    contact_phone: contact.phone || null,
+    contact_email: contact.email || null,
+    contact_web: contact.web || null,
+    social_links: contact.socialLinks,
+    opening_hours_plan: hoursPlan,
+  }), [
+    nameEs, nameGl, descEs, descGl, municipioId, zonaId,
+    establishment, seo, slug, visibleOnMap,
+    location, contact, hoursPlan,
+  ]);
+
+  const autoSave = useAutoSave({
+    data: autoSavePayload,
+    // Solo autosave cuando el recurso ya existe en BD (tiene id).
+    enabled: savedId != null && recoverState.kind === 'none',
+    intervalMs: 30_000,
+    localStorageKey: savedId ? `resource-autosave-${savedId}` : undefined,
+    onSave: async (data) => {
+      if (!savedId) return;
+      // Importante: NO incluir estado_editorial / published_at /
+      // scheduled_publish_at / published_by. Esos son responsabilidad
+      // exclusiva de los handlers de publicación del paso 7b.
+      const { error: updErr } = await supabase
+        .from('recurso_turistico')
+        .update(data)
+        .eq('id', savedId);
+      if (updErr) throw updErr;
+    },
+  });
+
+  // Marca el paso actual (1-indexed) como dirty mientras haya cambios
+  // sin guardar. El handleNavigate lo quita al cambiar de paso.
+  useEffect(() => {
+    if (!autoSave.isDirty) return;
+    setDirtySteps((curr) => {
+      const humanStep = currentStep + 1;
+      if (curr.has(humanStep)) return curr;
+      const next = new Set(curr);
+      next.add(humanStep);
+      return next;
+    });
+  }, [autoSave.isDirty, currentStep]);
+
+  // Aviso nativo del navegador al cerrar con cambios sin sincronizar.
+  useBeforeUnload(
+    autoSave.isDirty,
+    'Tienes cambios sin guardar. Espera unos segundos a que se sincronicen antes de cerrar la pestaña.',
+  );
+
+  // Navegación validada desde el stepper. Recibe paso 1-indexed (human).
+  async function handleNavigate(targetHumanStep: number) {
+    const targetIdx = targetHumanStep - 1;
+    if (targetIdx === currentStep) return;
+    const { allowed } = canNavigateToStep(targetHumanStep, navigationContext);
+    if (!allowed) return;
+    // Forzar guardado antes de navegar, para que no se pierda nada.
+    if (autoSave.isDirty) {
+      try {
+        await autoSave.forceSave();
+      } catch {
+        // Si falla, permitimos navegar igualmente: el dato queda en
+        // localStorage y el AutoSaveIndicator mostrará el error.
+      }
+    }
+    // Quitar dirty del paso que dejamos (ya sincronizado).
+    setDirtySteps((curr) => {
+      const next = new Set(curr);
+      next.delete(currentStep + 1);
+      return next;
+    });
+    setCurrentStep(targetIdx);
+  }
+
+  // ── Wizard global · t2 — Recuperación sesión previa ───────────────
+  //
+  // Al montar (solo edición: hay savedId), comprobar localStorage. Si
+  // hay un autosave local MÁS RECIENTE que el updated_at del recurso,
+  // ofrecer recuperar. Si no, descartar silenciosamente.
+  useEffect(() => {
+    if (!savedId) {
+      setRecoverState({ kind: 'none' });
+      return;
+    }
+    const key = `resource-autosave-${savedId}`;
+    const local = loadLocalAutosave<Record<string, unknown>>(key);
+    if (!local) {
+      setRecoverState({ kind: 'none' });
+      return;
+    }
+    // Si lo local tiene <1s de edad (recién salvado por el autosave de
+    // esta misma sesión), no es un "draft recuperado".
+    if (Date.now() - new Date(local.savedAt).getTime() < 2000) {
+      setRecoverState({ kind: 'none' });
+      return;
+    }
+    setRecoverState({
+      kind: 'found',
+      localSavedAt: local.savedAt,
+      localData: local.data,
+    });
+  }, [savedId]);
+
+  /**
+   * Aplica el payload del localStorage al state del wizard. Solo
+   * restaura los campos que el autosavePayload incluye; el resto
+   * (media, tags) se deja tal cual porque el autosave no los toca.
+   */
+  function applyWizardSnapshot(snap: Record<string, unknown>) {
+    const s = snap as Partial<typeof autoSavePayload>;
+    if (typeof s.name_es === 'string') setNameEs(s.name_es);
+    if (typeof s.name_gl === 'string') setNameGl(s.name_gl);
+    if (typeof s.desc_es === 'string') setDescEs(s.desc_es);
+    if (typeof s.desc_gl === 'string') setDescGl(s.desc_gl);
+    if (typeof s.municipio_id === 'string' || s.municipio_id === null) {
+      setMunicipioId(s.municipio_id ?? '');
+    }
+    if (typeof s.zona_id === 'string' || s.zona_id === null) {
+      setZonaId(s.zona_id ?? '');
+    }
+    if (s.accommodation_rating !== undefined || s.occupancy !== undefined || s.serves_cuisine !== undefined) {
+      setEstablishment({
+        rating: (s.accommodation_rating as number | null | undefined) ?? null,
+        occupancy: (s.occupancy as number | null | undefined) ?? null,
+        cuisineCodes: Array.isArray(s.serves_cuisine) ? s.serves_cuisine : [],
+      });
+    }
+    if (s.seo_by_lang || s.translations || s.keywords !== undefined) {
+      setSeo((prev) => ({
+        ...prev,
+        slug: typeof s.slug === 'string' ? s.slug : prev.slug,
+        byLang: (s.seo_by_lang as ResourceSeo['byLang']) ?? prev.byLang,
+        translations: (s.translations as ResourceSeo['translations']) ?? prev.translations,
+        keywords: Array.isArray(s.keywords) ? s.keywords : prev.keywords,
+        indexable: typeof s.indexable === 'boolean' ? s.indexable : prev.indexable,
+        ogImageOverridePath: (s.og_image_override_path as string | null | undefined) ?? prev.ogImageOverridePath,
+        canonicalUrl: (s.canonical_url as string | null | undefined) ?? prev.canonicalUrl,
+      }));
+    }
+    if (typeof s.visible_en_mapa === 'boolean') setVisibleOnMap(s.visible_en_mapa);
+    if (s.latitude !== undefined || s.longitude !== undefined) {
+      setLocation((prev) => ({
+        ...prev,
+        lat: (s.latitude as number | null | undefined) ?? prev.lat,
+        lng: (s.longitude as number | null | undefined) ?? prev.lng,
+        streetAddress: (s.street_address as string | null | undefined) ?? prev.streetAddress,
+        postalCode: (s.postal_code as string | null | undefined) ?? prev.postalCode,
+        locality: (s.locality as string | null | undefined) ?? prev.locality,
+        parroquia: (s.parroquia_text as string | null | undefined) ?? prev.parroquia,
+      }));
+    }
+    if (s.contact_phone !== undefined || s.contact_email !== undefined) {
+      setContact((prev) => ({
+        ...prev,
+        phone: (s.contact_phone as string | null | undefined) ?? prev.phone,
+        email: (s.contact_email as string | null | undefined) ?? prev.email,
+        web: (s.contact_web as string | null | undefined) ?? prev.web,
+        socialLinks: Array.isArray(s.social_links) ? (s.social_links as SocialLink[]) : prev.socialLinks,
+      }));
+    }
+    if (s.opening_hours_plan) {
+      setHoursPlan(s.opening_hours_plan as OpeningHoursPlan);
+    }
+  }
+
+  function handleRecoverDraft() {
+    if (recoverState.kind !== 'found') return;
+    applyWizardSnapshot(recoverState.localData);
+    if (savedId) clearLocalAutosave(`resource-autosave-${savedId}`);
+    setRecoverState({ kind: 'none' });
+    markDirty();
+  }
+
+  function handleDiscardDraft() {
+    if (savedId) clearLocalAutosave(`resource-autosave-${savedId}`);
+    setRecoverState({ kind: 'none' });
+  }
+
   // ── Save / Submit ───────────────────────────────────────────
 
   async function handleFinish() {
@@ -1656,6 +1943,39 @@ export function ResourceWizardPage() {
 
   return (
     <>
+    {/* ══════════ Wizard global · t2 — Stepper clickable + autosave ══════════
+        El WizardStepper sustituye al stepper legacy del componente Wizard
+        (que se oculta con hideDefaultStepper=true en t3). AutoSaveIndicator
+        muestra el estado de sincronización (idle/saving/saved/error/offline).
+        Ambos se renderizan FUERA del Wizard para que la cabecera sea visible
+        incluso cuando el contenido hace scroll. */}
+    <div className="wizard-global-header">
+      <div className="wizard-global-header-top">
+        <div>
+          <h1 className="wizard-global-title">
+            {isNew ? 'Nuevo recurso turístico' : 'Editar recurso'}
+          </h1>
+          <p className="wizard-global-subtitle">
+            {isNew
+              ? activeTemplate
+                ? `${activeTemplate.icon} Plantilla: ${activeTemplate.name}`
+                : 'Te guiamos paso a paso para crear un recurso completo'
+              : `Editando: ${nameEs || slug}`}
+          </p>
+        </div>
+        <AutoSaveIndicator
+          status={autoSave.status}
+          lastSavedAt={autoSave.lastSavedAt}
+          errorMessage={autoSave.errorMessage}
+          onRetry={autoSave.forceSave}
+        />
+      </div>
+      <WizardStepper
+        stepsState={stepperState}
+        currentStep={currentStep + 1}
+        onNavigate={handleNavigate}
+      />
+    </div>
     <Wizard
       steps={steps}
       currentStep={currentStep}
@@ -1671,6 +1991,7 @@ export function ResourceWizardPage() {
       }
       finishLabel={isNew ? 'Crear recurso' : 'Guardar cambios'}
       onCancel={() => navigate('/resources')}
+      hideDefaultStepper
     >
       {error && (
         <div className="alert alert-error" style={{ whiteSpace: 'pre-line', marginBottom: '1rem' }}>{error}</div>
@@ -2014,6 +2335,19 @@ export function ResourceWizardPage() {
         </>
       )}
     </Wizard>
+
+    {/* Wizard global · t2 — Modal de recuperación de sesión previa.
+        Aparece solo si al abrir un recurso existe un autosave local MÁS
+        RECIENTE que el updated_at del servidor. Bloquea hasta que el
+        usuario pulse "Recuperar" o "Descartar". */}
+    {recoverState.kind === 'found' && (
+      <RecoverDraftModal
+        localSavedAt={recoverState.localSavedAt}
+        remoteSavedAt={null}
+        onRecover={handleRecoverDraft}
+        onDiscard={handleDiscardDraft}
+      />
+    )}
 
     {/* Paso 2 · t4 — Toast "Traducción al gallego lista". Aparece cuando
         la traducción background termina y el usuario NO está en el paso 2
