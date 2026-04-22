@@ -94,11 +94,11 @@ export const LIST_COPY = {
   },
 
   statusLabels: {
-    draft: 'Borrador',
-    published: 'Publicado',
-    scheduled: 'Programado',
-    archived: 'Archivado',
-    in_review: 'En revisión',
+    borrador:   'Borrador',
+    publicado:  'Publicado',
+    programado: 'Programado',
+    archivado:  'Archivado',
+    revision:   'En revisión',
   },
 
   inlineEdit: {

@@ -82,32 +82,32 @@ export default function RowActionsMenu({
 
             <div className="list-row-menu-divider" />
 
-            {row.publicationStatus !== 'published' && (
+            {row.publicationStatus !== 'publicado' && (
               <MenuItem
                 icon="🚀"
                 label={COPY.statusPublish}
-                onClick={() => void handleChangeStatus('published')}
+                onClick={() => void handleChangeStatus('publicado')}
               />
             )}
-            {row.publicationStatus === 'published' && (
+            {row.publicationStatus === 'publicado' && (
               <MenuItem
                 icon="📥"
                 label={COPY.statusUnpublish}
-                onClick={() => void handleChangeStatus('draft')}
+                onClick={() => void handleChangeStatus('borrador')}
               />
             )}
-            {row.publicationStatus !== 'archived' && (
+            {row.publicationStatus !== 'archivado' && (
               <MenuItem
                 icon="🗄"
                 label={COPY.statusArchive}
-                onClick={() => void handleChangeStatus('archived')}
+                onClick={() => void handleChangeStatus('archivado')}
               />
             )}
-            {row.publicationStatus === 'archived' && (
+            {row.publicationStatus === 'archivado' && (
               <MenuItem
                 icon="↩"
                 label={COPY.statusRestore}
-                onClick={() => void handleChangeStatus('draft')}
+                onClick={() => void handleChangeStatus('borrador')}
               />
             )}
 

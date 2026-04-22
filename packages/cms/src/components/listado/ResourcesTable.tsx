@@ -305,7 +305,7 @@ function ResourceRow({
           {row.lastEditorEmail && (
             <div className="list-td-updated-author muted">{row.lastEditorEmail}</div>
           )}
-          {row.publicationStatus === 'scheduled' && row.scheduledPublishAt && (
+          {row.publicationStatus === 'programado' && row.scheduledPublishAt && (
             <div className="list-td-scheduled-info">
               📅 {formatScheduleForDisplay(row.scheduledPublishAt)} · {timeUntilSchedule(row.scheduledPublishAt)}
             </div>

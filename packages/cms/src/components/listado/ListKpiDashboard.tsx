@@ -33,7 +33,7 @@ export default function ListKpiDashboard({ kpis, loading, onApplyFilter }: ListK
         value={kpis.published}
         variant="published"
         loading={loading}
-        onClick={() => onApplyFilter({ status: 'published' })}
+        onClick={() => onApplyFilter({ status: 'publicado' })}
       />
       <KpiCard
         label={COPY.scheduled}
@@ -41,21 +41,21 @@ export default function ListKpiDashboard({ kpis, loading, onApplyFilter }: ListK
         variant="scheduled"
         loading={loading}
         pulse={kpis.scheduled > 0}
-        onClick={() => onApplyFilter({ status: 'scheduled' })}
+        onClick={() => onApplyFilter({ status: 'programado' })}
       />
       <KpiCard
         label={COPY.draft}
         value={kpis.draft}
         variant="draft"
         loading={loading}
-        onClick={() => onApplyFilter({ status: 'draft' })}
+        onClick={() => onApplyFilter({ status: 'borrador' })}
       />
       <KpiCard
         label={COPY.archived}
         value={kpis.archived}
         variant="archived"
         loading={loading}
-        onClick={() => onApplyFilter({ status: 'archived' })}
+        onClick={() => onApplyFilter({ status: 'archivado' })}
       />
       <KpiCard
         label={COPY.incompleteForPublish}

@@ -18,7 +18,11 @@ import { NotificationsProvider } from './lib/notifications';
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const SetupPasswordPage = lazy(() => import('./pages/SetupPasswordPage').then(m => ({ default: m.SetupPasswordPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const ResourcesPage = lazy(() => import('./pages/ResourcesPage').then(m => ({ default: m.ResourcesPage })));
+// Listado A · t2 — `ResourcesRoute` (orquestador nuevo con RPC
+// list_resources, KPIs, filtros facetados, edición inline, 9 columnas)
+// sustituye a ResourcesPage legacy en /resources. El componente legacy
+// queda en el repo hasta T3 por si se necesita rollback rápido.
+const ResourcesRoute = lazy(() => import('./pages/ResourcesRoute'));
 const ResourceFormPage = lazy(() => import('./pages/ResourceFormPage').then(m => ({ default: m.ResourceFormPage })));
 const ResourceWizardPage = lazy(() => import('./pages/ResourceWizardPage').then(m => ({ default: m.ResourceWizardPage })));
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then(m => ({ default: m.CategoriesPage })));
@@ -63,7 +67,7 @@ export function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
-                <Route path="/resources" element={<ErrorBoundary><ResourcesPage /></ErrorBoundary>} />
+                <Route path="/resources" element={<ErrorBoundary><ResourcesRoute /></ErrorBoundary>} />
                 <Route path="/resources/new" element={<ErrorBoundary><ResourceWizardPage /></ErrorBoundary>} />
                 <Route path="/resources/:id" element={<ErrorBoundary><ResourceWizardPage /></ErrorBoundary>} />
                 {/* Formulario clasico disponible como fallback */}

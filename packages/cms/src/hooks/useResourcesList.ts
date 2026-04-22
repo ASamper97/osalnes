@@ -211,7 +211,7 @@ function mapRpcRow(r: Record<string, unknown>): ListResourceRow {
     nameGl: String(r.name_gl ?? ''),
     slug: String(r.slug ?? ''),
     singleTypeVocabulary: (r.single_type_vocabulary as string) ?? null,
-    publicationStatus: (r.publication_status as ListResourceRow['publicationStatus']) ?? 'draft',
+    publicationStatus: (r.publication_status as ListResourceRow['publicationStatus']) ?? 'borrador',
     municipalityId: (r.municipality_id as string) ?? null,
     municipalityName: (r.municipality_name as string) ?? null,
     municipalitySlug: (r.municipality_slug as string) ?? null,

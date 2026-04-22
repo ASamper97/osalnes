@@ -61,6 +61,10 @@
     "./data/wizard-navigation": {
       "types": "./dist/data/wizard-navigation.d.ts",
       "default": "./dist/data/wizard-navigation.js"
+    },
+    "./data/resources-list": {
+      "types": "./dist/data/resources-list.d.ts",
+      "default": "./dist/data/resources-list.js"
     }
   },
   "scripts": {

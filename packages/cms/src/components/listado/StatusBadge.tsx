@@ -49,7 +49,7 @@ export default function StatusBadge({ status, scheduledAt, onChangeStatus }: Sta
         aria-haspopup="menu"
       >
         {loading ? '⏳' : COPY[status]}
-        {status !== 'scheduled' && ' ▾'}
+        {status !== 'programado' && ' ▾'}
       </button>
 
       {open && !loading && (
@@ -78,16 +78,16 @@ export default function StatusBadge({ status, scheduledAt, onChangeStatus }: Sta
 
 function getPossibleTransitions(from: Status): Status[] {
   switch (from) {
-    case 'draft':
-      return ['published', 'in_review', 'archived'];
-    case 'in_review':
-      return ['draft', 'published', 'archived'];
-    case 'published':
-      return ['draft', 'archived'];
-    case 'scheduled':
-      return ['draft', 'published']; // cancelar programación o forzar publicación ya
-    case 'archived':
-      return ['draft'];
+    case 'borrador':
+      return ['publicado', 'revision', 'archivado'];
+    case 'revision':
+      return ['borrador', 'publicado', 'archivado'];
+    case 'publicado':
+      return ['borrador', 'archivado'];
+    case 'programado':
+      return ['borrador', 'publicado']; // cancelar programación o forzar publicación ya
+    case 'archivado':
+      return ['borrador'];
     default:
       return [];
   }

@@ -1,16 +1,22 @@
 /**
  * Modelo de datos del listado de recursos (SCR-03)
  *
- * Matches the shape returned by the RPC `list_resources`.
+ * Matches the shape returned by the RPC `list_resources` (migración 026).
+ *
+ * Listado A · fix: los valores de `publicationStatus` son los del CHECK
+ * real de `recurso_turistico.estado_editorial` en Spanish
+ * (borrador/revision/programado/publicado/archivado), NO los English
+ * del prompt template. Coherente con `publication-status.ts` del
+ * paso 7b.
  */
 
 export type PublicationStatusFilter =
   | 'all'
-  | 'published'
-  | 'scheduled'
-  | 'draft'
-  | 'archived'
-  | 'in_review';
+  | 'publicado'
+  | 'programado'
+  | 'borrador'
+  | 'revision'
+  | 'archivado';
 
 export type OrderByField = 'name' | 'updated_at' | 'quality_score' | 'municipality';
 export type OrderDir = 'asc' | 'desc';
@@ -23,7 +29,7 @@ export interface ListResourceRow {
   nameGl: string;
   slug: string;
   singleTypeVocabulary: string | null;
-  publicationStatus: 'draft' | 'published' | 'scheduled' | 'archived' | 'in_review';
+  publicationStatus: 'borrador' | 'revision' | 'programado' | 'publicado' | 'archivado';
   municipalityId: string | null;
   municipalityName: string | null;
   municipalitySlug: string | null;
