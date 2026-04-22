@@ -49,7 +49,13 @@ export interface MyWorkRow {
   nameGl: string;
   slug: string;
   singleTypeVocabulary: string | null;
-  publicationStatus: 'draft' | 'in_review';
+  /**
+   * Dashboard · t2 — valores Spanish del CHECK real de
+   * `recurso_turistico.estado_editorial` (001+025). La RPC
+   * `dashboard_get_my_work` filtra solo borradores/revision, por eso
+   * el union type se restringe a esos dos.
+   */
+  publicationStatus: 'borrador' | 'revision';
   qualityScore: number;
   pidMissingRequired: number;
   updatedAt: string;
@@ -144,7 +150,7 @@ export function mapRpcMyWorkRow(r: Record<string, unknown>): MyWorkRow {
     nameGl: String(r.name_gl ?? ''),
     slug: String(r.slug ?? ''),
     singleTypeVocabulary: (r.single_type_vocabulary as string) ?? null,
-    publicationStatus: (r.publication_status as 'draft' | 'in_review') ?? 'draft',
+    publicationStatus: (r.publication_status as MyWorkRow['publicationStatus']) ?? 'borrador',
     qualityScore: Number(r.quality_score ?? 0),
     pidMissingRequired: Number(r.pid_missing_required ?? 0),
     updatedAt: String(r.updated_at ?? new Date().toISOString()),

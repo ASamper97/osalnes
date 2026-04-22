@@ -17,7 +17,12 @@ import { NotificationsProvider } from './lib/notifications';
 // makes it obvious which routes are split.
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const SetupPasswordPage = lazy(() => import('./pages/SetupPasswordPage').then(m => ({ default: m.SetupPasswordPage })));
-const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+// Dashboard · t2 — `DashboardRoute` envuelve el nuevo DashboardPage
+// "dumb" (SCR-02 con 11 widgets y visibilidad por rol) y provee el
+// hook useDashboard + parseUserRole + contadores de catálogo. El
+// componente DashboardPage legacy (named export) fue reemplazado por
+// el default export del orquestador nuevo.
+const DashboardRoute = lazy(() => import('./pages/DashboardRoute'));
 // Listado A · t2 — `ResourcesRoute` (orquestador nuevo con RPC
 // list_resources, KPIs, filtros facetados, edición inline, 9 columnas)
 // sustituye a ResourcesPage legacy en /resources. El componente legacy
@@ -66,7 +71,7 @@ export function App() {
             {/* Protected — requires authentication + DTI profile */}
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
-                <Route path="/" element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
+                <Route path="/" element={<ErrorBoundary><DashboardRoute /></ErrorBoundary>} />
                 <Route path="/resources" element={<ErrorBoundary><ResourcesRoute /></ErrorBoundary>} />
                 <Route path="/resources/new" element={<ErrorBoundary><ResourceWizardPage /></ErrorBoundary>} />
                 <Route path="/resources/:id" element={<ErrorBoundary><ResourceWizardPage /></ErrorBoundary>} />

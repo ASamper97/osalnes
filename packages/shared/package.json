@@ -69,6 +69,14 @@
     "./data/resources-list-b": {
       "types": "./dist/data/resources-list-b.d.ts",
       "default": "./dist/data/resources-list-b.js"
+    },
+    "./data/dashboard": {
+      "types": "./dist/data/dashboard.d.ts",
+      "default": "./dist/data/dashboard.js"
+    },
+    "./data/rbac": {
+      "types": "./dist/data/rbac.d.ts",
+      "default": "./dist/data/rbac.js"
     }
   },
   "scripts": {
