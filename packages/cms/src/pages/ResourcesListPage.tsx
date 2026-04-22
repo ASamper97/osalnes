@@ -13,8 +13,8 @@
  * El padre (ruta) monta el hook useResourcesList y conecta con Supabase.
  */
 
-import { useMemo, useState } from 'react';
-import type { ListResourceRow, ListFilters } from '@osalnes/shared/data/resources-list';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ListResourceRow, ListFilters, ListSort } from '@osalnes/shared/data/resources-list';
 import { EMPTY_FILTERS } from '@osalnes/shared/data/resources-list';
 import ListKpiDashboard from '../components/listado/ListKpiDashboard';
 import ListFiltersPanel, {
@@ -24,7 +24,16 @@ import ListFiltersPanel, {
 import ResourcesTable from '../components/listado/ResourcesTable';
 import ListPaginationBar from '../components/listado/ListPaginationBar';
 import DeleteConfirmModal from '../components/listado/DeleteConfirmModal';
+// ── Listado B · t2 — componentes + hook nuevos ──────────────────────
+import BulkActionsToolbar from '../components/listado/BulkActionsToolbar';
+import BulkConfirmModal from '../components/listado/BulkConfirmModal';
+import SavedViewsMenu from '../components/listado/SavedViewsMenu';
+import SaveViewDialog from '../components/listado/SaveViewDialog';
+import ExportCsvDialog from '../components/listado/ExportCsvDialog';
+import { useSavedViews, type SupabaseLike as SavedViewsSupabaseLike } from '../hooks/useSavedViews';
+import type { SavedView } from '@osalnes/shared/data/resources-list-b';
 import type { UseResourcesListState } from '../hooks/useResourcesList';
+import './listado-b.css';
 import { LIST_COPY } from './listado.copy';
 
 export interface ResourcesListPageProps {
@@ -44,10 +53,39 @@ export interface ResourcesListPageProps {
   onOpenPreview: (id: string, slug: string) => void;
   onRenameResource: (id: string, newNameEs: string) => Promise<void>;
   onChangeStatus: (id: string, newStatus: ListResourceRow['publicationStatus']) => Promise<void>;
-  onDuplicate: (id: string) => Promise<void>;
+
+  /**
+   * Listado B · t2/t3 — duplicar real: el handler ahora llama a la RPC
+   * `duplicate_resource` y devuelve el ID del recurso nuevo para que el
+   * listado pueda refrescar y/o navegar.
+   */
+  onDuplicate: (id: string) => Promise<string>;
+
   onViewHistory: (id: string) => void;
   onDeleteResource: (id: string) => Promise<void>;
   onArchiveResource: (id: string) => Promise<void>;
+
+  // ── Listado B · t2 — handlers nuevos ───────────────────────────────
+
+  /** Cambio de estado masivo (selección múltiple → toolbar inferior). */
+  onBulkChangeStatus: (
+    ids: string[],
+    newStatus: ListResourceRow['publicationStatus'],
+  ) => Promise<void>;
+
+  /** Borrado masivo con confirmación. */
+  onBulkDelete: (ids: string[]) => Promise<void>;
+
+  /**
+   * Fetch TODAS las filas del filtro actual (sin paginación) para exportar
+   * a CSV. El consumidor llama a la RPC `list_resources` con el mismo
+   * set de filtros pero con `p_page_size` alto (5000 típicamente).
+   * Crítico para que el CSV incluya solo lo que el usuario ve filtrado.
+   */
+  onFetchAllFilteredRows: () => Promise<ListResourceRow[]>;
+
+  /** Cliente Supabase — necesario para el hook useSavedViews. */
+  supabase: SavedViewsSupabaseLike;
 }
 
 export default function ResourcesListPage({
@@ -64,13 +102,51 @@ export default function ResourcesListPage({
   onViewHistory,
   onDeleteResource,
   onArchiveResource,
+  onBulkChangeStatus,
+  onBulkDelete,
+  onFetchAllFilteredRows,
+  supabase,
 }: ResourcesListPageProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // ── Listado B · t2 — estado nuevo ────────────────────────────────
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const savedViewsState = useSavedViews({ supabase, enabled: true });
+  const [saveViewDialogOpen, setSaveViewDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
   // Wrapper que refresca tras acciones
   const refresh = () => void state.refetch();
+
+  // ── Listado B · t2 — aplicar vista por defecto al montar ─────────
+  //
+  // Si el usuario tiene una vista marcada como `is_default`, se aplica
+  // al abrir /resources. EXCEPTO si la URL ya trae filtros (share
+  // links, atrás del navegador): entonces la URL prevalece.
+  const applyView = useCallback((view: SavedView) => {
+    state.setFilters(view.filters);
+    if (view.sortOrderBy && view.sortOrderDir) {
+      state.setSort({
+        orderBy: view.sortOrderBy as ListSort['orderBy'],
+        orderDir: view.sortOrderDir,
+      });
+    }
+    if (view.pageSize) {
+      state.setPagination({ page: 1, pageSize: view.pageSize });
+    }
+  }, [state]);
+
+  useEffect(() => {
+    const urlHasFilters = typeof window !== 'undefined' && window.location.search.length > 0;
+    if (urlHasFilters) return;
+    if (savedViewsState.defaultView) {
+      applyView(savedViewsState.defaultView);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViewsState.defaultView]);
 
   const handleRename = async (id: string, newNameEs: string): Promise<void> => {
     await onRenameResource(id, newNameEs);
@@ -86,8 +162,69 @@ export default function ResourcesListPage({
   };
 
   const handleDuplicate = async (id: string): Promise<void> => {
+    // Listado B · t2 — duplicar real (ya no placeholder fase A). El
+    // handler del padre llama a la RPC duplicate_resource y devuelve el
+    // UUID nuevo; refrescamos la tabla para que la copia aparezca
+    // inmediatamente.
     await onDuplicate(id);
     refresh();
+  };
+
+  // ── Listado B · t2 — Handlers bulk ────────────────────────────────
+
+  const selectedRowsArray = useMemo(
+    () => state.rows.filter((r) => selectedIds.has(r.id)),
+    [state.rows, selectedIds],
+  );
+
+  const handleBulkPublish = async () => {
+    await onBulkChangeStatus([...selectedIds], 'publicado');
+    setSelectedIds(new Set());
+    refresh();
+  };
+
+  const handleBulkUnpublish = async () => {
+    await onBulkChangeStatus([...selectedIds], 'borrador');
+    setSelectedIds(new Set());
+    refresh();
+  };
+
+  const handleBulkArchive = async () => {
+    await onBulkChangeStatus([...selectedIds], 'archivado');
+    setSelectedIds(new Set());
+    refresh();
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    setBulkDeleteLoading(true);
+    try {
+      await onBulkDelete([...selectedIds]);
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      refresh();
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
+  const handleBulkArchiveInsteadOfDelete = async () => {
+    await onBulkChangeStatus([...selectedIds], 'archivado');
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    refresh();
+  };
+
+  // ── Listado B · t2 — Handler guardar vista ────────────────────────
+
+  const handleSaveView = async ({ name, isDefault }: { name: string; isDefault: boolean }) => {
+    await savedViewsState.saveView({
+      name,
+      filters: state.filters,
+      sort: state.sort,
+      pageSize: state.pagination.pageSize,
+      isDefault,
+    });
+    setSaveViewDialogOpen(false);
   };
 
   const handleApplyKpiFilter = (patch: Partial<ListFilters>) => {
@@ -164,6 +301,26 @@ export default function ResourcesListPage({
         municipalities={municipalities}
       />
 
+      {/* Listado B · t2 — barra secundaria: vistas guardadas + exportar */}
+      <div className="list-toolbar-secondary">
+        <SavedViewsMenu
+          views={savedViewsState.views}
+          loading={savedViewsState.loading}
+          error={savedViewsState.error}
+          onApplyView={applyView}
+          onOpenSaveDialog={() => setSaveViewDialogOpen(true)}
+          onDeleteView={savedViewsState.deleteView}
+        />
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setExportDialogOpen(true)}
+          disabled={state.totalCount === 0}
+        >
+          📄 Exportar
+        </button>
+      </div>
+
       {/* Error */}
       {state.error && (
         <div className="list-error" role="alert">
@@ -231,6 +388,59 @@ export default function ResourcesListPage({
           onArchiveInstead={handleArchiveInstead}
           onCancel={() => setDeleteTarget(null)}
           loading={deleteLoading}
+        />
+      )}
+
+      {/* Listado B · t2 — Toolbar bulk (sticky bottom). Solo con selección. */}
+      {selectedIds.size > 0 && (
+        <BulkActionsToolbar
+          selectedCount={selectedIds.size}
+          onPublish={handleBulkPublish}
+          onUnpublish={handleBulkUnpublish}
+          onArchive={handleBulkArchive}
+          onExport={() => setExportDialogOpen(true)}
+          onDelete={() => setBulkDeleteOpen(true)}
+          onClearSelection={() => setSelectedIds(new Set())}
+        />
+      )}
+
+      {/* Listado B · t2 — Modal confirmación bulk delete */}
+      {bulkDeleteOpen && (
+        <BulkConfirmModal
+          title={`¿Eliminar ${selectedIds.size} recurso${selectedIds.size === 1 ? '' : 's'}?`}
+          body="Esta acción no se puede deshacer. Si solo quieres dejarlos de publicar, usa 'Archivar en vez de eliminar'."
+          names={selectedRowsArray.map((r) => r.nameEs || r.nameGl || '(sin nombre)')}
+          confirmLabel={`Sí, eliminar ${selectedIds.size}`}
+          confirmVariant="danger"
+          alternativeLabel={`Archivar los ${selectedIds.size}`}
+          onConfirm={handleBulkDeleteConfirm}
+          onAlternative={handleBulkArchiveInsteadOfDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
+          loading={bulkDeleteLoading}
+        />
+      )}
+
+      {/* Listado B · t2 — Diálogo guardar vista */}
+      {saveViewDialogOpen && (
+        <SaveViewDialog
+          filters={state.filters}
+          sort={state.sort}
+          pageSize={state.pagination.pageSize}
+          existingNames={savedViewsState.views.map((v) => v.name)}
+          hasExistingDefault={savedViewsState.defaultView != null}
+          onSave={handleSaveView}
+          onCancel={() => setSaveViewDialogOpen(false)}
+        />
+      )}
+
+      {/* Listado B · t2 — Diálogo exportar CSV */}
+      {exportDialogOpen && (
+        <ExportCsvDialog
+          onFetchAllFiltered={onFetchAllFilteredRows}
+          totalFilteredCount={state.totalCount}
+          selectedRows={selectedRowsArray}
+          resolveTypologyLabel={resolveTypologyLabel}
+          onCancel={() => setExportDialogOpen(false)}
         />
       )}
     </div>

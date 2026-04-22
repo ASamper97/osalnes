@@ -1,8 +1,14 @@
+/// <reference lib="dom" />
 /**
  * Tipos compartidos y helpers para la fase B del listado.
+ *
+ * `downloadCsv` usa DOM APIs (document.createElement, URL.createObjectURL)
+ * y solo se invoca desde el cliente CMS (browser). La triple-slash ref
+ * `dom` arriba permite que esos tipos resuelvan sin cambiar el tsconfig
+ * del paquete shared (que está apuntado a Node por defecto).
  */
 
-import type { ListFilters, ListSort, ListResourceRow } from './resources-list';
+import type { ListFilters, ListSort, ListResourceRow } from './resources-list.js';
 
 // ─── Vista guardada ────────────────────────────────────────────────────
 
