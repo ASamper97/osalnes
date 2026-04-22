@@ -409,6 +409,10 @@ returns jsonb
 language sql
 stable
 as $$
+  -- Postgres no permite anidar directamente `jsonb_object_agg(...,
+  -- jsonb_agg(...))`: hay que agrupar primero por predicado con su
+  -- `jsonb_agg` y luego combinar en un único objeto con
+  -- `jsonb_object_agg`. CTE en 2 capas (mapped → grouped → final).
   with mapped as (
     select
       case rr.predicate
@@ -431,19 +435,20 @@ as $$
     join public.recurso_turistico r on r.id = rr.target_id
     where rr.source_id = p_resource_id
       and rr.is_mirror = false
-  )
-  select coalesce(
-    jsonb_object_agg(
+  ),
+  grouped as (
+    select
       schema_predicate,
       jsonb_agg(jsonb_build_object(
         '@type', 'Thing',
         '@id', 'https://turismo.osalnes.gal/es/recurso/' || target_slug,
         'name', target_name
-      ))
-    ),
-    '{}'::jsonb
+      )) as items
+    from mapped
+    group by schema_predicate
   )
-  from mapped;
+  select coalesce(jsonb_object_agg(schema_predicate, items), '{}'::jsonb)
+  from grouped;
 $$;
 
 comment on function public.generate_jsonld_relations is
