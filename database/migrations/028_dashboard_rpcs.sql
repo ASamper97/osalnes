@@ -2,27 +2,34 @@
 -- Migration 028 — Dashboard operativo (SCR-02)
 -- ==========================================================================
 --
+-- Adaptado al schema real (mismas divergencias que 026/027):
+--   - Tabla `recurso_turistico` (NO `resources`).
+--   - `estado_editorial` Spanish (NO `publication_status` English).
+--     Valores: 'borrador' | 'revision' | 'programado' | 'publicado' | 'archivado'.
+--   - `visible_en_mapa` (NO `visible_on_map`).
+--   - `municipio_id` + tabla `municipio` (NO `municipality_id` + `municipalities`).
+--   - `name_es`/`name_gl`/`description_es`/`description_gl` viven en
+--     `traduccion` (NO columnas): resueltas con `tr_get()` helper de 026.
+--   - `rdf_type` (NO `single_type_vocabulary`).
+--   - `log_cambios` (NO `audit_log`): columnas `accion/usuario_id/cambios
+--     jsonb/entidad_tipo/entidad_id/created_at`. El actor_email se
+--     resuelve via JOIN con `usuario`.
+--   - `compute_resource_quality_score(uuid)` y
+--     `count_pid_missing_required(uuid)` tienen firma por UUID (cambiada
+--     en 026 para desacoplarlas del shape de la view).
+--
 -- Añade:
---   1. Tabla export_jobs (mínima, para widget "Últimas exportaciones")
---   2. RPC dashboard_get_overview — todos los datos del dashboard en UNA query
---   3. RPC dashboard_get_my_work — borradores del usuario actual
---   4. RPC dashboard_get_upcoming_scheduled — próximas publicaciones
---   5. RPC dashboard_get_recent_activity — últimas acciones en el sistema
---   6. RPC dashboard_get_translation_progress — % traducción por idioma
---   7. RPC dashboard_get_une_indicators — 5 indicadores UNE 178502
+--   1. Tabla export_jobs (mínima para widget "Última exportación").
+--   2. Helper band_from_percent.
+--   3. 6 RPCs dashboard_get_* para alimentar los 11 widgets.
 --
--- La estrategia es: el cliente hace 4-5 RPCs en paralelo al montar el
--- dashboard. Cada RPC devuelve datos agregados, no cruda. Permite
--- optimizar fácilmente (caché, índices) sin tocar cliente.
---
+-- El return shape de los RPCs usa snake_case English (el dashboard.ts
+-- del shared los consume así). `publication_status` devuelve el valor
+-- Spanish real del BD — el cliente hace el match `'borrador'|'revision'`.
 -- ==========================================================================
 
 
 -- ─── 1) Tabla export_jobs (mínima) ──────────────────────────────────────
---
--- Creada aquí para desbloquear el dashboard. El SCR-13 (Centro de
--- exportaciones) la ampliará con más campos (payload, duración,
--- recurso específico, etc.).
 
 create table if not exists public.export_jobs (
   id uuid primary key default gen_random_uuid(),
@@ -42,7 +49,6 @@ create index if not exists idx_export_jobs_type_status on public.export_jobs (jo
 
 alter table public.export_jobs enable row level security;
 
--- Solo usuarios autenticados pueden leer exportaciones
 drop policy if exists export_jobs_read on public.export_jobs;
 create policy export_jobs_read on public.export_jobs
   for select
@@ -52,14 +58,26 @@ comment on table public.export_jobs is
   'Historial de exportaciones a PID/Data Lake/CSV. Tabla mínima — SCR-13 la ampliará.';
 
 
--- ─── 2) RPC dashboard_get_overview ──────────────────────────────────────
---
--- Combina KPIs + alertas en una sola llamada. Devuelve un solo registro
--- con todos los conteos que el dashboard necesita arriba.
+-- ─── 2) Helper band_from_percent ────────────────────────────────────────
+
+create or replace function public.band_from_percent(p_pct numeric)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_pct >= 85 then 'A'
+    when p_pct >= 65 then 'B'
+    when p_pct >= 40 then 'C'
+    else 'D'
+  end;
+$$;
+
+
+-- ─── 3) RPC dashboard_get_overview ──────────────────────────────────────
 
 create or replace function public.dashboard_get_overview()
 returns table (
-  -- KPIs totales
   total bigint,
   published bigint,
   scheduled bigint,
@@ -68,12 +86,10 @@ returns table (
   archived bigint,
   incomplete_for_publish bigint,
 
-  -- Alertas derivadas
-  without_image bigint,           -- recursos sin ninguna imagen
-  without_coordinates bigint,     -- visibles en mapa pero sin coords
-  without_description_es bigint,  -- sin descripción base en ES
+  without_image bigint,
+  without_coordinates bigint,
+  without_description_es bigint,
 
-  -- Último evento relevante
   last_published_at timestamptz,
   last_export_at timestamptz,
   last_export_status text
@@ -82,37 +98,34 @@ language sql
 stable
 as $$
   select
-    (select count(*) from public.resources)::bigint as total,
-    (select count(*) from public.resources where publication_status = 'published')::bigint as published,
-    (select count(*) from public.resources where publication_status = 'scheduled')::bigint as scheduled,
-    (select count(*) from public.resources where publication_status = 'draft')::bigint as draft,
-    (select count(*) from public.resources where publication_status = 'in_review')::bigint as in_review,
-    (select count(*) from public.resources where publication_status = 'archived')::bigint as archived,
-    (select count(*) from public.resources
-       where public.count_pid_missing_required(public.resources) > 0)::bigint as incomplete_for_publish,
+    (select count(*) from public.recurso_turistico)::bigint as total,
+    (select count(*) from public.recurso_turistico where estado_editorial = 'publicado')::bigint as published,
+    (select count(*) from public.recurso_turistico where estado_editorial = 'programado')::bigint as scheduled,
+    (select count(*) from public.recurso_turistico where estado_editorial = 'borrador')::bigint as draft,
+    (select count(*) from public.recurso_turistico where estado_editorial = 'revision')::bigint as in_review,
+    (select count(*) from public.recurso_turistico where estado_editorial = 'archivado')::bigint as archived,
+    (select count(*) from public.recurso_turistico r
+       where public.count_pid_missing_required(r.id) > 0)::bigint as incomplete_for_publish,
 
-    (select count(*) from public.resources r
+    (select count(*) from public.recurso_turistico r
        where not exists (select 1 from public.resource_images ri where ri.resource_id = r.id))::bigint as without_image,
 
-    (select count(*) from public.resources
-       where coalesce(visible_on_map, true) and (latitude is null or longitude is null))::bigint as without_coordinates,
+    (select count(*) from public.recurso_turistico
+       where coalesce(visible_en_mapa, true) and (latitude is null or longitude is null))::bigint as without_coordinates,
 
-    (select count(*) from public.resources
-       where coalesce(length(description_es), 0) < 30)::bigint as without_description_es,
+    (select count(*) from public.recurso_turistico r
+       where coalesce(length(public.tr_get('recurso_turistico', r.id, 'description', 'es')), 0) < 30)::bigint as without_description_es,
 
-    (select max(published_at) from public.resources where publication_status = 'published') as last_published_at,
+    (select max(published_at) from public.recurso_turistico where estado_editorial = 'publicado') as last_published_at,
     (select max(started_at) from public.export_jobs where status = 'success') as last_export_at,
-    (select status from public.export_jobs order by started_at desc limit 1) as last_export_status;
+    ((select status from public.export_jobs order by started_at desc limit 1))::text as last_export_status;
 $$;
 
 comment on function public.dashboard_get_overview is
   'Métricas agregadas del dashboard. Una llamada devuelve todo lo necesario para las cards superiores y alertas.';
 
 
--- ─── 3) RPC dashboard_get_my_work ───────────────────────────────────────
---
--- Borradores del usuario actual en las últimas 2 semanas (decisión 1-C
--- "Mi trabajo"). Ordenados por reciente primero.
+-- ─── 4) RPC dashboard_get_my_work ───────────────────────────────────────
 
 create or replace function public.dashboard_get_my_work(
   p_limit integer default 6
@@ -133,30 +146,27 @@ stable
 as $$
   select
     r.id,
-    r.name_es,
-    r.name_gl,
-    r.slug,
-    r.single_type_vocabulary,
-    r.publication_status,
-    public.compute_resource_quality_score(r) as quality_score,
-    public.count_pid_missing_required(r) as pid_missing_required,
+    public.tr_get('recurso_turistico', r.id, 'name', 'es') as name_es,
+    public.tr_get('recurso_turistico', r.id, 'name', 'gl') as name_gl,
+    r.slug::text,
+    r.rdf_type::text as single_type_vocabulary,
+    r.estado_editorial::text as publication_status,
+    public.compute_resource_quality_score(r.id) as quality_score,
+    public.count_pid_missing_required(r.id) as pid_missing_required,
     r.updated_at
-  from public.resources r
+  from public.recurso_turistico r
   where r.created_by = auth.uid()
-    and r.publication_status in ('draft', 'in_review')
+    and r.estado_editorial in ('borrador', 'revision')
     and r.updated_at >= (now() - interval '14 days')
   order by r.updated_at desc
   limit p_limit;
 $$;
 
 comment on function public.dashboard_get_my_work is
-  'Borradores del usuario actual en los últimos 14 días. Widget "Mi trabajo".';
+  'Borradores del usuario actual en los últimos 14 días. Widget "Mi trabajo". Devuelve estado_editorial en Spanish (el cliente lo matchea con valores reales).';
 
 
--- ─── 4) RPC dashboard_get_upcoming_scheduled ────────────────────────────
---
--- Próximas publicaciones programadas (decisión 5-A). No filtra por
--- usuario — el equipo debe ver lo que va a salir pronto.
+-- ─── 5) RPC dashboard_get_upcoming_scheduled ────────────────────────────
 
 create or replace function public.dashboard_get_upcoming_scheduled(
   p_limit integer default 5
@@ -177,17 +187,20 @@ stable
 as $$
   select
     r.id,
-    r.name_es,
-    r.name_gl,
-    r.slug,
-    r.single_type_vocabulary,
-    m.name as municipality_name,
+    public.tr_get('recurso_turistico', r.id, 'name', 'es') as name_es,
+    public.tr_get('recurso_turistico', r.id, 'name', 'gl') as name_gl,
+    r.slug::text,
+    r.rdf_type::text as single_type_vocabulary,
+    coalesce(
+      public.tr_get('municipio', r.municipio_id, 'name', 'es'),
+      m.slug::text
+    ) as municipality_name,
     r.scheduled_publish_at,
-    public.compute_resource_quality_score(r) as quality_score,
-    public.count_pid_missing_required(r) as pid_missing_required
-  from public.resources r
-  left join public.municipalities m on m.id = r.municipality_id
-  where r.publication_status = 'scheduled'
+    public.compute_resource_quality_score(r.id) as quality_score,
+    public.count_pid_missing_required(r.id) as pid_missing_required
+  from public.recurso_turistico r
+  left join public.municipio m on m.id = r.municipio_id
+  where r.estado_editorial = 'programado'
     and r.scheduled_publish_at is not null
     and r.scheduled_publish_at > now()
   order by r.scheduled_publish_at asc
@@ -198,10 +211,11 @@ comment on function public.dashboard_get_upcoming_scheduled is
   'Próximas publicaciones programadas ordenadas por fecha más próxima. Widget "Próximas publicaciones".';
 
 
--- ─── 5) RPC dashboard_get_recent_activity ───────────────────────────────
+-- ─── 6) RPC dashboard_get_recent_activity ───────────────────────────────
 --
--- Últimas acciones del audit_log. Si audit_log no existe o está vacío,
--- fallback a updated_at de resources.
+-- Usa `log_cambios` (tabla real del repo, migración 001+013). El
+-- actor_email se resuelve via JOIN con `usuario`. Fallback a
+-- updated_at de recurso_turistico si log_cambios está vacío.
 
 create or replace function public.dashboard_get_recent_activity(
   p_limit integer default 10,
@@ -219,35 +233,61 @@ returns table (
 language plpgsql
 stable
 as $$
+declare
+  v_has_log_cambios boolean;
+  v_log_has_data boolean := false;
 begin
-  -- Si audit_log existe y tiene datos, usarlo
-  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'audit_log') then
+  select exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'log_cambios'
+  ) into v_has_log_cambios;
+
+  if v_has_log_cambios then
+    select exists (select 1 from public.log_cambios limit 1) into v_log_has_data;
+  end if;
+
+  if v_log_has_data then
     return query
     select
-      al.actor_email::text,
-      al.action::text,
-      al.entity_type::text,
-      al.resource_id::uuid as entity_id,
-      coalesce(r.name_es, r.name_gl, '(recurso eliminado)')::text as entity_name,
-      al.created_at::timestamptz,
-      coalesce(al.field_name, '')::text as field_name
-    from public.audit_log al
-    left join public.resources r on r.id = al.resource_id
-    where (not p_only_mine or al.actor_id = auth.uid())
-    order by al.created_at desc
+      u.email::text as actor_email,
+      lc.accion::text as action,
+      lc.entidad_tipo::text as entity_type,
+      lc.entidad_id as entity_id,
+      coalesce(
+        public.tr_get('recurso_turistico', lc.entidad_id, 'name', 'es'),
+        public.tr_get('recurso_turistico', lc.entidad_id, 'name', 'gl'),
+        '(recurso eliminado)'
+      )::text as entity_name,
+      lc.created_at,
+      coalesce(
+        case
+          when lc.cambios ? 'fields' and jsonb_typeof(lc.cambios->'fields') = 'array'
+            then (lc.cambios->'fields'->>0)
+          else null
+        end,
+        ''
+      )::text as field_name
+    from public.log_cambios lc
+    left join public.usuario u on u.id = lc.usuario_id
+    where lc.entidad_tipo = 'recurso_turistico'
+      and (not p_only_mine or lc.usuario_id = auth.uid())
+    order by lc.created_at desc
     limit p_limit;
   else
-    -- Fallback: updated_at de resources
     return query
     select
       null::text as actor_email,
-      'Modificado'::text as action,
-      'resource'::text as entity_type,
+      'modificar'::text as action,
+      'recurso_turistico'::text as entity_type,
       r.id as entity_id,
-      coalesce(r.name_es, r.name_gl, '(sin nombre)')::text as entity_name,
-      r.updated_at::timestamptz as created_at,
+      coalesce(
+        public.tr_get('recurso_turistico', r.id, 'name', 'es'),
+        public.tr_get('recurso_turistico', r.id, 'name', 'gl'),
+        '(sin nombre)'
+      )::text as entity_name,
+      r.updated_at as created_at,
       ''::text as field_name
-    from public.resources r
+    from public.recurso_turistico r
     where (not p_only_mine or r.created_by = auth.uid())
     order by r.updated_at desc
     limit p_limit;
@@ -256,13 +296,10 @@ end;
 $$;
 
 comment on function public.dashboard_get_recent_activity is
-  'Últimas acciones en el sistema. Lee audit_log si existe, si no devuelve updated_at de recursos.';
+  'Últimas acciones en el sistema. Lee log_cambios (tabla real del repo) con JOIN a usuario para actor_email; fallback a updated_at de recurso_turistico si log vacío.';
 
 
--- ─── 6) RPC dashboard_get_translation_progress ──────────────────────────
---
--- Porcentaje de cobertura por idioma (cuántos de los recursos
--- publicados tienen contenido en cada idioma).
+-- ─── 7) RPC dashboard_get_translation_progress ──────────────────────────
 
 create or replace function public.dashboard_get_translation_progress()
 returns table (
@@ -276,29 +313,47 @@ stable
 as $$
   with base as (
     select count(*)::bigint as total
-    from public.resources
-    where publication_status = 'published'
+    from public.recurso_turistico
+    where estado_editorial = 'publicado'
   ),
   langs as (
-    select 'es' as lang,
-      count(*) filter (where coalesce(length(name_es), 0) > 0 and publication_status = 'published')::bigint as translated
-      from public.resources
+    -- ES via traduccion
+    select 'es'::text as lang,
+      count(*) filter (
+        where coalesce(length(public.tr_get('recurso_turistico', r.id, 'name', 'es')), 0) > 0
+          and r.estado_editorial = 'publicado'
+      )::bigint as translated
+      from public.recurso_turistico r
     union all
-    select 'gl' as lang,
-      count(*) filter (where coalesce(length(name_gl), 0) > 0 and publication_status = 'published')::bigint
-      from public.resources
+    -- GL via traduccion
+    select 'gl'::text as lang,
+      count(*) filter (
+        where coalesce(length(public.tr_get('recurso_turistico', r.id, 'name', 'gl')), 0) > 0
+          and r.estado_editorial = 'publicado'
+      )::bigint
+      from public.recurso_turistico r
     union all
-    select 'en' as lang,
-      count(*) filter (where coalesce(translations->'en'->>'name', '') <> '' and publication_status = 'published')::bigint
-      from public.resources
+    -- EN desde jsonb translations (paso 6 · migración 024)
+    select 'en'::text as lang,
+      count(*) filter (
+        where coalesce(translations->'en'->>'name', '') <> ''
+          and estado_editorial = 'publicado'
+      )::bigint
+      from public.recurso_turistico
     union all
-    select 'fr' as lang,
-      count(*) filter (where coalesce(translations->'fr'->>'name', '') <> '' and publication_status = 'published')::bigint
-      from public.resources
+    select 'fr'::text as lang,
+      count(*) filter (
+        where coalesce(translations->'fr'->>'name', '') <> ''
+          and estado_editorial = 'publicado'
+      )::bigint
+      from public.recurso_turistico
     union all
-    select 'pt' as lang,
-      count(*) filter (where coalesce(translations->'pt'->>'name', '') <> '' and publication_status = 'published')::bigint
-      from public.resources
+    select 'pt'::text as lang,
+      count(*) filter (
+        where coalesce(translations->'pt'->>'name', '') <> ''
+          and estado_editorial = 'publicado'
+      )::bigint
+      from public.recurso_turistico
   )
   select
     l.lang as language_code,
@@ -315,37 +370,31 @@ as $$
 $$;
 
 comment on function public.dashboard_get_translation_progress is
-  'Progreso de traducción por idioma: % de recursos publicados con contenido en cada idioma.';
+  'Progreso de traducción por idioma: % de recursos publicados con contenido en cada idioma. ES/GL desde tabla traduccion; EN/FR/PT desde jsonb translations del paso 6.';
 
 
--- ─── 7) RPC dashboard_get_une_indicators ────────────────────────────────
+-- ─── 8) RPC dashboard_get_une_indicators ────────────────────────────────
 --
--- Los 5 indicadores UNE 178502 que ya veíamos en el dashboard actual.
--- Ahora calculados de verdad contra los datos, no placeholder.
+-- Los 5 indicadores UNE 178502 heurísticos (no métricas oficiales —
+-- aviso 3 del prompt: si auditoría exige oficiales, ajustar fórmulas).
 
 create or replace function public.dashboard_get_une_indicators()
 returns table (
-  -- Digitalización: % recursos con datos estructurados completos
   digitalization_percent numeric,
-  digitalization_band text,  -- 'A', 'B', 'C', 'D'
+  digitalization_band text,
 
-  -- Multilingüismo: % recursos con al menos 2 idiomas completos
   multilingualism_percent numeric,
   multilingualism_band text,
 
-  -- Georreferenciación: % recursos visibles en mapa con coordenadas válidas
   georeferencing_percent numeric,
   georeferencing_band text,
 
-  -- Actualización 30d: % recursos actualizados en últimos 30 días
   freshness_30d_percent numeric,
   freshness_30d_band text,
 
-  -- Actualización 90d: % recursos actualizados en últimos 90 días
   freshness_90d_percent numeric,
   freshness_90d_band text,
 
-  -- Interoperabilidad PID: % recursos exportados exitosamente al PID
   pid_interop_percent numeric,
   pid_interop_band text
 )
@@ -362,8 +411,8 @@ declare
   v_fresh90 numeric := 0;
   v_pid numeric := 0;
 begin
-  select count(*) into v_total from public.resources;
-  select count(*) into v_published from public.resources where publication_status = 'published';
+  select count(*) into v_total from public.recurso_turistico;
+  select count(*) into v_published from public.recurso_turistico where estado_editorial = 'publicado';
 
   if v_total = 0 then
     return query select
@@ -376,49 +425,49 @@ begin
     return;
   end if;
 
-  -- Digitalización: % con nombre ES + descripción ES + tipología + municipio
+  -- Digitalización: % con nombre ES + descripción ES (≥30 chars) + tipología + municipio
   select round(
     count(*) filter (
-      where coalesce(length(name_es), 0) > 0
-        and coalesce(length(description_es), 0) >= 30
-        and single_type_vocabulary is not null
-        and municipality_id is not null
+      where coalesce(length(public.tr_get('recurso_turistico', r.id, 'name', 'es')), 0) > 0
+        and coalesce(length(public.tr_get('recurso_turistico', r.id, 'description', 'es')), 0) >= 30
+        and r.rdf_type is not null and r.rdf_type <> ''
+        and r.municipio_id is not null
     )::numeric * 100 / greatest(v_total, 1),
     0
-  ) into v_digitalization from public.resources;
+  ) into v_digitalization from public.recurso_turistico r;
 
-  -- Multilingüismo: al menos ES y GL
+  -- Multilingüismo: ES y GL
   select round(
     count(*) filter (
-      where coalesce(length(name_es), 0) > 0
-        and coalesce(length(name_gl), 0) > 0
+      where coalesce(length(public.tr_get('recurso_turistico', r.id, 'name', 'es')), 0) > 0
+        and coalesce(length(public.tr_get('recurso_turistico', r.id, 'name', 'gl')), 0) > 0
     )::numeric * 100 / greatest(v_total, 1),
     0
-  ) into v_multilingualism from public.resources;
+  ) into v_multilingualism from public.recurso_turistico r;
 
-  -- Georreferenciación: visible en mapa con coordenadas
+  -- Georreferenciación: visible_en_mapa + coordenadas
   select round(
     count(*) filter (
-      where coalesce(visible_on_map, true)
+      where coalesce(visible_en_mapa, true)
         and latitude is not null
         and longitude is not null
     )::numeric * 100 / greatest(v_total, 1),
     0
-  ) into v_georef from public.resources;
+  ) into v_georef from public.recurso_turistico;
 
   -- Actualización 30 días
   select round(
     count(*) filter (where updated_at >= (now() - interval '30 days'))::numeric * 100 / greatest(v_total, 1),
     0
-  ) into v_fresh30 from public.resources;
+  ) into v_fresh30 from public.recurso_turistico;
 
   -- Actualización 90 días
   select round(
     count(*) filter (where updated_at >= (now() - interval '90 days'))::numeric * 100 / greatest(v_total, 1),
     0
-  ) into v_fresh90 from public.resources;
+  ) into v_fresh90 from public.recurso_turistico;
 
-  -- Interoperabilidad PID: % publicados exportados con éxito (mínimo una vez)
+  -- Interoperabilidad PID
   if v_published > 0 and exists (select 1 from public.export_jobs where job_type = 'pid' and status = 'success') then
     v_pid := 100;
   else
@@ -435,19 +484,5 @@ begin
 end;
 $$;
 
--- Helper: convierte % en letra A/B/C/D (solo si no existe ya)
-create or replace function public.band_from_percent(p_pct numeric)
-returns text
-language sql
-immutable
-as $$
-  select case
-    when p_pct >= 85 then 'A'
-    when p_pct >= 65 then 'B'
-    when p_pct >= 40 then 'C'
-    else 'D'
-  end;
-$$;
-
 comment on function public.dashboard_get_une_indicators is
-  '5 indicadores clave alineados con UNE 178502: digitalización, multilingüismo, georreferenciación, actualización y interoperabilidad PID.';
+  '6 indicadores heurísticos alineados con UNE 178502: digitalización, multilingüismo, georreferenciación, actualización 30d/90d, interoperabilidad PID. NO son métricas oficiales del INE/Ministerio (aviso 3 del prompt 13): si auditoría exige oficiales, ajustar fórmulas.';
