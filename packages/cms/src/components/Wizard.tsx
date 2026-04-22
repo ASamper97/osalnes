@@ -71,7 +71,13 @@ export function Wizard({
     return false;
   });
 
-  const progressPercent = Math.round(((currentStep) / steps.length) * 100);
+  // Wizard global · t3 — fix del bug "paso 7 de 7 = 86%". `currentStep`
+  // es 0-indexed: paso 7 humano = índice 6. La fórmula correcta es
+  // `(currentStep + 1) / steps.length * 100`. Afecta a los wizards que
+  // todavía usan el stepper legacy (CategoryWizard, PageWizard, …);
+  // ResourceWizardPage monta su propio WizardStepper desde t2 que usa
+  // `computeProgressPercent()` de shared con la fórmula correcta.
+  const progressPercent = Math.round(((currentStep + 1) / steps.length) * 100);
 
   const goNext = useCallback(() => {
     setValidationErrors([]);
