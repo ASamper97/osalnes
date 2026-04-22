@@ -335,7 +335,7 @@ begin
     r.scheduled_publish_at,
     r.published_at,
     r.updated_at,
-    r.last_editor_email,
+    r.last_editor_email::text,
     v_total as total_count
   from public.resources_list_view r
   where
