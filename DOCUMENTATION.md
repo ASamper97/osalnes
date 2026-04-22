@@ -38,6 +38,7 @@ Los recursos turísticos siguen el vocabulario **schema.org** con extensiones **
 - Cada recurso tiene un `uri` único (e.g. `https://turismo.osalnes.gal/recurso/<uuid>`)
 - El campo `rdfType` mapea tipologías a clases schema.org: `schema:LodgingBusiness`, `schema:Restaurant`, `schema:TouristAttraction`, etc.
 - Todos los campos textuales son multilingüe: `{ "es": "...", "gl": "..." }`
+- **Relaciones entre recursos** (pliego 5.1.1 último bullet): el paso 7 del wizard permite crear estructuras jerárquicas y vinculadas mediante 7 predicados (`is_part_of`, `contains`, `related_to`, `includes`, `near_by`, `same_category`, `follows`). Se exportan al PID en JSON-LD alineado con UNE 178503 / SEGITTUR vía la función SQL `generate_jsonld_relations(resource_id)` (migración 029). Bidireccionalidad automática por trigger + detección de ciclos en las jerárquicas.
 
 ---
 
