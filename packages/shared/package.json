@@ -57,6 +57,10 @@
     "./data/publication-status": {
       "types": "./dist/data/publication-status.d.ts",
       "default": "./dist/data/publication-status.js"
+    },
+    "./data/wizard-navigation": {
+      "types": "./dist/data/wizard-navigation.d.ts",
+      "default": "./dist/data/wizard-navigation.js"
     }
   },
   "scripts": {
