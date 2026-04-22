@@ -2,29 +2,36 @@
 -- Migration 027 — Listado fase B: duplicar + vistas guardadas + bulk actions
 -- ==========================================================================
 --
+-- Adaptado al schema real (igual que 026):
+--   - Tabla `recurso_turistico` (NO `resources`).
+--   - `estado_editorial` Spanish (NO `publication_status` English).
+--   - Nombre/descripción en `traduccion` (NO columnas name_es/name_gl/...).
+--   - Columnas paso 3/4/5/6: `visible_en_mapa`, `public_access`,
+--     `is_accessible_for_free`, `opening_hours_plan`, `municipio_id`,
+--     `og_image_override_path`, etc.
+--   - `resource_images.storage_path/sort_order` (NO `path/order_index`).
+--   - `resource_videos.sort_order` + campos del paso 5 (external_id,
+--     thumbnail_url).
+--   - `resource_documents.storage_path/kind/lang/sort_order` +
+--     `mime_type/original_filename/size_bytes`.
+--
 -- Añade:
---   1. RPC duplicate_resource(uuid) — copia profunda con nuevo UUID
---   2. Tabla saved_views + RPCs para vistas guardadas por usuario
---   3. RPCs bulk: bulk_change_status, bulk_delete, bulk_archive
+--   1. RPC duplicate_resource(uuid) — copia profunda con nuevo UUID.
+--      * Clona la fila de recurso_turistico con estado 'borrador'.
+--      * Clona las filas de traduccion (name + description en todos los
+--        idiomas) con sufijo '(copia)' en name_es.
+--      * Clona resource_images, resource_videos, resource_documents y
+--        resource_tags con nuevos UUIDs.
+--      * NO duplica el binario físico en Storage (el aviso 3 del prompt
+--        documenta esta deuda): los paths apuntan al mismo blob.
+--   2. Tabla saved_views + RPCs (list/upsert/delete) con RLS.
+--   3. RPCs bulk: bulk_change_status, bulk_delete_resources.
 --
 -- Idempotente.
 -- ==========================================================================
 
 
 -- ─── 1) RPC duplicate_resource ─────────────────────────────────────────
---
--- Copia:
---   - Fila principal de resources (con nuevo UUID, estado draft,
---     slug único con sufijo, nombre con "(copia)").
---   - resource_images, resource_videos, resource_documents.
---   - resource_tags.
---   - No copia: audit_log, published_at, scheduled_publish_at,
---     og_image_override_path (el path del archivo quedaría duplicado
---     lógicamente, pero el blob en storage se mantiene compartido;
---     iteración futura: duplicar también el binario en Storage).
---
--- Devuelve el nuevo UUID para que el cliente pueda navegar al recurso
--- duplicado inmediatamente.
 
 create or replace function public.duplicate_resource(
   p_source_id uuid
@@ -38,134 +45,154 @@ declare
   v_slug_base text;
   v_slug_candidate text;
   v_counter integer := 1;
-  v_src public.resources%rowtype;
+  v_src public.recurso_turistico%rowtype;
+  v_new_uri text;
 begin
   -- Cargar el recurso origen
-  select * into v_src from public.resources where id = p_source_id;
+  select * into v_src from public.recurso_turistico where id = p_source_id;
   if not found then
     raise exception 'Recurso origen % no existe', p_source_id;
   end if;
 
-  -- Calcular slug único añadiendo -copia, -copia-2, -copia-3...
+  -- Calcular slug único añadiendo -copia, -copia-2, ...
   v_slug_base := v_src.slug || '-copia';
   v_slug_candidate := v_slug_base;
-  while exists (select 1 from public.resources where slug = v_slug_candidate) loop
+  while exists (select 1 from public.recurso_turistico where slug = v_slug_candidate) loop
     v_counter := v_counter + 1;
     v_slug_candidate := v_slug_base || '-' || v_counter;
   end loop;
 
+  -- URI estable coherente con admin.createResource: osalnes:recurso:{slug}
+  v_new_uri := 'osalnes:recurso:' || v_slug_candidate;
+
   -- Insertar copia con nuevo UUID y campos reseteados
-  insert into public.resources (
+  insert into public.recurso_turistico (
     id,
-    single_type_vocabulary,
-    name_es,
-    name_gl,
+    uri,
+    rdf_type,
+    rdf_types,
     slug,
-    description_es,
-    description_gl,
-    access_public,
-    access_free,
-    visible_on_map,
-    latitude,
-    longitude,
-    street_address,
-    postal_code,
-    contact_phone,
-    contact_email,
-    contact_web,
-    hours_plan,
-    municipality_id,
-    accommodation_rating,
-    occupancy,
-    serves_cuisine,
-    seo_by_lang,
-    translations,
-    keywords,
-    indexable,
-    canonical_url,
-    -- Los siguientes campos se resetean explícitamente:
-    publication_status,
-    published_at,
-    published_by,
-    scheduled_publish_at,
-    og_image_override_path,
-    created_by,
-    created_at,
-    updated_at
+    municipio_id,
+    zona_id,
+    -- Paso 3 · t4 (estructurado + legacy espejo)
+    latitude, longitude,
+    address_street, address_postal,
+    telephone, email, url, same_as,
+    opening_hours,
+    street_address, postal_code, locality, parroquia_text,
+    contact_phone, contact_email, contact_web,
+    social_links, opening_hours_plan,
+    -- Paso 4 · t5 (establishment)
+    accommodation_rating, occupancy, serves_cuisine,
+    -- Flags legacy
+    tourist_types, rating_value,
+    is_accessible_for_free, public_access,
+    visible_en_mapa,
+    extras,
+    -- Paso 6 · t4 (SEO)
+    seo_by_lang, translations, keywords, indexable, canonical_url,
+    -- RESETEADOS explícitamente:
+    estado_editorial,            -- 'borrador'
+    published_at,                -- null
+    published_by,                -- null
+    scheduled_publish_at,        -- null
+    og_image_override_path,      -- null (iteración futura: copiar blob)
+    created_by,                  -- auth.uid() (quien duplica)
+    updated_by,
+    created_at, updated_at
   )
   values (
     v_new_id,
-    v_src.single_type_vocabulary,
-    coalesce(v_src.name_es, '') || ' (copia)',
-    case when v_src.name_gl is not null and v_src.name_gl <> ''
-         then v_src.name_gl || ' (copia)'
-         else v_src.name_gl
-    end,
+    v_new_uri,
+    v_src.rdf_type,
+    v_src.rdf_types,
     v_slug_candidate,
-    v_src.description_es,
-    v_src.description_gl,
-    v_src.access_public,
-    v_src.access_free,
-    v_src.visible_on_map,
-    v_src.latitude,
-    v_src.longitude,
-    v_src.street_address,
-    v_src.postal_code,
-    v_src.contact_phone,
-    v_src.contact_email,
-    v_src.contact_web,
-    v_src.hours_plan,
-    v_src.municipality_id,
-    v_src.accommodation_rating,
-    v_src.occupancy,
-    v_src.serves_cuisine,
-    v_src.seo_by_lang,
-    v_src.translations,
-    v_src.keywords,
-    v_src.indexable,
-    v_src.canonical_url,
-    'draft',                    -- siempre draft
-    null,                       -- sin published_at
-    null,                       -- sin published_by
-    null,                       -- sin scheduled_publish_at
-    null,                       -- sin override OG (usa la principal del paso 5)
-    auth.uid(),                 -- el que duplica es el nuevo creador
-    now(),
-    now()
+    v_src.municipio_id,
+    v_src.zona_id,
+    v_src.latitude, v_src.longitude,
+    v_src.address_street, v_src.address_postal,
+    v_src.telephone, v_src.email, v_src.url, v_src.same_as,
+    v_src.opening_hours,
+    v_src.street_address, v_src.postal_code, v_src.locality, v_src.parroquia_text,
+    v_src.contact_phone, v_src.contact_email, v_src.contact_web,
+    v_src.social_links, v_src.opening_hours_plan,
+    v_src.accommodation_rating, v_src.occupancy, v_src.serves_cuisine,
+    v_src.tourist_types, v_src.rating_value,
+    v_src.is_accessible_for_free, v_src.public_access,
+    v_src.visible_en_mapa,
+    v_src.extras,
+    v_src.seo_by_lang, v_src.translations, v_src.keywords, v_src.indexable, v_src.canonical_url,
+    'borrador',
+    null, null, null, null,
+    auth.uid(), auth.uid(),
+    now(), now()
   );
 
-  -- Copiar imágenes
-  insert into public.resource_images (
-    id, resource_id, path, alt_text, is_primary, order_index, uploaded_at
-  )
-  select gen_random_uuid(), v_new_id, path, alt_text, is_primary, order_index, now()
-  from public.resource_images where resource_id = p_source_id;
+  -- Copiar traducciones (name + description en todos los idiomas).
+  -- Añadimos sufijo '(copia)' al name_es y name_gl para distinguir el
+  -- duplicado en el listado. El resto de idiomas se copia literal.
+  insert into public.traduccion (entidad_tipo, entidad_id, campo, idioma, valor)
+  select
+    'recurso_turistico',
+    v_new_id,
+    t.campo,
+    t.idioma,
+    case
+      when t.campo = 'name' and t.idioma in ('es', 'gl')
+        then t.valor || ' (copia)'
+      else t.valor
+    end
+  from public.traduccion t
+  where t.entidad_tipo = 'recurso_turistico'
+    and t.entidad_id = p_source_id;
 
-  -- Copiar vídeos
-  insert into public.resource_videos (
-    id, resource_id, url, title, provider, order_index, created_at
+  -- Copiar imágenes (columnas reales del paso 5 · t1)
+  insert into public.resource_images (
+    id, resource_id, storage_path, mime_type, size_bytes,
+    width, height, alt_text, alt_source, is_primary, sort_order,
+    created_at, created_by
   )
-  select gen_random_uuid(), v_new_id, url, title, provider, order_index, now()
-  from public.resource_videos where resource_id = p_source_id;
+  select
+    gen_random_uuid(), v_new_id, storage_path, mime_type, size_bytes,
+    width, height, alt_text, alt_source, is_primary, sort_order,
+    now(), auth.uid()
+  from public.resource_images
+  where resource_id = p_source_id;
+
+  -- Copiar vídeos (URL externa del paso 5)
+  insert into public.resource_videos (
+    id, resource_id, url, provider, external_id, title, thumbnail_url,
+    sort_order, created_at, created_by
+  )
+  select
+    gen_random_uuid(), v_new_id, url, provider, external_id, title, thumbnail_url,
+    sort_order, now(), auth.uid()
+  from public.resource_videos
+  where resource_id = p_source_id;
 
   -- Copiar documentos
   insert into public.resource_documents (
-    id, resource_id, path, title, doc_type, language, size_bytes, order_index, uploaded_at
+    id, resource_id, storage_path, mime_type, size_bytes, original_filename,
+    title, kind, lang, sort_order, created_at, created_by
   )
-  select gen_random_uuid(), v_new_id, path, title, doc_type, language, size_bytes, order_index, now()
-  from public.resource_documents where resource_id = p_source_id;
+  select
+    gen_random_uuid(), v_new_id, storage_path, mime_type, size_bytes, original_filename,
+    title, kind, lang, sort_order, now(), auth.uid()
+  from public.resource_documents
+  where resource_id = p_source_id;
 
-  -- Copiar tags
-  insert into public.resource_tags (resource_id, tag_key)
-  select v_new_id, tag_key
-  from public.resource_tags where resource_id = p_source_id;
+  -- Copiar tags UNE 178503 (paso 4 · t1)
+  insert into public.resource_tags (resource_id, tag_key, field, value, pid_exportable, source)
+  select v_new_id, tag_key, field, value, pid_exportable, source
+  from public.resource_tags
+  where resource_id = p_source_id;
 
   return v_new_id;
 end;
 $$;
 
 comment on function public.duplicate_resource is
-  'Copia profunda de un recurso: crea nueva fila en resources con nuevo UUID y slug único, copia sus imágenes/vídeos/documentos/tags. Resetea estado a draft. Devuelve el nuevo UUID.';
+  'Copia profunda de un recurso: crea nueva fila en recurso_turistico con nuevo UUID y slug único, copia traducciones (sufijo "(copia)" en name ES/GL), imágenes/vídeos/documentos/tags. Resetea estado a borrador. Los blobs físicos de Storage NO se duplican (ambos recursos apuntan al mismo archivo — deuda para iteración futura). Devuelve el nuevo UUID.';
 
 
 -- ─── 2) Tabla saved_views + RPCs ───────────────────────────────────────
@@ -288,15 +315,16 @@ as $$
 declare
   v_count integer;
 begin
-  if p_new_status not in ('draft', 'published', 'scheduled', 'archived', 'in_review') then
+  -- Valores Spanish del CHECK real de recurso_turistico.estado_editorial
+  if p_new_status not in ('borrador', 'revision', 'programado', 'publicado', 'archivado') then
     raise exception 'Estado inválido: %', p_new_status;
   end if;
 
-  update public.resources
-  set publication_status = p_new_status,
-      published_at = case when p_new_status = 'published' then now() else published_at end,
-      published_by = case when p_new_status = 'published' then auth.uid() else published_by end,
-      scheduled_publish_at = case when p_new_status <> 'scheduled' then null else scheduled_publish_at end,
+  update public.recurso_turistico
+  set estado_editorial = p_new_status,
+      published_at = case when p_new_status = 'publicado' then now() else published_at end,
+      published_by = case when p_new_status = 'publicado' then auth.uid() else published_by end,
+      scheduled_publish_at = case when p_new_status <> 'programado' then null else scheduled_publish_at end,
       updated_at = now()
   where id = any(p_resource_ids);
 
@@ -306,7 +334,7 @@ end;
 $$;
 
 comment on function public.bulk_change_status is
-  'Cambia el estado de múltiples recursos de golpe. Devuelve el número de recursos afectados.';
+  'Cambia estado_editorial de múltiples recursos de golpe. Acepta valores Spanish del CHECK. Devuelve el número de recursos afectados.';
 
 create or replace function public.bulk_delete_resources(
   p_resource_ids uuid[]
@@ -318,7 +346,7 @@ as $$
 declare
   v_count integer;
 begin
-  delete from public.resources
+  delete from public.recurso_turistico
   where id = any(p_resource_ids);
 
   get diagnostics v_count = row_count;
