@@ -311,18 +311,22 @@ begin
     ))
     and (p_owner_id is null or r.created_by = p_owner_id);
 
-  -- Segunda pasada: devolver página
+  -- Segunda pasada: devolver página.
+  -- Casts a `text`: las columnas `slug`, `rdf_type`, `estado_editorial` y
+  -- el `municipio.slug` son VARCHAR(N) en BD, y Postgres distingue
+  -- `text` de `varchar(N)` al validar el return table. Casteamos aquí
+  -- para evitar "structure of query does not match function result type".
   return query
   select
     r.id,
     r.name_es,
     r.name_gl,
-    r.slug,
-    r.rdf_type as single_type_vocabulary,
-    r.estado_editorial as publication_status,
+    r.slug::text,
+    (r.rdf_type)::text as single_type_vocabulary,
+    (r.estado_editorial)::text as publication_status,
     r.municipio_id as municipality_id,
-    r.municipio_name as municipality_name,
-    r.municipio_slug as municipality_slug,
+    r.municipio_name::text as municipality_name,
+    r.municipio_slug::text as municipality_slug,
     r.has_lang_es, r.has_lang_gl, r.has_lang_en, r.has_lang_fr, r.has_lang_pt,
     r.has_coordinates,
     coalesce(r.visible_en_mapa, true) as visible_on_map,
