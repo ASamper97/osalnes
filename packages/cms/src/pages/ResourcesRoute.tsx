@@ -26,6 +26,36 @@ import type { TypologyOption, MunicipalityOption } from '@/components/listado/Li
 import type { ListResourceRow } from '@osalnes/shared/data/resources-list';
 import '@/pages/listado.css';
 
+/** Mapper snake_case → camelCase igual al del hook. Aquí lo duplicamos
+ *  porque onFetchAllFilteredRows necesita convertir las filas de la RPC
+ *  antes de pasarlas al diálogo de export. */
+function mapRpcRow(r: Record<string, unknown>): ListResourceRow {
+  return {
+    id: String(r.id ?? ''),
+    nameEs: String(r.name_es ?? ''),
+    nameGl: String(r.name_gl ?? ''),
+    slug: String(r.slug ?? ''),
+    singleTypeVocabulary: (r.single_type_vocabulary as string) ?? null,
+    publicationStatus: (r.publication_status as ListResourceRow['publicationStatus']) ?? 'borrador',
+    municipalityId: (r.municipality_id as string) ?? null,
+    municipalityName: (r.municipality_name as string) ?? null,
+    municipalitySlug: (r.municipality_slug as string) ?? null,
+    hasLangEs: Boolean(r.has_lang_es),
+    hasLangGl: Boolean(r.has_lang_gl),
+    hasLangEn: Boolean(r.has_lang_en),
+    hasLangFr: Boolean(r.has_lang_fr),
+    hasLangPt: Boolean(r.has_lang_pt),
+    hasCoordinates: Boolean(r.has_coordinates),
+    visibleOnMap: Boolean(r.visible_on_map),
+    qualityScore: Number(r.quality_score ?? 0),
+    pidMissingRequired: Number(r.pid_missing_required ?? 0),
+    scheduledPublishAt: (r.scheduled_publish_at as string) ?? null,
+    publishedAt: (r.published_at as string) ?? null,
+    updatedAt: String(r.updated_at ?? new Date().toISOString()),
+    lastEditorEmail: (r.last_editor_email as string) ?? null,
+  };
+}
+
 // Mapeo rdf_type → grupo raíz (misma tabla que el legacy ResourcesPage).
 // Si el rdf_type no está en el mapa, cae a 'general' como fallback
 // (decisión documentada en el prompt).
@@ -145,15 +175,16 @@ export default function ResourcesRoute() {
         });
         if (error) throw error;
       }}
-      onDuplicate={async (_id) => {
-        // Placeholder hasta la fase B del listado (prompt 11 explícito).
-        // La implementación real (RPC `duplicate_resource`) copiará el
-        // recurso + imágenes + tags + videos + documentos + SEO +
-        // translations con nuevo UUID y slug con sufijo "-copia".
-        alert(
-          'Duplicar está pendiente de implementar (Listado fase B).\n\n' +
-          'Mientras tanto puedes abrir el recurso, copiar manualmente los campos y crear uno nuevo.',
-        );
+      onDuplicate={async (id) => {
+        // Listado B · t3 — duplicación REAL vía RPC duplicate_resource
+        // (migración 027). Clona recurso + traducciones + imágenes +
+        // vídeos + documentos + tags. Devuelve el UUID del duplicado
+        // para que el listado pueda refrescar y/o navegar.
+        const { data, error } = await supabase.rpc('duplicate_resource', {
+          p_source_id: id,
+        });
+        if (error) throw error;
+        return String(data ?? '');
       }}
       onViewHistory={(id) => navigate(`/resources/${id}?scrollTo=audit-log`)}
       onDeleteResource={async (id) => {
@@ -170,6 +201,49 @@ export default function ResourcesRoute() {
         });
         if (error) throw error;
       }}
+      onBulkChangeStatus={async (ids, newStatus) => {
+        // Listado B · t3 — RPC bulk_change_status. Acepta valores Spanish
+        // y valida contra el CHECK real de estado_editorial.
+        const { error } = await supabase.rpc('bulk_change_status', {
+          p_resource_ids: ids,
+          p_new_status: newStatus,
+        });
+        if (error) throw error;
+      }}
+      onBulkDelete={async (ids) => {
+        const { error } = await supabase.rpc('bulk_delete_resources', {
+          p_resource_ids: ids,
+        });
+        if (error) throw error;
+      }}
+      onFetchAllFilteredRows={async () => {
+        // Listado B · t3 — CRÍTICO: replicar TODOS los filtros que usa
+        // useResourcesList pero con p_page_size alto (5000) para volcar
+        // sin paginación. Si algún filtro se olvida, el CSV incluiría
+        // filas que NO están en la tabla visible (aviso 2 del prompt).
+        const f = state.filters;
+        const ownerFilter = f.onlyMine ? currentUserId : null;
+        const { data, error } = await supabase.rpc('list_resources', {
+          p_search: f.search.trim() || null,
+          p_status: f.status === 'all' ? null : f.status,
+          p_type_keys: f.typeKeys.length > 0 ? f.typeKeys : null,
+          p_municipality_ids: f.municipalityIds.length > 0 ? f.municipalityIds : null,
+          p_languages_missing:
+            f.languagesMissing.length > 0 ? f.languagesMissing : null,
+          p_visible_on_map: f.visibleOnMap,
+          p_has_coordinates: f.hasCoordinates,
+          p_incomplete_for_publish: f.incompleteForPublish,
+          p_owner_id: ownerFilter,
+          p_order_by: state.sort.orderBy,
+          p_order_dir: state.sort.orderDir,
+          p_page: 1,
+          p_page_size: 5000,
+        });
+        if (error) throw error;
+        const rows = (data ?? []) as Record<string, unknown>[];
+        return rows.map(mapRpcRow);
+      }}
+      supabase={supabase as unknown as SupabaseLike}
     />
   );
 }
