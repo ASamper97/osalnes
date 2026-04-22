@@ -9,5 +9,6 @@ drop function if exists public.list_resources(
   text, text, integer, integer
 );
 drop view if exists public.resources_list_view;
-drop function if exists public.count_pid_missing_required(public.resources);
-drop function if exists public.compute_resource_quality_score(public.resources);
+drop function if exists public.count_pid_missing_required(uuid);
+drop function if exists public.compute_resource_quality_score(uuid);
+drop function if exists public.tr_get(text, uuid, text, text);
