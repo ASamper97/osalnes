@@ -60,6 +60,11 @@ import type { PublicationStatus } from '@osalnes/shared/data/publication-status'
 import type { AuditEntry } from '@/components/AuditLogPanel';
 import { aiSuggestImprovements, type AiImprovementSuggestion } from '@/lib/ai';
 import '@/pages/step7-review.css';
+// Paso 8 · t3 — Relaciones entre recursos (UNE 178503, pliego 5.1.1).
+// Pasa a ser el paso 7 del wizard (0-indexed 6); Revisión se desplaza al 8.
+import ResourceWizardStep8Relations from '@/pages/ResourceWizardStep8Relations';
+import { useRelations } from '@/hooks/useRelations';
+import '@/pages/step8-relations.css';
 // ── Wizard global (transversal) ──────────────────────────────────────
 import WizardStepper from '@/components/WizardStepper';
 import AutoSaveIndicator from '@/components/AutoSaveIndicator';
@@ -906,6 +911,16 @@ export function ResourceWizardPage() {
       icon: '🌐',
       help: 'Optimiza como aparece el recurso en Google y traduce a ingles, frances y portugues. El titulo SEO ideal tiene menos de 60 caracteres y la descripcion menos de 160.',
       validate: validateStep6,
+      optional: true,
+    },
+    {
+      id: 'relaciones',
+      title: 'Relaciones',
+      subtitle: 'Vincula este recurso con otros (UNE 178503)',
+      icon: '🔗',
+      help: savedId
+        ? 'Crea relaciones semánticas con otros recursos: rutas que contienen este hito, POIs cercanos, la misma categoría, etc. Se exportarán al PID en JSON-LD.'
+        : 'Las relaciones se podrán crear después de guardar el recurso por primera vez. Completa este asistente y vuelve a editar para vincular con otros recursos.',
       optional: true,
     },
     {
@@ -1884,6 +1899,18 @@ export function ResourceWizardPage() {
     setGlStatus,
   });
 
+  // Paso 8 · t3 — Relaciones UNE 178503. El hook no pide nada hasta
+  // que el recurso esté guardado (si savedId es null, `relations` queda
+  // vacío y `createRelation` lanza "Debes guardar el recurso antes...").
+  // Cast a `SupabaseLike`: supabase-js devuelve `PostgrestFilterBuilder`
+  // (thenable) en `.rpc()`, que TS no reconoce como `Promise<...>`, pero
+  // en runtime se comporta exactamente como un Promise y `await` resuelve
+  // al shape `{data, error}` que espera el hook.
+  const relationsState = useRelations({
+    supabase: supabase as unknown as Parameters<typeof useRelations>[0]['supabase'],
+    resourceId: savedId,
+  });
+
   // Wrapper del onStepChange del Wizard: intercepta la salida del paso 2
   // (índice 1) para disparar la traducción background antes de avanzar.
   // No bloquea la navegación — el hook corre en paralelo.
@@ -2293,14 +2320,45 @@ export function ResourceWizardPage() {
       )}
 
       {/* ================================================================
-          STEP 7 — Revisión (paso 7a · t2)
+          STEP 7 — Relaciones entre recursos (paso 8 · t3)
+          ================================================================
+          Añade relaciones semánticas entre el recurso actual y otros
+          (is_part_of / contains / related_to / includes / near_by /
+          same_category / follows). Cumple pliego 5.1.1 último bullet
+          y se exporta en JSON-LD UNE 178503 vía `generate_jsonld_relations`.
+          El paso queda accesible siempre que haya savedId; el componente
+          muestra banner amarillo cuando resourceId es null. */}
+      {currentStep === 6 && (
+        <ResourceWizardStep8Relations
+          state={relationsState}
+          resourceId={savedId}
+          sourceType={mainTypeKey}
+          typologies={typologies.map((t) => ({ key: t.typeCode, label: t.name?.es ?? t.typeCode }))}
+          municipalities={municipalities.map((m) => ({ id: m.id, name: m.name?.es ?? m.id }))}
+          onOpenResource={(id) => navigate(`/resources/${id}`)}
+          onFetchJsonldPreview={async () => {
+            if (!savedId) return null;
+            const { data, error } = await supabase.rpc(
+              'generate_jsonld_relations',
+              { p_resource_id: savedId },
+            );
+            if (error) throw error;
+            return data;
+          }}
+        />
+      )}
+
+      {/* ================================================================
+          STEP 8 — Revisión (paso 7a · t2 · desplazado por paso 8 · t3)
           ================================================================
           Rediseño: ScoreDashboard global + 6 StepCards con estado honesto
           + PidCompletenessCard plegada + modal de confirmación al publicar
           + orden nuevo (resumen arriba, publicación abajo). Sustituye el
           bloque legacy (AiQualityScore + 6 WizardCompletionCard + PID
-          card inline + bug "Disponible tras guardar" del paso 5). */}
-      {currentStep === 6 && (
+          card inline + bug "Disponible tras guardar" del paso 5).
+          Paso 8 · t3 — currentStep === 7 (antes 6). onPrevious regresa
+          al paso 7 Relaciones (setCurrentStep(6)). */}
+      {currentStep === 7 && (
         <>
           <ResourceWizardStep7Review
             snapshot={resourceSnapshot}
@@ -2314,7 +2372,7 @@ export function ResourceWizardPage() {
             onSchedulePublish={handleSchedulePublish}
             onRequestAiSuggestions={handleRequestAiSuggestions}
             onLoadAuditLog={handleLoadAuditLog}
-            onPrevious={() => setCurrentStep(5)}
+            onPrevious={() => setCurrentStep(6)}
           />
 
           {/* Paso 7b · t4 — ActivityTimeline queda duplicado con el nuevo
