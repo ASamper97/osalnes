@@ -2,33 +2,11 @@
 -- Migration 030 — Centro de exportaciones (SCR-13) · Fase A
 -- ==========================================================================
 --
--- REESCRITO contra el esquema real del repo (auditoría pre-SCR-13,
--- 2026-04-23). El fichero anterior quedó como
--- 030_exports_full.sql.INCORRECTO.bak porque asumía tablas/columnas
--- en inglés (`public.resources`, `publication_status`, `name_es`,
--- `municipality_id`, `single_type_vocabulary`) que no existen en esta
--- base. Sigue el patrón de las migraciones 026 (traducciones vía
--- `tr_get`) y 029 (relaciones + JSON-LD).
---
--- Cambios respecto al .INCORRECTO.bak:
---   · public.resources              → public.recurso_turistico
---   · public.municipalities         → public.municipio
---   · publication_status            → estado_editorial
---   · valor 'published'             → 'publicado'
---   · single_type_vocabulary        → rdf_type
---   · municipality_id               → municipio_id
---   · r.name_es / r.description_es  → tr_get('recurso_turistico', r.id, 'name'|'description', 'es')
---   · count_pid_missing_required(r) → count_pid_missing_required(r.id) (firma real es uuid)
---   · FK export_job_records.resource_id → public.recurso_turistico(id)
---   · addressLocality               → tr_get('municipio', …) con fallback al slug
---   · telephone/email (arrays)      → coalesce(contact_*, array[1]) para soportar
---                                      los dos juegos de columnas que coexisten
---
--- Amplía la tabla export_jobs (creada en migración 028) con todos los
+-- Amplia la tabla export_jobs (creada en migración 028) con todos los
 -- campos necesarios para trazabilidad completa según el pliego 5.1.7:
 --   - payload (JSONB) del payload enviado
 --   - response_payload (JSONB) respuesta del sistema destino
---   - scope_type (all_published | filtered | selected | single)
+--   - scope_type (all_published | filtered | selected)
 --   - scope_filter (JSONB) filtros aplicados al generar
 --   - scope_ids (uuid[]) ids explícitos si scope_type='selected'
 --   - validation_errors (JSONB) errores del precheck
@@ -39,19 +17,16 @@
 -- Permite ver qué recurso concretamente falló y por qué.
 --
 -- Nuevas RPCs:
---   - exports_resolve_scope_ids(scope_type, filter, ids)   · helper
---   - exports_validate_scope(scope..., job_type)           · precheck sin crear job
---   - exports_launch(job_type, scope..., notes)            · crear job pending
---   - exports_process_pending(job_id)                      · fallback síncrono
---   - exports_list(filters, pagination)                    · listado
---   - exports_get_kpis()                                   · cabecera SCR-13
+--   - exports_list(filters, pagination)        · listado
+--   - exports_validate_scope(scope...)         · precheck sin crear job
+--   - exports_launch(scope..., job_type)       · crear job pending
+--   - exports_get_detail(job_id)               · detalle completo
+--   - exports_get_records(job_id, status?)     · records de un job
+--   - exports_retry(job_id, mode)              · relanzamiento (fase B)
+--   - exports_get_kpis()                       · para cabecera SCR-13
 --
--- Edge Function `export-worker` procesa los jobs en estado 'pending'
--- en producción; `exports_process_pending` es el fallback síncrono
--- para desarrollo o tests sin worker.
---
--- IMPORTANTE: NO toca la tabla `export_job` (singular, legacy migración
--- 001). Esa pertenece a otro sistema y no se usa en el SCR-13.
+-- Edge Function `export-worker` procesará los jobs en estado 'pending'
+-- y actualizará 'running' → 'success' | 'partial' | 'failed'.
 -- ==========================================================================
 
 
@@ -71,7 +46,7 @@ alter table public.export_jobs
   add column if not exists records_skipped integer default 0,
   add column if not exists notes text;
 
--- Ampliar el constraint de job_type para soportar decisión 2-B (4 tipos)
+-- Ampliar el constraint de job_type para soportar decisión 2-B
 do $$
 begin
   alter table public.export_jobs drop constraint if exists export_jobs_job_type_check;
@@ -87,13 +62,12 @@ create index if not exists idx_export_jobs_status_type on public.export_jobs (st
 -- ─── 2) Tabla export_job_records ───────────────────────────────────────
 --
 -- Detalle por recurso. Un job masivo procesa N recursos y cada uno
--- genera una fila aquí con su estado individual. FK real a
--- recurso_turistico (no a `resources`).
+-- genera una fila aquí con su estado individual.
 
 create table if not exists public.export_job_records (
   id uuid primary key default gen_random_uuid(),
   job_id uuid not null references public.export_jobs(id) on delete cascade,
-  resource_id uuid references public.recurso_turistico(id) on delete set null,
+  resource_id uuid references public.resources(id) on delete set null,
   /* Snapshot de nombre/slug por si se borra el recurso luego */
   resource_name text,
   resource_slug text,
@@ -141,33 +115,31 @@ begin
 
   if p_scope_type = 'all_published' then
     select array_agg(id) into v_ids
-    from public.recurso_turistico
-    where estado_editorial = 'publicado';
+    from public.resources
+    where publication_status = 'published';
     return coalesce(v_ids, '{}'::uuid[]);
   end if;
 
   if p_scope_type = 'filtered' then
     -- Los filtros vienen como JSONB con los mismos nombres que ListFilters
-    -- del frontend. 'status' acepta el valor castellano del CHECK
-    -- (borrador|revision|programado|publicado|archivado) o 'all'.
     select array_agg(r.id) into v_ids
-    from public.recurso_turistico r
+    from public.resources r
     where (
       (p_scope_filter->>'status') is null
       or (p_scope_filter->>'status') = 'all'
-      or r.estado_editorial = (p_scope_filter->>'status')
+      or r.publication_status::text = (p_scope_filter->>'status')
     )
     and (
       (p_scope_filter->'typeKeys') is null
       or jsonb_array_length(p_scope_filter->'typeKeys') = 0
-      or r.rdf_type = any(
+      or r.single_type_vocabulary = any(
            select jsonb_array_elements_text(p_scope_filter->'typeKeys')
          )
     )
     and (
       (p_scope_filter->'municipalityIds') is null
       or jsonb_array_length(p_scope_filter->'municipalityIds') = 0
-      or r.municipio_id::text = any(
+      or r.municipality_id::text = any(
            select jsonb_array_elements_text(p_scope_filter->'municipalityIds')
          )
     );
@@ -203,6 +175,9 @@ as $$
 declare
   v_ids uuid[];
   v_total bigint;
+  v_passing bigint;
+  v_failing bigint;
+  v_sample jsonb;
 begin
   v_ids := public.exports_resolve_scope_ids(p_scope_type, p_scope_filter, p_scope_ids);
   v_total := coalesce(array_length(v_ids, 1), 0);
@@ -212,16 +187,12 @@ begin
     return;
   end if;
 
-  -- Un recurso "pasa" si tiene los obligatorios PID rellenos. La firma
-  -- real de count_pid_missing_required es (uuid) — pasamos r.id, no r.
-  -- Nombre se resuelve vía tr_get (no hay columna name_es en la tabla).
-  return query
+  -- Un recurso "pasa" si tiene los obligatorios PID rellenos
+  -- (usamos la función count_pid_missing_required ya existente)
   with scope as (
-    select r.id,
-           r.slug,
-           public.tr_get('recurso_turistico', r.id, 'name', 'es') as name_es,
-           public.count_pid_missing_required(r.id) as missing_count
-    from public.recurso_turistico r
+    select r.id, r.name_es, r.slug,
+           public.count_pid_missing_required(r) as missing_count
+    from public.resources r
     where r.id = any(v_ids)
   ),
   counts as (
@@ -233,24 +204,24 @@ begin
   sample as (
     select jsonb_agg(jsonb_build_object(
       'resource_id', id,
-      'resource_name', coalesce(name_es, slug),
+      'resource_name', name_es,
       'resource_slug', slug,
       'missing_count', missing_count,
       'error_category', 'content',
       'error_message', 'Faltan ' || missing_count || ' campo(s) obligatorio(s) PID sin rellenar'
     )) as s
-    from (
-      select id, slug, name_es, missing_count
-      from scope
-      where missing_count > 0
-      limit 10
-    ) sub
+    from scope
+    where missing_count > 0
+    limit 10
   )
   select
     v_total::bigint,
     (select ok from counts)::bigint,
     (select ko from counts)::bigint,
     coalesce((select s from sample), '[]'::jsonb);
+
+  v_passing := 0; v_failing := 0; v_sample := '[]'::jsonb;
+  return;
 end;
 $$;
 
@@ -260,9 +231,9 @@ comment on function public.exports_validate_scope is
 
 -- ─── 5) RPC exports_launch ──────────────────────────────────────────────
 --
--- Crea un job en estado 'pending'. La edge function export-worker lo
--- recoge y procesa. Si no hay edge function corriendo, se puede
--- disparar manualmente `exports_process_pending(job_id)`.
+-- Crea un job en estado 'pending'. La edge function lo recoge y procesa.
+-- Si hay errores de contenido bloqueantes y p_force=false, devuelve
+-- error y no crea el job.
 
 create or replace function public.exports_launch(
   p_job_type text,
@@ -298,6 +269,10 @@ begin
   )
   returning id into v_job_id;
 
+  -- Nota: la edge function export-worker se encargará de procesar.
+  -- En entornos de desarrollo sin edge function, se puede invocar
+  -- manualmente la RPC exports_process_pending(v_job_id).
+
   return v_job_id;
 end;
 $$;
@@ -308,15 +283,6 @@ $$;
 -- Versión "simulada" del procesamiento (usada si no hay edge function
 -- corriendo o para tests). Procesa un job pendiente sincronamente.
 -- La edge function real hace lo mismo llamando al PID de verdad.
---
--- Adaptaciones respecto al .INCORRECTO.bak:
---   · recurso_turistico + municipio (no resources + municipalities)
---   · count_pid_missing_required(v_resource.id) con firma uuid
---   · name/description vía tr_get (no columnas name_es/description_es)
---   · addressLocality vía tr_get('municipio', …) con fallback a slug
---   · telephone/email: coalesce(contact_phone, telephone[1]) para
---     sobrevivir al desdoble de columnas (nuevas vs viejas)
---   · URI en https://turismo.osalnes.gal/es/recurso/... (productivo)
 
 create or replace function public.exports_process_pending(
   p_job_id uuid
@@ -333,16 +299,6 @@ declare
   v_resource record;
   v_payload jsonb;
   v_missing integer;
-  v_name_es text;
-  v_name_gl text;
-  v_desc_es text;
-  v_desc_gl text;
-  v_locality text;
-  v_phone text;
-  v_email text;
-  v_web text;
-  v_street text;
-  v_postal text;
 begin
   select * into v_job from public.export_jobs where id = p_job_id for update;
   if not found then
@@ -357,69 +313,38 @@ begin
 
   -- Procesar cada recurso del alcance
   for v_resource in
-    select r.id, r.slug, r.rdf_type, r.municipio_id,
-           r.latitude, r.longitude,
-           r.address_street, r.address_postal,
-           r.street_address, r.postal_code, r.locality,
-           r.telephone, r.email, r.url,
-           r.contact_phone, r.contact_email, r.contact_web,
-           m.slug as municipio_slug
-    from public.recurso_turistico r
-    left join public.municipio m on m.id = r.municipio_id
+    select r.*, m.name as municipality_name
+    from public.resources r
+    left join public.municipalities m on m.id = r.municipality_id
     where r.id = any(v_job.scope_ids)
   loop
-    v_missing := public.count_pid_missing_required(v_resource.id);
+    v_missing := public.count_pid_missing_required(v_resource);
 
     if v_missing > 0 then
-      v_name_es := public.tr_get('recurso_turistico', v_resource.id, 'name', 'es');
-      v_name_gl := public.tr_get('recurso_turistico', v_resource.id, 'name', 'gl');
-
       insert into public.export_job_records (
         job_id, resource_id, resource_name, resource_slug,
         status, error_category, error_message
       ) values (
         p_job_id, v_resource.id,
-        coalesce(v_name_es, v_name_gl, v_resource.slug),
+        coalesce(v_resource.name_es, v_resource.name_gl),
         v_resource.slug,
         'failed', 'content',
         'Faltan ' || v_missing || ' campo(s) obligatorio(s) PID sin rellenar'
       );
       v_failed := v_failed + 1;
     else
-      -- Resolver traducciones y campos duplicados (new → old fallback)
-      v_name_es := public.tr_get('recurso_turistico', v_resource.id, 'name', 'es');
-      v_name_gl := public.tr_get('recurso_turistico', v_resource.id, 'name', 'gl');
-      v_desc_es := public.tr_get('recurso_turistico', v_resource.id, 'description', 'es');
-      v_desc_gl := public.tr_get('recurso_turistico', v_resource.id, 'description', 'gl');
-      v_locality := coalesce(
-        public.tr_get('municipio', v_resource.municipio_id, 'name', 'es'),
-        v_resource.municipio_slug
-      );
-      v_phone := coalesce(v_resource.contact_phone, (v_resource.telephone)[1]);
-      v_email := coalesce(v_resource.contact_email, (v_resource.email)[1]);
-      v_web := coalesce(v_resource.contact_web, v_resource.url);
-      v_street := coalesce(v_resource.street_address, v_resource.address_street);
-      v_postal := coalesce(v_resource.postal_code, v_resource.address_postal);
-
-      -- Payload JSON-LD base (schema.org + UNE 178503)
-      v_payload := jsonb_strip_nulls(jsonb_build_object(
+      -- Generar payload JSON-LD básico (incluye relaciones del paso 8)
+      v_payload := jsonb_build_object(
         '@context', 'https://schema.org',
-        '@type', coalesce(v_resource.rdf_type, 'TouristAttraction'),
-        '@id', 'https://turismo.osalnes.gal/es/recurso/' || v_resource.slug,
-        'name', v_name_es,
-        'alternateName', v_name_gl,
-        'description', v_desc_es,
-        'addressLocality', v_locality,
-        'streetAddress', v_street,
-        'postalCode', v_postal,
+        '@type', coalesce(v_resource.single_type_vocabulary, 'TouristAttraction'),
+        '@id', 'https://osalnes.gal/recurso/' || v_resource.slug,
+        'name', v_resource.name_es,
+        'description', v_resource.description_es,
+        'addressLocality', v_resource.municipality_name,
         'latitude', v_resource.latitude,
-        'longitude', v_resource.longitude,
-        'telephone', v_phone,
-        'email', v_email,
-        'url', v_web
-      ));
-
-      -- Añadir relaciones si la función del paso 8 existe (migración 029)
+        'longitude', v_resource.longitude
+      );
+      -- Añadir relaciones si la función del paso 8 existe
       begin
         v_payload := v_payload || coalesce(
           public.generate_jsonld_relations(v_resource.id),
@@ -434,8 +359,7 @@ begin
         status, payload
       ) values (
         p_job_id, v_resource.id,
-        coalesce(v_name_es, v_name_gl, v_resource.slug),
-        v_resource.slug,
+        v_resource.name_es, v_resource.slug,
         'success', v_payload
       );
       v_processed := v_processed + 1;
@@ -462,10 +386,6 @@ comment on function public.exports_process_pending is
 
 
 -- ─── 7) RPC exports_list ────────────────────────────────────────────────
---
--- Listado paginado para la tabla del SCR-13. Solo toca export_jobs +
--- auth.users (para obtener el email del triggered_by). No depende del
--- esquema español/inglés de recursos.
 
 create or replace function public.exports_list(
   p_status text default null,
@@ -541,8 +461,7 @@ $$;
 
 -- ─── 8) RPC exports_get_kpis ────────────────────────────────────────────
 --
--- Para la cabecera del SCR-13: cards con conteos por estado. Idem:
--- solo toca export_jobs, no depende del esquema español/inglés.
+-- Para la cabecera del SCR-13: cards con conteos por estado.
 
 create or replace function public.exports_get_kpis()
 returns table (
