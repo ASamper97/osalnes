@@ -33,6 +33,9 @@ import ExportCsvDialog from '../components/listado/ExportCsvDialog';
 import { useSavedViews, type SupabaseLike as SavedViewsSupabaseLike } from '../hooks/useSavedViews';
 import type { SavedView } from '@osalnes/shared/data/resources-list-b';
 import type { UseResourcesListState } from '../hooks/useResourcesList';
+// ── SCR-13 Fase B · t5 — integración con centro de exportaciones ───
+import ListExportButtons from '../components/exports/ListExportButtons';
+import type { UseExportsState } from '../hooks/useExports';
 import './listado-b.css';
 import { LIST_COPY } from './listado.copy';
 
@@ -86,6 +89,18 @@ export interface ResourcesListPageProps {
 
   /** Cliente Supabase — necesario para el hook useSavedViews. */
   supabase: SavedViewsSupabaseLike;
+
+  // ── SCR-13 Fase B · t5 — exportaciones desde el listado ───────────
+
+  /**
+   * Estado del hook useExports. Si el caller lo pasa, se renderiza
+   * ListExportButtons en la barra secundaria del listado. Si el caller
+   * no conecta SCR-13, el prop queda undefined y los botones no aparecen.
+   */
+  exportsState?: UseExportsState;
+
+  /** Permiso RBAC del usuario para lanzar exportaciones. */
+  canExport?: boolean;
 }
 
 export default function ResourcesListPage({
@@ -106,6 +121,8 @@ export default function ResourcesListPage({
   onBulkDelete,
   onFetchAllFilteredRows,
   supabase,
+  exportsState,
+  canExport = false,
 }: ResourcesListPageProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -319,6 +336,28 @@ export default function ResourcesListPage({
         >
           📄 Exportar
         </button>
+
+        {/* SCR-13 Fase B · t5 — botones de exportación al PID. Solo
+            aparecen si el padre conecta exportsState y canExport=true.
+            ListExportButtons decide internamente cuál mostrar:
+            · "Exportar al PID (N)" si hay selección
+            · "Exportar filtrados" si hay filtros activos sin selección
+            · nada en caso contrario */}
+        {exportsState && (
+          <ListExportButtons
+            state={exportsState}
+            selectedIds={Array.from(selectedIds)}
+            currentFilters={(() => {
+              const f = state.filters;
+              const out: Record<string, unknown> = {};
+              if (f.status && f.status !== 'all') out.status = f.status;
+              if (f.typeKeys.length > 0) out.typeKeys = f.typeKeys;
+              if (f.municipalityIds.length > 0) out.municipalityIds = f.municipalityIds;
+              return Object.keys(out).length > 0 ? out : null;
+            })()}
+            canExport={canExport}
+          />
+        )}
       </div>
 
       {/* Error */}

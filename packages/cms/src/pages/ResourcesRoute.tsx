@@ -21,6 +21,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { api, type TypologyItem, type MunicipalityItem } from '@/lib/api';
 import { useResourcesList, type SupabaseLike } from '@/hooks/useResourcesList';
+import { useExports, type SupabaseLike as ExportsSupabaseLike } from '@/hooks/useExports';
+import { parseUserRole } from '@osalnes/shared/data/rbac';
 import ResourcesListPage from '@/pages/ResourcesListPage';
 import type { TypologyOption, MunicipalityOption } from '@/components/listado/ListFiltersPanel';
 import type { ListResourceRow } from '@osalnes/shared/data/resources-list';
@@ -84,8 +86,25 @@ const GROUP_LABELS: Record<string, string> = {
 
 export default function ResourcesRoute() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { user, profile, role: legacyRole } = useAuth();
   const currentUserId = profile?.id ?? null;
+
+  // SCR-13 Fase B · t5 — permiso de exportación al PID. Misma regla que
+  // la visibilidad del sidebar "Exportaciones" (A5): admin en cualquiera
+  // de los dos sistemas RBAC que coexisten (legacy profile.role o shared
+  // user_metadata.role parseado por parseUserRole). Hasta SCR-14, el rol
+  // legacy 'tecnico' ≈ shared 'platform'.
+  const sharedRole = parseUserRole(user?.user_metadata);
+  const canExport =
+    legacyRole === 'admin' || legacyRole === 'tecnico' ||
+    sharedRole === 'admin' || sharedRole === 'platform';
+
+  // Estado del centro de exportaciones. El hook hace un fetch inicial
+  // al montar (listado + KPIs) aunque el usuario no pulse ningún botón;
+  // coste aceptable para tener el launcher listo al primer click.
+  const exportsState = useExports({
+    supabase: supabase as unknown as ExportsSupabaseLike,
+  });
 
   // ─── Cargar typologies/municipalities una vez al montar ────────────
   const [typologies, setTypologies] = useState<TypologyItem[]>([]);
@@ -244,6 +263,8 @@ export default function ResourcesRoute() {
         return rows.map(mapRpcRow);
       }}
       supabase={supabase as unknown as SupabaseLike}
+      exportsState={exportsState}
+      canExport={canExport}
     />
   );
 }
