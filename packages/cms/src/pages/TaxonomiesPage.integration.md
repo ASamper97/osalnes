@@ -1,96 +1,81 @@
-# Integración · SCR-10 Gestor de taxonomías
+# Integración · SCR-10 Gestor de taxonomías (v2)
 
-Gestor unificado de catálogos (municipios, zonas, tipologías UNE,
-categorías, productos turísticos) con master-detail, editor multi-tab,
-soft-delete y vista de uso.
+Gestor unificado de catálogos. **Versión v2 adaptada al esquema real**
+del proyecto tras PREFLIGHT.
 
-## Prerrequisitos
+## Cambios clave respecto a la v1 (descartada)
 
-- Migraciones 000-031 aplicadas (incluye `traduccion`, `municipio`,
-  `recurso_turistico.rdf_type`, función `tr_get(text, uuid, text, text)`).
-- Rol de usuario resuelto: admin / platform / tourist_manager / operator.
+- Catálogo `tipologia_une` → `tipologia` (nombre real de tabla).
+- Slug → `type_code` (vía alias en RPC, frontend no cambia).
+- `is_active` → `activo` (vía alias en RPC).
+- Campo `grupo` (alojamiento/restauracion/recurso/evento/transporte) expuesto
+  en listado y editor.
+- La tabla `tipologia` ya tiene **69 valores productivos** con `schema_org_type`.
+- `ALTER TABLE ADD COLUMN IF NOT EXISTS` para ampliar sin destruir datos.
 
-## 1) Aplicar query PREFLIGHT (sin modificar nada)
+## 1) Aplicar migración 032 v2
 
-Antes de aplicar la migración 032, ejecutar la query
-`database/migrations/032_taxonomies.PREFLIGHT.sql` en SQL Editor de
-Supabase. El output confirma qué tablas existen y qué hay que crear.
+PREFLIGHT ya realizado y validado (catálogo existente confirmado). Aplicar
+directamente.
 
-### Resultado esperado
+1. Abrir SQL Editor de Supabase.
+2. Pegar contenido completo de `database/migrations/032_taxonomies.sql` v2.
+3. Pulsar Run.
 
-- **Resultset 1**: debería devolver al menos `municipio`. Si aparecen
-  `zona`, `tipologia_une`, `categoria` o `producto_turistico`, la
-  migración las detecta con `create table if not exists` y solo crea
-  las que faltan (no rompe las existentes).
+### Qué hace la migración
 
-- **Resultset 2**: columnas relacionadas de `recurso_turistico`. Debe
-  mostrar `rdf_type`, `rdf_types`, `tourist_types`, `municipio_id`.
+1. **Añade columnas faltantes** a `tipologia`: `semantic_uri`, `sort_order`,
+   `updated_at`. Crea trigger `set_updated_at_tipologia`.
+2. **Añade columnas faltantes** a `producto_turistico`: `parent_id`,
+   `semantic_uri`, `sort_order`, `updated_at`. Crea trigger.
+3. **Añade columnas faltantes** a `categoria`: `parent_id`, `semantic_uri`,
+   `sort_order`, `is_active`, `updated_at`. Crea trigger.
+4. **Añade columnas faltantes** a `zona`: `parent_id`, `semantic_uri`,
+   `sort_order` (zona ya tiene su propio `updated_at` y trigger).
+5. **Pobla `semantic_uri`** automáticamente en los 69 valores de
+   `tipologia` → `https://schema.org/{schema_org_type}`.
+6. **Crea `tr_upsert`** (no existía).
+7. **Crea 6 RPCs** unificadas (`taxonomy_list`, `taxonomy_get`,
+   `taxonomy_upsert`, `taxonomy_toggle_active`, `taxonomy_get_usage`,
+   `taxonomy_get_tree`).
 
-- **Resultset 3**: las funciones `tr_get` y `tr_upsert`. Si `tr_upsert`
-  no existe, la migración 032 la crea. Si existe con firma distinta,
-  hay que ajustar.
+### Verificación
 
-- **Resultset 4-5**: estructura de `traduccion` con unique
-  `(entidad_tipo, entidad_id, campo, idioma)`. Si el constraint tiene
-  nombre distinto pero mismas columnas, funciona igual.
-
-**Si algo difiere del esperado, parar y reportar antes de aplicar 032.**
-
-## 2) Aplicar migración 032
-
-Pegar el contenido completo de `032_taxonomies.sql` en SQL Editor
-y pulsar Run.
-
-Verificación:
 ```sql
--- Tablas nuevas creadas
-select count(*) from information_schema.tables
-where table_schema = 'public'
-  and table_name in ('zona', 'tipologia_une', 'categoria', 'producto_turistico');
--- Esperado: 4 (o menos si ya existían algunas)
-
--- RPCs nuevas
-select proname from pg_proc
-where proname in (
-  'taxonomy_list', 'taxonomy_get', 'taxonomy_upsert',
-  'taxonomy_toggle_active', 'taxonomy_get_usage', 'taxonomy_get_tree'
-) and pronamespace = 'public'::regnamespace;
+-- 6 RPCs creadas
+select count(*) from pg_proc
+where proname in ('taxonomy_list','taxonomy_get','taxonomy_upsert',
+  'taxonomy_toggle_active','taxonomy_get_usage','taxonomy_get_tree')
+  and pronamespace='public'::regnamespace;
 -- Esperado: 6
+
+-- tr_upsert creada
+select proname from pg_proc
+where proname = 'tr_upsert' and pronamespace='public'::regnamespace;
+-- Esperado: 1 fila
+
+-- Las 69 tipologías ahora tienen semantic_uri
+select count(*) from public.tipologia where semantic_uri is not null;
+-- Esperado: 69
+
+-- Columnas nuevas en tipologia
+select column_name from information_schema.columns
+where table_schema='public' and table_name='tipologia'
+  and column_name in ('semantic_uri','sort_order','updated_at')
+order by column_name;
+-- Esperado: 3 filas
+
+-- Smoke test: listado de tipologías con grupo
+select name, slug, schema_code, grupo, usage_count
+from public.taxonomy_list('tipologia')
+order by grupo, slug
+limit 10;
+-- Esperado: 10 filas con nombres como Beach/ArtGallery/BarOrPub + grupo poblado
 ```
 
-Smoke test:
-```sql
--- Listar municipios (ya existentes, deberían salir los 9)
-select name, slug, usage_count, usage_published
-from public.taxonomy_list('municipio');
--- Esperado: 9 filas
+## 2) Añadir ruta `/taxonomies`
 
--- Listar tipologías (inicialmente vacío)
-select * from public.taxonomy_list('tipologia_une');
--- Esperado: 0 filas
-
--- Crear una tipología de prueba
-select public.taxonomy_upsert(
-  p_catalog := 'tipologia_une',
-  p_slug := 'playa',
-  p_semantic_uri := 'https://schema.org/Beach',
-  p_schema_code := 'Beach',
-  p_name_es := 'Playa',
-  p_name_gl := 'Praia',
-  p_name_en := 'Beach',
-  p_description_es := 'Playas y calas del litoral'
-);
--- Devuelve un UUID
-
--- Verificar que apareció con sus traducciones
-select name, slug, semantic_uri, schema_code
-from public.taxonomy_list('tipologia_une');
--- Esperado: 1 fila con name='Playa'
-```
-
-## 3) Añadir ruta `/taxonomies` en el router
-
-En `App.tsx` o donde esté definido el router:
+En `App.tsx`:
 
 ```tsx
 import TaxonomiesRoute from './pages/TaxonomiesRoute';
@@ -98,141 +83,103 @@ import TaxonomiesRoute from './pages/TaxonomiesRoute';
 <Route path="/taxonomies" element={<TaxonomiesRoute />} />
 ```
 
-**Importante**: TaxonomiesRoute.tsx asume que hay un hook `useAuth()`
-y una instancia `supabase` disponibles. Ajusta los imports reales del
-proyecto (mismo patrón que `ExportsRoute.tsx`).
+Adaptar los `declare const supabase` / `declare const useAuth` de
+`TaxonomiesRoute.tsx` al patrón real del proyecto (igual que
+`ExportsRoute.tsx`).
 
-## 4) Importar CSS
-
-Donde estén los imports de CSS del CMS, añadir:
+## 3) Importar CSS
 
 ```tsx
 import './pages/taxonomies.css';
 ```
 
-## 5) Añadir item en sidebar
-
-Patrón idéntico al de "Exportaciones" (Fase A SCR-13):
+## 4) Añadir item sidebar
 
 ```tsx
 <NavLink to="/taxonomies">🏷 Taxonomías</NavLink>
 ```
 
-Con RBAC — visible para roles que puedan editar **al menos un**
-catálogo:
-- `admin` → todo
-- `platform` → todo excepto URIs semánticas (warning)
-- `tourist_manager` → solo zona + producto_turistico + categoria
-- `operator` → sólo lectura (puede entrar y ver, pero no editar)
+Visible para admin, platform, tourist_manager. Operator también puede
+verlo (solo lectura).
 
-## 6) Checklist E2E
+## 5) Checklist E2E
 
 ### Navegación
-- [ ] `/taxonomies` carga con "Municipios" seleccionado por defecto.
+- [ ] `/taxonomies` carga con **Tipologías seleccionado por defecto** (entramos directos a lo útil con los 69 valores).
 - [ ] Click en cada catálogo del panel izquierdo → cambia la lista.
-- [ ] Selector responde al click sin recargar.
 
-### Municipios (readonly)
-- [ ] Banner azul informa que son readonly.
-- [ ] Los 9 concellos aparecen con nombre en español.
-- [ ] Usage chips muestran N publicados + N borrador por municipio.
-- [ ] NO aparece botón "+ Nuevo término".
+### Tipologías (69 filas productivas)
+- [ ] Aparecen ordenadas por `grupo` y luego por `type_code`.
+- [ ] Cada fila muestra:
+  - Nombre (placeholder = `type_code` si no hay traducción).
+  - Chip de color según grupo (azul=alojamiento, naranja=restauracion, verde=recurso, morado=evento, celeste=transporte).
+  - URI semántica linkeable (auto-poblada tras la migración).
+  - Contador de uso basado en `recurso_turistico.rdf_type = type_code`.
+- [ ] Click en "Editar" abre modal con selector de grupo rellenado.
+- [ ] Tabs ES/GL/EN inicialmente vacíos (no hay traducciones todavía).
 
-### Tipologías UNE (crear nuevo)
-- [ ] Click "+ Nuevo término" abre el editor.
-- [ ] El editor pide slug + URI semántica + schema_code.
-- [ ] Datalist de schema codes sugiere Beach, Hotel, Restaurant, etc.
-- [ ] Tab ES rellenado → guardar crea el término.
-- [ ] Término aparece en la lista con chip verde publicado=0.
-- [ ] Tab GL / EN vacíos → muestra dot solo si tienen contenido.
+### Crear nueva tipología
+- [ ] Botón "+ Nuevo término" visible para admin/platform.
+- [ ] Datalist de schema.org sugiere Beach, Hotel, etc.
+- [ ] Selector de grupo con las 5 opciones.
+- [ ] Guardar crea el término y aparece en la lista con el chip correcto.
 
-### Warning URI semántica (decisión 4-C)
-- [ ] Crear tipología sin `semantic_uri` → aviso amarillo en
-      el editor.
-- [ ] Tras guardar, aparece chip amarillo "⚠ Sin URI semántica"
-      en la lista.
-- [ ] Si añades la URI y guardas, el chip desaparece.
+### Zonas (46 filas)
+- [ ] Aparecen con su parent si tienen.
+- [ ] Uso count > 0 si los recursos tienen `zona_id` asignado.
 
-### Categorías jerárquicas (decisión 2-B)
-- [ ] Al crear categoría, aparece selector "Término padre".
-- [ ] Seleccionar otra categoría como padre → se guarda.
-- [ ] La lista muestra chip "Con subcategorías" en el padre.
-- [ ] Zonas y productos también admiten parent.
-- [ ] Municipios y tipologías NO muestran selector de parent.
+### Categorías (17 filas)
+- [ ] Aparecen con parent_id / hasChildren si aplica.
+- [ ] Uso count = 0 (no hay relación directa con recurso todavía).
 
-### Traducciones multi-tab (decisión 3-C)
-- [ ] Las 3 pestañas (ES / GL / EN) son clickables en el editor.
-- [ ] Rellenar ES y EN (dejar GL vacío) → guardar.
-- [ ] Reabrir el término → ES y EN rellenos, GL vacío.
-- [ ] Las pestañas con contenido muestran un puntito verde.
+### Productos turísticos (0 filas inicialmente)
+- [ ] Lista vacía, empty state correcto.
+- [ ] Crear uno → aparece correctamente.
 
-### Ver uso (decisión 5-B)
-- [ ] Click "Ver uso" en una tipología que se use → drawer derecho
-      con lista de recursos.
-- [ ] Cada fila muestra nombre + slug + chip de estado.
-- [ ] Click en fila → navega a `/resources/:id/edit`.
-- [ ] Zonas/categorías/productos muestran banner "uso indirecto"
-      (sin recursos listados, decisión de modelo).
+### Municipios (9 filas, readonly)
+- [ ] Banner azul informa readonly.
+- [ ] Los 9 concellos aparecen con `usage_count` basado en `municipio_id`.
+- [ ] No aparece "+ Nuevo término".
+- [ ] Botones editar NO aparecen.
 
-### Soft delete (decisión 6-C)
-- [ ] Click "🚫" en un término activo → modal de confirmación.
-- [ ] Confirmar → el término queda inactivo.
-- [ ] Por defecto deja de aparecer en la lista.
-- [ ] Activar "Mostrar inactivos" → vuelve a aparecer con
-      chip "Inactivo".
-- [ ] Click "✓" en un inactivo → modal de reactivación.
-- [ ] Confirmar → vuelve activo.
+### Soft delete
+- [ ] Desactivar una tipología → modal con "Los N recursos mantendrán la referencia".
+- [ ] Confirmar → desactiva.
+- [ ] Por defecto no aparece en lista; activar "Mostrar inactivos" la trae de vuelta.
 
-### RBAC (decisión 7-C)
-- [ ] Usuario con rol `admin` → puede editar todo.
-- [ ] Usuario con rol `platform` → puede editar todo.
-- [ ] Usuario con rol `tourist_manager` → al entrar en Tipologías UNE
-      ve banner amarillo "No tienes permisos". NO aparece
-      "+ Nuevo término". NO aparecen botones editar / desactivar.
-- [ ] Mismo rol en Zonas → sí puede editar.
+### RBAC
+- [ ] Usuario `tourist_manager` NO ve botones editar en Tipologías.
+- [ ] Sí los ve en Zonas, Categorías y Productos.
 
 ## Deuda abierta
 
-### 1. Uso de zona / categoria / producto_turistico
-Actualmente `taxonomy_get_usage` devuelve vacío para estos 3 catálogos
-porque no hay tabla many-to-many `recurso_zona`, `recurso_categoria`,
-etc. en la BD. Hay dos opciones:
+### 1. Uso de categoría y producto_turistico
+La RPC `taxonomy_get_usage` devuelve vacío para estos 2 catálogos. Falta
+decidir si se crean tablas many-to-many `recurso_categoria` y
+`recurso_producto`, o se guardan IDs en `recurso_turistico.extras`.
 
-- **A** Crear tablas intermedias (`recurso_zona`, `recurso_categoria`,
-  `recurso_producto`). Cambio de modelo mayor.
-- **B** Almacenar los IDs en `recurso_turistico.extras` JSONB
-  (campo `category_ids`, `zone_ids`, `product_ids`). Menos normalizado
-  pero no requiere migración de tablas.
+### 2. Columna `is_active` en zona
+La tabla `zona` no tenía columna `activo` o `is_active` al hacer PREFLIGHT.
+La migración la añade on-the-fly desde `taxonomy_toggle_active` la primera
+vez que alguien intenta desactivar una zona.
 
-Decidir antes de SCR-11 (mapa) o SCR-03 actualizado, porque ambos
-van a querer filtrar por zona/categoría.
-
-### 2. Detección de ciclos en jerarquías
-El editor actualmente impide seleccionar el propio término como padre,
-pero NO detecta ciclos de más de un nivel (A padre de B, B padre de A).
-Si se vuelve problema en producción, hay que añadir validación BFS en
-`taxonomy_upsert` (similar a `fn_resource_relations_cycle_check` de
-la migración 029).
-
-### 3. Migración de tipologías existentes
-Si los recursos productivos ya tienen valores en `rdf_type`, hay que
-poblar `tipologia_une` con una entrada por cada valor distinto usado.
-Script sugerido:
+### 3. Traducciones automáticas
+Los 69 valores de `tipologia` actualmente no tienen filas en `traduccion`.
+La UI muestra `type_code` como fallback. Para rellenarlos en bulk sin
+hacerlo uno por uno desde la UI:
 
 ```sql
-insert into public.tipologia_une (slug, schema_code, semantic_uri, is_active)
-select distinct
-  lower(regexp_replace(rdf_type, '([A-Z])', '-\1', 'g')),
-  rdf_type,
-  'https://schema.org/' || rdf_type,
-  true
-from public.recurso_turistico
-where rdf_type is not null
-on conflict (slug) do nothing;
-
--- Añadir traducciones por defecto
+-- Ejemplo: nombre en español igual al type_code
 insert into public.traduccion (entidad_tipo, entidad_id, campo, idioma, valor)
-select 'tipologia_une', t.id, 'name', 'es', t.schema_code
-from public.tipologia_une t
+select 'tipologia', id, 'name', 'es', type_code
+from public.tipologia
+where not exists (
+  select 1 from public.traduccion t
+  where t.entidad_tipo = 'tipologia' and t.entidad_id = public.tipologia.id
+    and t.campo = 'name' and t.idioma = 'es'
+)
 on conflict do nothing;
 ```
+
+Esto se puede ejecutar luego con los nombres reales curados en español,
+gallego e inglés.

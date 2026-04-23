@@ -1,14 +1,9 @@
 /**
- * TermEditorDialog — modal de creación/edición de un término
+ * TermEditorDialog v2 — editor multi-tab con selector de grupo
  *
- * Decisión 3-C: editor multi-tab ES / GL / EN en una sola pantalla.
- *
- * Secciones:
- *   1. Identificador + orden (fila superior)
- *   2. URI semántica + schema.org code (si aplica)
- *   3. Traducciones en tabs ES/GL/EN (name + description)
- *   4. Activo checkbox
- *   5. Parent selector si el catálogo es jerárquico
+ * Cambios v2:
+ *   · Selector `grupo` visible solo si CATALOGS[catalog].hasGrupo=true (tipologia)
+ *   · Pasa grupo al onSave
  */
 
 import { useEffect, useState } from 'react';
@@ -16,7 +11,10 @@ import {
   type TaxonomyCatalog,
   type TaxonomyTerm,
   type TaxonomyTermDetail,
+  type TipologiaGrupo,
   CATALOGS,
+  GRUPO_LABELS,
+  ALL_GRUPOS,
   SCHEMA_ORG_CODES,
   emptyTaxonomyDetail,
   validateSemanticUri,
@@ -27,10 +25,8 @@ const COPY = TAXONOMIES_COPY.editor;
 
 export interface TermEditorDialogProps {
   catalog: TaxonomyCatalog;
-  termId: string | null;  // null = creación
-  /** Lista de términos padres posibles (mismo catálogo, activos) · para jerarquías */
+  termId: string | null;
   parentCandidates: TaxonomyTerm[];
-  /** Fetch async del detalle completo (traducciones) · se llama al abrir si hay termId */
   onLoadDetail: (id: string | null) => Promise<TaxonomyTermDetail>;
   onSave: (params: {
     id?: string | null;
@@ -38,6 +34,7 @@ export interface TermEditorDialogProps {
     parentId?: string | null;
     semanticUri?: string | null;
     schemaCode?: string | null;
+    grupo?: string | null;
     sortOrder?: number;
     isActive?: boolean;
     nameEs?: string; nameGl?: string; nameEn?: string;
@@ -58,7 +55,6 @@ export default function TermEditorDialog({
   const [error, setError] = useState<string | null>(null);
   const [langTab, setLangTab] = useState<Lang>('es');
 
-  // Cargar detalle
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -112,6 +108,7 @@ export default function TermEditorDialog({
         parentId: detail.parentId,
         semanticUri: detail.semanticUri?.trim() || null,
         schemaCode: detail.schemaCode?.trim() || null,
+        grupo: detail.grupo?.trim() || null,
         sortOrder: detail.sortOrder,
         isActive: detail.isActive,
         nameEs: detail.translations.name.es.trim() || undefined,
@@ -130,8 +127,6 @@ export default function TermEditorDialog({
   };
 
   const semanticCheck = validateSemanticUri(detail.semanticUri);
-
-  // Filtrar parents: mismo catálogo, no a sí mismo, no descendiente de él (simplificado: no a sí mismo)
   const validParents = parentCandidates.filter((p) => p.id !== termId && p.isActive);
 
   return (
@@ -155,7 +150,7 @@ export default function TermEditorDialog({
             <div className="taxo-editor-loading muted">Cargando…</div>
           ) : (
             <>
-              {/* Identificador */}
+              {/* Identificador + orden */}
               <div className="taxo-editor-row">
                 <label className="taxo-editor-field">
                   <span>{COPY.slugLabel}</span>
@@ -163,7 +158,7 @@ export default function TermEditorDialog({
                     type="text"
                     value={detail.slug}
                     onChange={(e) => updateDetail({ slug: e.target.value })}
-                    placeholder="turismo-cultural"
+                    placeholder={catalog === 'tipologia' ? 'Beach' : 'turismo-cultural'}
                     disabled={saving}
                   />
                   <small className="muted">{COPY.slugHint}</small>
@@ -181,7 +176,7 @@ export default function TermEditorDialog({
                 </label>
               </div>
 
-              {/* Parent selector (solo catálogos jerárquicos) */}
+              {/* Parent selector */}
               {meta.hierarchical && (
                 <label className="taxo-editor-field">
                   <span>{COPY.parentLabel}</span>
@@ -198,42 +193,58 @@ export default function TermEditorDialog({
                 </label>
               )}
 
-              {/* URI semántica + schema code (solo tipologia_une) */}
-              {(catalog === 'tipologia_une' || catalog === 'zona' || catalog === 'categoria' || catalog === 'producto_turistico') && (
-                <div className="taxo-editor-row">
-                  <label className="taxo-editor-field">
-                    <span>{COPY.semanticUriLabel}</span>
+              {/* Grupo (solo tipologia · v2) */}
+              {meta.hasGrupo && (
+                <label className="taxo-editor-field">
+                  <span>{COPY.grupoLabel}</span>
+                  <select
+                    value={detail.grupo ?? ''}
+                    onChange={(e) => updateDetail({ grupo: e.target.value || null })}
+                    disabled={saving}
+                  >
+                    <option value="">{COPY.grupoPlaceholder}</option>
+                    {ALL_GRUPOS.map((g: TipologiaGrupo) => (
+                      <option key={g} value={g}>{GRUPO_LABELS[g]}</option>
+                    ))}
+                  </select>
+                  <small className="muted">{COPY.grupoHint}</small>
+                </label>
+              )}
+
+              {/* URI semántica + schema code */}
+              <div className="taxo-editor-row">
+                <label className="taxo-editor-field">
+                  <span>{COPY.semanticUriLabel}</span>
+                  <input
+                    type="url"
+                    value={detail.semanticUri ?? ''}
+                    onChange={(e) => updateDetail({ semanticUri: e.target.value })}
+                    placeholder={meta.semanticUriExample ?? 'https://…'}
+                    disabled={saving}
+                  />
+                  <small className={semanticCheck.warning ? 'taxo-warn' : 'muted'}>
+                    {semanticCheck.warning ?? COPY.semanticUriHint}
+                  </small>
+                </label>
+
+                {catalog === 'tipologia' && (
+                  <label className="taxo-editor-field taxo-editor-field-short">
+                    <span>{COPY.schemaCodeLabel}</span>
                     <input
-                      type="url"
-                      value={detail.semanticUri ?? ''}
-                      onChange={(e) => updateDetail({ semanticUri: e.target.value })}
-                      placeholder={meta.semanticUriExample ?? 'https://…'}
+                      type="text"
+                      list="schema-codes-list"
+                      value={detail.schemaCode ?? ''}
+                      onChange={(e) => updateDetail({ schemaCode: e.target.value })}
+                      placeholder="Beach"
                       disabled={saving}
                     />
-                    <small className={semanticCheck.warning ? 'taxo-warn' : 'muted'}>
-                      {semanticCheck.warning ?? COPY.semanticUriHint}
-                    </small>
+                    <datalist id="schema-codes-list">
+                      {SCHEMA_ORG_CODES.map((c) => <option key={c} value={c} />)}
+                    </datalist>
+                    <small className="muted">{COPY.schemaCodeHint}</small>
                   </label>
-
-                  {catalog === 'tipologia_une' && (
-                    <label className="taxo-editor-field taxo-editor-field-short">
-                      <span>{COPY.schemaCodeLabel}</span>
-                      <input
-                        type="text"
-                        list="schema-codes-list"
-                        value={detail.schemaCode ?? ''}
-                        onChange={(e) => updateDetail({ schemaCode: e.target.value })}
-                        placeholder="Beach"
-                        disabled={saving}
-                      />
-                      <datalist id="schema-codes-list">
-                        {SCHEMA_ORG_CODES.map((c) => <option key={c} value={c} />)}
-                      </datalist>
-                      <small className="muted">{COPY.schemaCodeHint}</small>
-                    </label>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Traducciones en tabs */}
               <div className="taxo-editor-translations">

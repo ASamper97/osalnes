@@ -1,5 +1,10 @@
 /**
- * useTaxonomies — gestor unificado de catálogos SCR-10
+ * useTaxonomies v2 — adaptado a los nombres de catálogo reales
+ *
+ * Cambios respecto a v1:
+ *   · initialCatalog = 'tipologia' (antes 'municipio') para entrar
+ *     directamente a lo más útil con los 69 valores ya poblados.
+ *   · upsert acepta grupo opcional (solo aplicable a tipologia).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -30,45 +35,34 @@ export interface UseTaxonomiesOptions {
 export interface UseTaxonomiesState {
   catalog: TaxonomyCatalog;
   setCatalog: (c: TaxonomyCatalog) => void;
-
   lang: string;
   setLang: (l: string) => void;
-
   includeInactive: boolean;
   setIncludeInactive: (b: boolean) => void;
-
   terms: TaxonomyTerm[];
   loading: boolean;
   error: string | null;
-
   refetch: () => Promise<void>;
-
-  /** Cargar detalle (para el editor) */
   getDetail: (id: string | null) => Promise<TaxonomyTermDetail>;
-
-  /** Crear/editar */
   upsert: (params: {
     id?: string | null;
     slug: string;
     parentId?: string | null;
     semanticUri?: string | null;
     schemaCode?: string | null;
+    grupo?: string | null;
     sortOrder?: number;
     isActive?: boolean;
     nameEs?: string; nameGl?: string; nameEn?: string;
     descriptionEs?: string; descriptionGl?: string; descriptionEn?: string;
   }) => Promise<string>;
-
-  /** Soft delete · decisión 6-C */
   toggleActive: (id: string, isActive: boolean) => Promise<void>;
-
-  /** Ver uso · decisión 5-B */
   getUsage: (id: string) => Promise<UsageItem[]>;
 }
 
 export function useTaxonomies({
   supabase,
-  initialCatalog = 'municipio',
+  initialCatalog = 'tipologia',
   initialLang = 'es',
 }: UseTaxonomiesOptions): UseTaxonomiesState {
   const [catalog, setCatalog] = useState<TaxonomyCatalog>(initialCatalog);
@@ -133,6 +127,7 @@ export function useTaxonomies({
         p_parent_id: params.parentId ?? null,
         p_semantic_uri: params.semanticUri ?? null,
         p_schema_code: params.schemaCode ?? null,
+        p_grupo: params.grupo ?? null,
         p_sort_order: params.sortOrder ?? 0,
         p_is_active: params.isActive ?? true,
         p_name_es: params.nameEs ?? null,
@@ -176,11 +171,9 @@ export function useTaxonomies({
   );
 
   return {
-    catalog, setCatalog,
-    lang, setLang,
+    catalog, setCatalog, lang, setLang,
     includeInactive, setIncludeInactive,
     terms, loading, error,
-    refetch,
-    getDetail, upsert, toggleActive, getUsage,
+    refetch, getDetail, upsert, toggleActive, getUsage,
   };
 }

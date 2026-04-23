@@ -1,31 +1,56 @@
 /**
- * Modelo de taxonomías · SCR-10
+ * Modelo de taxonomías · SCR-10 v2
+ *
+ * Adaptado al esquema real del proyecto O Salnés tras PREFLIGHT.
+ *
+ * CAMBIOS v2:
+ *   · 'tipologia_une' → 'tipologia' (nombre real de tabla)
+ *   · Campo `grupo` expuesto (alojamiento / restauracion / recurso / evento / transporte)
+ *   · El RPC devuelve alias type_code→slug, schema_org_type→schema_code,
+ *     activo→is_active · el frontend sigue usando estos nombres lógicos.
  */
 
 export type TaxonomyCatalog =
   | 'municipio'
   | 'zona'
-  | 'tipologia_une'
+  | 'tipologia'          // ← antes tipologia_une
   | 'categoria'
   | 'producto_turistico';
 
-// ─── Metadata visual por catálogo ──────────────────────────────────────
+// Grupos que la tabla `tipologia` tiene poblados en producción
+export type TipologiaGrupo =
+  | 'alojamiento'
+  | 'restauracion'
+  | 'recurso'
+  | 'evento'
+  | 'transporte';
+
+export const GRUPO_LABELS: Record<TipologiaGrupo, string> = {
+  alojamiento: 'Alojamiento',
+  restauracion: 'Restauración',
+  recurso: 'Recurso turístico',
+  evento: 'Evento',
+  transporte: 'Transporte',
+};
+
+export const ALL_GRUPOS: TipologiaGrupo[] = [
+  'alojamiento', 'restauracion', 'recurso', 'evento', 'transporte',
+];
+
+// ─── Metadata por catálogo ─────────────────────────────────────────────
 
 export interface CatalogMeta {
   key: TaxonomyCatalog;
   label: string;
   labelPlural: string;
   icon: string;
-  /** Decisión 2-B: cuáles admiten jerarquía padre/hijo */
   hierarchical: boolean;
-  /** Decisión 7-C: quién puede editar */
   rolesCanEdit: Array<'admin' | 'platform' | 'tourist_manager'>;
-  /** Municipios son de solo lectura (códigos INE oficiales) */
   readonly: boolean;
-  /** Hint mostrado arriba del listado */
   hint: string;
-  /** Si hay URI semántica, qué ejemplo mostrar */
   semanticUriExample: string | null;
+  /** Solo para tipologia: mostrar campo grupo en el editor */
+  hasGrupo: boolean;
 }
 
 export const CATALOGS: Record<TaxonomyCatalog, CatalogMeta> = {
@@ -35,10 +60,11 @@ export const CATALOGS: Record<TaxonomyCatalog, CatalogMeta> = {
     labelPlural: 'Municipios',
     icon: '🏘',
     hierarchical: false,
-    rolesCanEdit: [],  // nadie · solo lectura
+    rolesCanEdit: [],
     readonly: true,
-    hint: 'Los municipios de O Salnés son los 9 concellos oficiales. Se pueden editar sus traducciones y descripciones, pero no crear nuevos.',
+    hint: 'Los 9 concellos oficiales de O Salnés. Puedes editar sus traducciones, pero no crear nuevos (códigos INE).',
     semanticUriExample: null,
+    hasGrupo: false,
   },
   zona: {
     key: 'zona',
@@ -50,17 +76,19 @@ export const CATALOGS: Record<TaxonomyCatalog, CatalogMeta> = {
     readonly: false,
     hint: 'Subdivisiones operativas del destino: áreas turísticas, comarcas internas o agrupaciones temáticas.',
     semanticUriExample: null,
+    hasGrupo: false,
   },
-  tipologia_une: {
-    key: 'tipologia_une',
-    label: 'Tipología UNE',
-    labelPlural: 'Tipologías UNE',
+  tipologia: {
+    key: 'tipologia',
+    label: 'Tipología',
+    labelPlural: 'Tipologías',
     icon: '🏛',
     hierarchical: false,
-    rolesCanEdit: ['admin', 'platform'],  // no tourist_manager · decisión 7-C
+    rolesCanEdit: ['admin', 'platform'],
     readonly: false,
-    hint: 'Clases semánticas según UNE 178503 / schema.org. Son el tipo principal de un recurso (Beach, Hotel, Restaurant...). Necesitan URI semántica.',
+    hint: 'Clases semánticas según UNE 178503 / schema.org. El código tipo (ej. "Beach") coincide con el rdf_type del recurso.',
     semanticUriExample: 'https://schema.org/Beach',
+    hasGrupo: true,
   },
   categoria: {
     key: 'categoria',
@@ -72,6 +100,7 @@ export const CATALOGS: Record<TaxonomyCatalog, CatalogMeta> = {
     readonly: false,
     hint: 'Agrupaciones temáticas propias del destino. Admiten jerarquía: "Cultural > Patrimonio > Iglesias".',
     semanticUriExample: null,
+    hasGrupo: false,
   },
   producto_turistico: {
     key: 'producto_turistico',
@@ -83,11 +112,12 @@ export const CATALOGS: Record<TaxonomyCatalog, CatalogMeta> = {
     readonly: false,
     hint: 'Líneas comerciales o paquetes del destino. Ej: "Ruta del Albariño", "Turismo náutico".',
     semanticUriExample: null,
+    hasGrupo: false,
   },
 };
 
 export const ALL_CATALOGS: TaxonomyCatalog[] = [
-  'municipio', 'tipologia_une', 'categoria', 'zona', 'producto_turistico',
+  'municipio', 'tipologia', 'categoria', 'zona', 'producto_turistico',
 ];
 
 // ─── Término plano (listado) ──────────────────────────────────────────
@@ -98,6 +128,7 @@ export interface TaxonomyTerm {
   parentId: string | null;
   semanticUri: string | null;
   schemaCode: string | null;
+  grupo: string | null;   // solo relevante para tipologia
   sortOrder: number;
   isActive: boolean;
   name: string;
@@ -117,6 +148,7 @@ export function mapRpcTaxonomyTerm(r: Record<string, unknown>): TaxonomyTerm {
     parentId: (r.parent_id as string) ?? null,
     semanticUri: (r.semantic_uri as string) ?? null,
     schemaCode: (r.schema_code as string) ?? null,
+    grupo: (r.grupo as string) ?? null,
     sortOrder: Number(r.sort_order ?? 0),
     isActive: Boolean(r.is_active ?? true),
     name: String(r.name ?? r.slug ?? ''),
@@ -130,7 +162,7 @@ export function mapRpcTaxonomyTerm(r: Record<string, unknown>): TaxonomyTerm {
   };
 }
 
-// ─── Término detallado (para editor multi-tab ES/GL/EN · decisión 3-C) ──
+// ─── Término detallado ────────────────────────────────────────────────
 
 export interface TaxonomyTermDetail {
   id: string;
@@ -138,6 +170,7 @@ export interface TaxonomyTermDetail {
   parentId: string | null;
   semanticUri: string | null;
   schemaCode: string | null;
+  grupo: string | null;
   sortOrder: number;
   isActive: boolean;
   translations: {
@@ -154,6 +187,7 @@ export function mapRpcTaxonomyDetail(r: Record<string, unknown>): TaxonomyTermDe
     parentId: (r.parent_id as string) ?? null,
     semanticUri: (r.semantic_uri as string) ?? null,
     schemaCode: (r.schema_code as string) ?? null,
+    grupo: (r.grupo as string) ?? null,
     sortOrder: Number(r.sort_order ?? 0),
     isActive: Boolean(r.is_active ?? true),
     translations: {
@@ -179,6 +213,7 @@ export function emptyTaxonomyDetail(): TaxonomyTermDetail {
     parentId: null,
     semanticUri: null,
     schemaCode: null,
+    grupo: null,
     sortOrder: 0,
     isActive: true,
     translations: {
@@ -207,7 +242,7 @@ export function mapRpcUsageItem(r: Record<string, unknown>): UsageItem {
   };
 }
 
-// ─── Validación de URI semántica (decisión 4-C: warning no bloqueante) ─
+// ─── Validación de URI semántica ──────────────────────────────────────
 
 export function validateSemanticUri(uri: string | null): {
   valid: boolean;
@@ -215,7 +250,7 @@ export function validateSemanticUri(uri: string | null): {
 } {
   if (!uri || uri.trim() === '') {
     return {
-      valid: true,  // no obligatoria
+      valid: true,
       warning: 'Sin URI semántica: este término no se podrá exportar al PID.',
     };
   }
@@ -226,7 +261,7 @@ export function validateSemanticUri(uri: string | null): {
   return { valid: true, warning: null };
 }
 
-// ─── Códigos schema.org comunes (para autocomplete de tipologías UNE) ──
+// ─── Códigos schema.org comunes para autocomplete ─────────────────────
 
 export const SCHEMA_ORG_CODES = [
   'Beach', 'Hotel', 'Restaurant', 'Museum', 'TouristAttraction',
@@ -237,5 +272,6 @@ export const SCHEMA_ORG_CODES = [
   'SportsActivityLocation', 'TouristTrip', 'TouristDestination',
   'Waterfall', 'Volcano', 'Cave', 'BodyOfWater', 'Square',
   'LodgingBusiness', 'BedAndBreakfast', 'Hostel', 'RuralHotel',
-  'ViewPoint', 'Trail', 'City', 'Landform',
+  'ViewPoint', 'Trail', 'City', 'Landform', 'ApartHotel', 'Apartment',
+  'Brewery', 'BusinessEvent', 'BusStation', 'BusStop',
 ] as const;

@@ -1,182 +1,154 @@
-# Prompt maestro · SCR-10 Gestor de taxonomías
+# Prompt maestro · SCR-10 Gestor de taxonomías (v2)
 
 **Pega este contenido en Claude Code.**
 
-Gestor unificado de catálogos (municipios, zonas, tipologías UNE,
-categorías, productos turísticos) en una pantalla master-detail con
-editor multi-tab, soft-delete y vista de uso.
+Versión **v2 adaptada al esquema real** del proyecto. PREFLIGHT ya ejecutado
+y validado — la migración 032 v2 se aplica directamente, sin más checks.
 
-Cumple el pliego 5.1.x:
-- **FR-02** · taxonomías gobernadas sin contaminar trabajo editorial.
-- **ENT-04** · taxonomías maestras (municipio, zona, categoría,
-  tipología, producto).
-- **NFR-03** · consistencia semántica con UNE 178503.
+## Hallazgos clave del PREFLIGHT (ya resueltos en v2)
+
+- **`tipologia`** es el nombre real (no `tipologia_une`). Tiene **69 filas
+  productivas** ya pobladas con `type_code`, `schema_org_type`, `grupo`,
+  `activo`. No se toca.
+- **`producto_turistico`** existe con 4 columnas (0 filas). Se amplía.
+- **`categoria`** existe con 17 filas. Se amplía si faltan columnas.
+- **`zona`** existe con 46 filas y su propio trigger `set_updated_at`.
+- **`tr_upsert`** NO existe. La migración la crea.
+- La RPC `tr_get(text, uuid, text, text) → text` SÍ existe y funciona.
+- La constraint unique de `traduccion` es `(entidad_tipo, entidad_id, campo, idioma)`,
+  por lo que `on conflict` en `tr_upsert` funciona correctamente.
 
 ## Decisiones aplicadas
 
 - **1-C**: 5 catálogos completos.
-- **2-B**: jerarquía solo en categoría/zona/producto. Municipios y
-  tipologías planas.
-- **3-C**: editor multi-tab ES/GL/EN en una sola pantalla, vía tabla
-  `traduccion` centralizada.
+- **2-B**: jerarquía solo en zona/categoria/producto. Tipologías planas.
+- **3-C**: editor multi-tab ES/GL/EN.
 - **4-C**: URI semántica opcional con warning no bloqueante.
 - **5-B**: contador + breakdown por estado.
-- **6-C**: soft delete (is_active boolean).
-- **7-C**: RBAC granular — admin+platform todo, tourist_manager solo
-  zona/producto/categoría (no tipologías UNE), municipios readonly.
-- **8-C**: master-detail (panel catálogos a la izquierda, lista a la
-  derecha).
+- **6-C**: soft delete (activo/is_active según tabla).
+- **7-C**: RBAC granular — tourist_manager NO edita tipologías.
+- **8-C**: master-detail.
 
 ## Ficheros en el repo
 
 ```
 osalnes-dti/
 ├── database/migrations/
-│   ├── 032_taxonomies.PREFLIGHT.sql           (NUEVO · validación)
-│   ├── 032_taxonomies.sql                     (NUEVO · 4 tablas + 6 RPCs)
+│   ├── 032_taxonomies.sql                     (NUEVO · v2 adaptada)
 │   └── 032_taxonomies.down.sql                (NUEVO)
 │
 ├── packages/shared/src/data/
-│   └── taxonomies.ts                          (NUEVO · tipos + metadata catálogos)
+│   └── taxonomies.ts                          (NUEVO · con tipo TipologiaGrupo)
 │
 ├── packages/cms/src/
 │   ├── hooks/
-│   │   └── useTaxonomies.ts                   (NUEVO)
+│   │   └── useTaxonomies.ts                   (NUEVO · initialCatalog='tipologia')
 │   ├── components/taxonomies/
-│   │   ├── CatalogSelector.tsx                (NUEVO · panel master)
-│   │   ├── TermsList.tsx                      (NUEVO · panel detail)
-│   │   ├── TermEditorDialog.tsx               (NUEVO · editor multi-tab)
-│   │   ├── UsageDrawer.tsx                    (NUEVO · ver uso)
-│   │   └── ConfirmToggleDialog.tsx            (NUEVO · soft-delete)
+│   │   ├── CatalogSelector.tsx                (NUEVO)
+│   │   ├── TermsList.tsx                      (NUEVO · con chip de grupo)
+│   │   ├── TermEditorDialog.tsx               (NUEVO · con selector de grupo)
+│   │   ├── UsageDrawer.tsx                    (NUEVO)
+│   │   └── ConfirmToggleDialog.tsx            (NUEVO)
 │   └── pages/
-│       ├── TaxonomiesPage.tsx                 (NUEVO · orquestador)
-│       ├── TaxonomiesRoute.tsx                (NUEVO · wrapper con RBAC)
-│       ├── taxonomies.copy.ts                 (NUEVO · copy ES completo)
-│       ├── taxonomies.css                     (NUEVO)
+│       ├── TaxonomiesPage.tsx                 (NUEVO)
+│       ├── TaxonomiesRoute.tsx                (NUEVO)
+│       ├── taxonomies.copy.ts                 (NUEVO · con copy de grupo)
+│       ├── taxonomies.css                     (NUEVO · con estilos de chip grupo)
 │       └── TaxonomiesPage.integration.md      (docs)
 │
 └── prompts/
     └── 17_scr10_taxonomias.md                 (este fichero)
 ```
 
-## Tareas en orden
+## Tareas
 
-### Tarea 1 · Ejecutar PREFLIGHT
+### T1 · Aplicar migración 032 v2 (PREFLIGHT ya hecho, saltar validación)
 
-**NO aplicar la migración 032 directamente.** Primero, ejecutar el
-contenido de `database/migrations/032_taxonomies.PREFLIGHT.sql` en
-el SQL Editor y validar que el output coincide con lo esperado en
-`TaxonomiesPage.integration.md` sección 1.
-
-Si algo difiere (p.ej. `tr_get` tiene firma distinta, o
-`traduccion` no tiene unique constraint en las columnas asumidas),
-**parar y reportar al usuario** antes de aplicar 032.
-
-### Tarea 2 · Aplicar migración 032
-
-Pegar el contenido de `database/migrations/032_taxonomies.sql` en el
-SQL Editor. Pulsar Run.
+Pegar el contenido de `database/migrations/032_taxonomies.sql` en SQL Editor
+de Supabase y pulsar Run.
 
 Verificar con:
-```sql
-select count(*) from information_schema.tables
-where table_schema='public'
-  and table_name in ('zona','tipologia_une','categoria','producto_turistico');
--- Esperado: 4
 
+```sql
+-- 6 RPCs + 1 helper
 select count(*) from pg_proc
 where proname in ('taxonomy_list','taxonomy_get','taxonomy_upsert',
-  'taxonomy_toggle_active','taxonomy_get_usage','taxonomy_get_tree')
+  'taxonomy_toggle_active','taxonomy_get_usage','taxonomy_get_tree','tr_upsert')
   and pronamespace='public'::regnamespace;
--- Esperado: 6
+-- Esperado: 7
+
+-- semantic_uri autopoblado en las 69 tipologías
+select count(*) from public.tipologia where semantic_uri like 'https://schema.org/%';
+-- Esperado: 69
 ```
 
-Si el PREFLIGHT reveló que alguna tabla ya existía con columnas
-distintas, adaptar la 032 antes de aplicar. El `create table if not
-exists` no crea columnas que falten en tablas preexistentes.
+**NO tocar**: la tabla `tipologia` tiene datos productivos, la migración
+solo añade columnas con `add column if not exists`.
 
-### Tarea 3 · Registrar la ruta `/taxonomies`
+### T2 · Ruta `/taxonomies`
 
 En `App.tsx`:
 ```tsx
 import TaxonomiesRoute from './pages/TaxonomiesRoute';
-
 <Route path="/taxonomies" element={<TaxonomiesRoute />} />
 ```
 
-Adaptar los `declare const supabase` / `declare const useAuth` de
-`TaxonomiesRoute.tsx` al patrón real del proyecto (mismo patrón que
-`ExportsRoute.tsx`).
+Ajustar `declare const supabase` / `declare const useAuth` en
+`TaxonomiesRoute.tsx` al patrón real del CMS (mismo que `ExportsRoute.tsx`).
 
-### Tarea 4 · Importar CSS
+### T3 · Importar CSS
 
-Añadir donde estén los imports de CSS del CMS:
 ```tsx
 import './pages/taxonomies.css';
 ```
 
-### Tarea 5 · Añadir item de sidebar
+### T4 · Item de sidebar
 
 ```tsx
 <NavLink to="/taxonomies">🏷 Taxonomías</NavLink>
 ```
 
-Visible para roles: admin, platform, tourist_manager. El operador puro
-también puede verlo (solo lectura).
+Visible para admin/platform/tourist_manager. Operator puede verlo
+(solo lectura).
 
-### Tarea 6 · Migrar tipologías existentes (opcional pero recomendado)
+### T5 · Checklist E2E
 
-Si los recursos productivos ya tienen `rdf_type` rellenado, ejecutar
-el script de migración de la sección "Deuda abierta 3" del
-`integration.md` para poblar `tipologia_une` automáticamente. Así el
-gestor muestra de entrada las tipologías en uso con su código
-schema.org.
+1. `/taxonomies` carga con **Tipologías** seleccionado por defecto y
+   muestra los 69 valores con chip de color por grupo.
+2. Click "Editar" en Beach → modal con `schema_code=Beach`,
+   `grupo=recurso`, URI preautomatizada.
+3. Crear nueva tipología → aparece con chip correcto.
+4. Crear zona hija de otra zona → jerarquía funciona.
+5. Desactivar tipología → modal → desactiva → no aparece por defecto.
+6. Tourist_manager NO ve botón editar en Tipologías, sí en Zonas.
+7. Municipios readonly con los 9 concellos y usage_count real.
 
-### Tarea 7 · Checklist E2E
+### T6 · Commits
 
-Ver `integration.md` sección 6. Los puntos más críticos:
-
-1. Municipios aparecen readonly con los 9 concellos.
-2. Crear tipología UNE → aparece en lista con chip de conteo 0.
-3. Warning "Sin URI semántica" aparece si no se rellena URI.
-4. Tabs ES/GL/EN funcionan independientemente con dot indicator.
-5. Soft delete → término desaparece salvo "Mostrar inactivos".
-6. Ver uso → drawer con recursos que usan la tipología.
-7. RBAC — tourist_manager NO ve botones editar en Tipologías UNE.
-
-### Tarea 8 · Commits
-
-Uno por tarea:
 ```
-feat(db): migración 032 · taxonomías + RPCs unificadas (scr10 · t2)
-feat(shared): tipos taxonomías + metadata catálogos (scr10 · t3a)
-feat(cms): useTaxonomies hook (scr10 · t3b)
-feat(cms): CatalogSelector + TermsList + TermEditorDialog (scr10 · t3c)
-feat(cms): UsageDrawer + ConfirmToggleDialog (scr10 · t3d)
-feat(cms): TaxonomiesPage + TaxonomiesRoute con RBAC (scr10 · t3e)
-feat(cms): ruta /taxonomies + sidebar (scr10 · t5)
-feat(db): migración tipologías UNE desde rdf_type existentes (scr10 · t6)
-docs: checklist E2E SCR-10 (scr10 · t7)
+feat(db): migración 032 v2 · taxonomías adaptadas al esquema real (scr10 · t1)
+feat(shared): tipos taxonomías con grupo tipologia (scr10 · t2a)
+feat(cms): useTaxonomies hook + CatalogSelector + dialogs (scr10 · t2b)
+feat(cms): TermsList + TermEditor con grupo UNE (scr10 · t2c)
+feat(cms): TaxonomiesPage + TaxonomiesRoute con RBAC (scr10 · t2d)
+feat(cms): ruta /taxonomies + sidebar (scr10 · t4)
+docs: checklist E2E SCR-10 v2 (scr10 · t5)
 ```
 
 ## Restricciones
 
+- NO tocar la tabla `tipologia` en sí · tiene datos productivos.
 - NO aplicar migraciones por CLI (403).
-- NO modificar la tabla `municipio` existente.
-- NO modificar la tabla `traduccion` existente.
-- NO desplegar Edge Functions (no hay en este módulo).
-- Typecheck con `tsc --strict` al terminar. Los errores preexistentes
-  de `DocumentUploader.tsx` y `RelationsManager.tsx` se pueden seguir
-  ignorando (son deuda de otro módulo).
+- NO desplegar Edge Functions.
+- Typecheck con `tsc --strict`. Los errores preexistentes de
+  `DocumentUploader.tsx` y `RelationsManager.tsx` son deuda de otro módulo.
 
-## Lo que NO hacer en este entregable
+## Lo que NO hacer
 
-- No crear tablas intermedias `recurso_zona`, `recurso_categoria`, etc.
-  (decisión pendiente para futuro · ver deuda abierta 1 en integration.md).
-- No añadir conexión en el wizard SCR-04 para que use estos catálogos
-  (eso es otra tarea).
-- No añadir el selector de zona/categoría en el listado SCR-03
-  (también otra tarea).
+- No crear tablas intermedias `recurso_categoria`, `recurso_producto`
+  (deuda abierta para otra sesión).
+- No conectar SCR-04 al selector de tipologías todavía.
+- No conectar SCR-03 al filtro por zona todavía.
 
-SCR-10 en esta fase entrega la **herramienta de gestión de catálogos**.
-Que los recursos los usen después es otra conversación.
+Esta entrega cierra SCR-10 como herramienta autónoma de gestión de
+catálogos. La integración con el wizard y listado es otra tarea.

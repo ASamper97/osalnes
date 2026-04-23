@@ -1,19 +1,14 @@
 /**
- * TermsList — listado de términos del catálogo actual (detail)
- *
- * Soporta:
- * - Búsqueda por nombre / slug
- * - Indentación para jerarquías (decisión 2-B)
- * - Chip de uso con breakdown por estado (decisión 5-B)
- * - Warning de URI semántica ausente (decisión 4-C)
- * - Acciones: editar, desactivar, ver uso
+ * TermsList v2 — listado de términos con chip de grupo para tipologías
  */
 
 import { useMemo, useState } from 'react';
 import {
   type TaxonomyCatalog,
   type TaxonomyTerm,
+  type TipologiaGrupo,
   CATALOGS,
+  GRUPO_LABELS,
 } from '@osalnes/shared/data/taxonomies';
 import { TAXONOMIES_COPY, interpolateTx } from '../../pages/taxonomies.copy';
 
@@ -53,6 +48,7 @@ export default function TermsList({
     return terms.filter((t) =>
       t.name.toLowerCase().includes(q) ||
       t.slug.toLowerCase().includes(q) ||
+      (t.grupo ?? '').toLowerCase().includes(q) ||
       (t.description ?? '').toLowerCase().includes(q),
     );
   }, [terms, search]);
@@ -152,7 +148,10 @@ interface TermRowProps {
 function TermRow({
   term, catalog, canEdit, onEdit, onToggleActive, onViewUsage,
 }: TermRowProps) {
-  const needsSemanticUri = catalog === 'tipologia_une' && !term.semanticUri;
+  const needsSemanticUri = catalog === 'tipologia' && !term.semanticUri;
+  const grupoLabel = term.grupo
+    ? (GRUPO_LABELS[term.grupo as TipologiaGrupo] ?? term.grupo)
+    : null;
 
   return (
     <li className={`taxo-term ${term.isActive ? '' : 'is-inactive'}`}>
@@ -161,6 +160,11 @@ function TermRow({
           <strong className="taxo-term-name">{term.name}</strong>
           {!term.isActive && (
             <span className="taxo-chip taxo-chip-inactive">{TAXONOMIES_COPY.list.inactiveLabel}</span>
+          )}
+          {catalog === 'tipologia' && grupoLabel && (
+            <span className={`taxo-chip taxo-chip-grupo taxo-chip-grupo-${term.grupo}`}>
+              {grupoLabel}
+            </span>
           )}
           {term.hasChildren && (
             <span className="taxo-chip taxo-chip-neutral">{TAXONOMIES_COPY.list.hasChildrenLabel}</span>
@@ -186,7 +190,7 @@ function TermRow({
               </a>
             </>
           )}
-          {term.schemaCode && (
+          {term.schemaCode && term.schemaCode !== term.slug && (
             <>
               <span className="muted">·</span>
               <span>schema.org: <code>{term.schemaCode}</code></span>

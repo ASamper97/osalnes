@@ -1,5 +1,7 @@
 /**
- * Copy del gestor de taxonomías · SCR-10
+ * Copy del gestor de taxonomías · SCR-10 v2
+ *
+ * Cambios v2: añade labels para el campo `grupo` (tipologias).
  */
 
 export const TAXONOMIES_COPY = {
@@ -37,6 +39,7 @@ export const TAXONOMIES_COPY = {
     viewUsageButton: 'Ver uso',
     toggleActiveOn: 'Activar',
     toggleActiveOff: 'Desactivar',
+    grupoLabel: 'Grupo:',
   },
 
   editor: {
@@ -46,9 +49,9 @@ export const TAXONOMIES_COPY = {
     saveButton: 'Guardar',
     saving: 'Guardando…',
 
-    slugLabel: 'Slug (identificador único URL)',
-    slugHint: 'Sin espacios ni caracteres especiales. Ej: "turismo-cultural".',
-    slugRequired: 'El slug es obligatorio.',
+    slugLabel: 'Código (type_code para tipologías)',
+    slugHint: 'Identificador único. Sin espacios. Para tipologías coincide con el valor de rdf_type en recurso_turistico. Ej: "Beach".',
+    slugRequired: 'El código es obligatorio.',
 
     parentLabel: 'Término padre (opcional)',
     parentNone: '— Ninguno (nivel raíz) —',
@@ -62,8 +65,12 @@ export const TAXONOMIES_COPY = {
     semanticUriLabel: 'URI semántica',
     semanticUriHint: 'URL del vocabulario semántico. Ej: https://schema.org/Beach. Opcional pero necesario para exportación al PID.',
 
-    schemaCodeLabel: 'Código schema.org',
-    schemaCodeHint: 'Código corto tal y como aparece en rdf_type. Ej: "Beach", "Hotel".',
+    schemaCodeLabel: 'Código schema.org (schema_org_type)',
+    schemaCodeHint: 'Tipo schema.org al que equivale. Ej: "Beach" para playas, "LodgingBusiness" para ApartHotel.',
+
+    grupoLabel: 'Grupo',
+    grupoHint: 'Categoría operativa interna. Clasifica la tipología para filtros del CMS.',
+    grupoPlaceholder: '— Seleccionar grupo —',
 
     translationsTitle: 'Traducciones',
     translationsHint: 'Al menos una versión en castellano es recomendable. El gallego se rellena automáticamente desde el español si lo dejas vacío.',

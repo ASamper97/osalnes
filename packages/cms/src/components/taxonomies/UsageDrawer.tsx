@@ -53,8 +53,8 @@ export default function UsageDrawer({
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
-  // Catálogos sin relación directa con recurso_turistico (zona/categoria/producto)
-  const isDirectRelation = catalog === 'municipio' || catalog === 'tipologia_une';
+  // Catálogos con relación directa con recurso_turistico (municipio_id, zona_id, rdf_type)
+  const isDirectRelation = catalog === 'municipio' || catalog === 'tipologia' || catalog === 'zona';
 
   return (
     <div
