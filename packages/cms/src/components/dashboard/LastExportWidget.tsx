@@ -23,7 +23,7 @@ export default function LastExportWidget({ overview, onNavigate }: LastExportWid
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => onNavigate('/exports')}
+            onClick={() => onNavigate(overview.lastExportId ? `/exports/${overview.lastExportId}` : '/exports')}
           >
             📤 Lanzar exportación →
           </button>

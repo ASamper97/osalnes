@@ -23,6 +23,16 @@ export interface DashboardOverview {
   lastPublishedAt: string | null;
   lastExportAt: string | null;
   lastExportStatus: string | null;
+  /**
+   * SCR-13 Fase B · t6 — id del último job de exportación para que el
+   * LastExportWidget pueda navegar al drawer `/exports/:id` en vez del
+   * listado genérico `/exports`.
+   *
+   * Requiere ampliar `dashboard_get_overview` con `last_export_id uuid`.
+   * Hasta que llegue esa migración (deuda documentada en el checklist),
+   * el mapper devuelve null y el widget cae al fallback `/exports`.
+   */
+  lastExportId: string | null;
 }
 
 export const EMPTY_OVERVIEW: DashboardOverview = {
@@ -39,6 +49,7 @@ export const EMPTY_OVERVIEW: DashboardOverview = {
   lastPublishedAt: null,
   lastExportAt: null,
   lastExportStatus: null,
+  lastExportId: null,
 };
 
 // ─── Mi trabajo (borradores del usuario) ──────────────────────────────
@@ -140,6 +151,9 @@ export function mapRpcOverview(r: Record<string, unknown>): DashboardOverview {
     lastPublishedAt: (r.last_published_at as string) ?? null,
     lastExportAt: (r.last_export_at as string) ?? null,
     lastExportStatus: (r.last_export_status as string) ?? null,
+    // SCR-13 Fase B · t6 — null hasta que una futura migración amplíe
+    // dashboard_get_overview con last_export_id. El widget hace fallback.
+    lastExportId: (r.last_export_id as string) ?? null,
   };
 }
 
