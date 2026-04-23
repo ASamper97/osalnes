@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 import { useDarkMode } from '../lib/dark-mode';
@@ -6,14 +6,27 @@ import { CmsAssistant } from './CmsAssistant';
 import { OnboardingTour, shouldShowTour, resetTour } from './OnboardingTour';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationsBell } from './NotificationsBell';
+import { parseUserRole, type UserRole as SharedUserRole } from '@osalnes/shared/data/rbac';
 
 type Role = 'admin' | 'editor' | 'validador' | 'tecnico' | 'analitica';
 
+/**
+ * Un ítem del nav acepta DOS sistemas de roles en OR:
+ *   · `roles` (legacy) — viene de `profile.role` (tabla usuario),
+ *     5 valores: admin | editor | validador | tecnico | analitica.
+ *   · `sharedRoles` (SCR-02+) — viene de `user_metadata.role` parseado
+ *     por `parseUserRole` del shared/rbac, 5 valores del pliego:
+ *     admin | platform | operator | agency | tourism_manager.
+ * Si cualquiera de los dos sistemas autoriza al usuario, el item se
+ * muestra. Así sobrevivimos al desdoble de RBAC hasta que SCR-14
+ * unifique ambos.
+ */
 interface NavItem {
   path: string;
   label: string;
   icon: string;
   roles: Role[];
+  sharedRoles?: SharedUserRole[];
 }
 
 const allRoles: Role[] = ['admin', 'editor', 'validador', 'tecnico', 'analitica'];
@@ -26,7 +39,12 @@ const navItems: NavItem[] = [
   { path: '/zones', label: 'Zonas', icon: '\u{1F4CD}', roles: ['admin', 'editor', 'tecnico'] },
   { path: '/pages', label: 'Paginas', icon: '\u{1F4C4}', roles: ['admin', 'editor'] },
   { path: '/navigation', label: 'Navegacion', icon: '\u2630\uFE0F', roles: ['admin'] },
-  { path: '/exports', label: 'Exportaciones', icon: '\u{1F4E4}', roles: ['admin', 'tecnico'] },
+  // SCR-13 · A5 — Exportaciones visible para admin/tecnico (legacy) y
+  // para admin/platform (shared RBAC del pliego). El prompt A5 pide
+  // admin+platform; `tecnico` se mantiene porque es el mapeo legacy
+  // del "gestor de plataforma" del pliego y retirarlo sin migración
+  // de user_metadata rompería acceso a técnicos existentes.
+  { path: '/exports', label: 'Exportaciones', icon: '\u{1F4E4}', roles: ['admin', 'tecnico'], sharedRoles: ['admin', 'platform'] },
   { path: '/audit', label: 'Actividad', icon: '\u{1F4CB}', roles: ['admin', 'tecnico'] },
   { path: '/users', label: 'Usuarios', icon: '\u{1F465}', roles: ['admin'] },
 ];
@@ -77,7 +95,14 @@ export function Layout() {
     setTourOpen(true);
   }
 
-  const visibleItems = navItems.filter((item) => role && item.roles.includes(role));
+  // Dos sistemas de RBAC conviven (ver comentario en NavItem). Un item
+  // es visible si el rol legacy O el rol shared autorizan al usuario.
+  const sharedRole = useMemo(() => parseUserRole(user?.user_metadata), [user]);
+  const visibleItems = navItems.filter((item) => {
+    const legacyOk = !!role && item.roles.includes(role);
+    const sharedOk = !!item.sharedRoles && item.sharedRoles.includes(sharedRole);
+    return legacyOk || sharedOk;
+  });
 
   return (
     <div className="cms-layout">
