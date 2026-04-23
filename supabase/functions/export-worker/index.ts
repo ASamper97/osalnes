@@ -5,6 +5,16 @@
 // Worker asíncrono que procesa jobs de exportación. Se invoca tras crear
 // un job desde el RPC `exports_launch`.
 //
+// REESCRITO (SCR-13 · A2, 2026-04-23) contra el esquema real:
+//   · Tabla `recurso_turistico` (no `resources`)
+//   · Tabla `municipio` (no `municipalities`)
+//   · estado_editorial (no publication_status) con valor 'publicado'
+//   · rdf_type (no single_type_vocabulary)
+//   · municipio_id (no municipality_id)
+//   · name/description vía tr_get (no columnas name_es/description_es)
+//   · Campos duplicados contact_*/telephone[]/email[]/url sobreviven
+//     ambos con coalesce(new, old)
+//
 // Dos modos de invocación soportados:
 //   1) HTTP POST { job_id } → procesa ese job específico
 //   2) HTTP POST (sin body) → busca todos los jobs 'pending' y los procesa
@@ -39,24 +49,30 @@ interface ExportJob {
   triggered_by: string | null;
 }
 
+/**
+ * Fila hidratada de un recurso para el worker. Los nombres mantienen el
+ * estilo camelCase y reflejan el modelo lógico (nameEs/descriptionEs),
+ * aunque la BD resuelve nameEs/descriptionEs vía `tr_get` (no hay
+ * columnas name_es/description_es reales).
+ */
 interface ResourceRow {
   id: string;
-  name_es: string;
-  name_gl: string | null;
   slug: string;
-  description_es: string | null;
-  single_type_vocabulary: string | null;
+  rdfType: string | null;
+  estadoEditorial: string;
+  municipioId: string | null;
+  municipioName: string | null;
+  nameEs: string | null;
+  nameGl: string | null;
+  descriptionEs: string | null;
   latitude: number | null;
   longitude: number | null;
-  street_address: string | null;
-  postal_code: string | null;
-  contact_phone: string | null;
-  contact_email: string | null;
-  contact_web: string | null;
-  municipality_id: string | null;
-  publication_status: string;
-  municipality_name: string | null;
-  pid_missing_required: number;
+  streetAddress: string | null;
+  postalCode: string | null;
+  telephone: string | null;
+  email: string | null;
+  web: string | null;
+  pidMissingRequired: number;
 }
 
 interface ProcessResult {
@@ -75,21 +91,131 @@ interface ClassifiedError {
   details?: Record<string, unknown>;
 }
 
+type SupabaseClient = ReturnType<typeof createClient>;
+
+// ─── Hidratación de un recurso (Spanish schema → ResourceRow) ──────────
+//
+// Hace las consultas necesarias para llenar el ResourceRow:
+//   1) Una fila base de recurso_turistico + slug del municipio
+//   2) 4 tr_get en paralelo (nameEs, nameGl, descEs, municipioName)
+//   3) 1 count_pid_missing_required
+//
+// Es N+1 para el worker, pero como procesa asíncrono y el alcance
+// suele ser <500 recursos/job, no compensa optimizar con una RPC
+// dedicada. Si en fase B se ve lento, crear `exports_load_scope_row`.
+
+async function hydrateResource(
+  id: string,
+  supabase: SupabaseClient,
+): Promise<{ row: ResourceRow | null; error?: string }> {
+  const { data: base, error } = await supabase
+    .from('recurso_turistico')
+    .select(`
+      id, slug, rdf_type, estado_editorial, municipio_id,
+      latitude, longitude,
+      address_street, address_postal,
+      street_address, postal_code,
+      telephone, email, url,
+      contact_phone, contact_email, contact_web,
+      municipio:municipio_id ( slug )
+    `)
+    .eq('id', id)
+    .single();
+
+  if (error || !base) {
+    return { row: null, error: error?.message ?? 'Recurso no encontrado' };
+  }
+
+  const b = base as Record<string, unknown>;
+  const municipioRel = b.municipio as { slug?: string } | null;
+
+  // Paralelo: traducciones + pid_missing_required
+  const [nameEsRes, nameGlRes, descEsRes, municipioNameRes, pidMissingRes] = await Promise.all([
+    supabase.rpc('tr_get', {
+      p_entidad_tipo: 'recurso_turistico',
+      p_entidad_id: id,
+      p_campo: 'name',
+      p_idioma: 'es',
+    }),
+    supabase.rpc('tr_get', {
+      p_entidad_tipo: 'recurso_turistico',
+      p_entidad_id: id,
+      p_campo: 'name',
+      p_idioma: 'gl',
+    }),
+    supabase.rpc('tr_get', {
+      p_entidad_tipo: 'recurso_turistico',
+      p_entidad_id: id,
+      p_campo: 'description',
+      p_idioma: 'es',
+    }),
+    b.municipio_id
+      ? supabase.rpc('tr_get', {
+          p_entidad_tipo: 'municipio',
+          p_entidad_id: b.municipio_id,
+          p_campo: 'name',
+          p_idioma: 'es',
+        })
+      : Promise.resolve({ data: null, error: null }),
+    supabase.rpc('count_pid_missing_required', { p_resource_id: id }),
+  ]);
+
+  const nameEs = (nameEsRes.data as string | null) ?? null;
+  const nameGl = (nameGlRes.data as string | null) ?? null;
+  const descriptionEs = (descEsRes.data as string | null) ?? null;
+  const municipioName =
+    ((municipioNameRes.data as string | null) ?? null) || municipioRel?.slug || null;
+
+  // Campos duplicados: preferir nuevo, fallback al viejo. telephone/email
+  // antiguos son arrays; cogemos el primer elemento.
+  const telephoneArray = Array.isArray(b.telephone) ? (b.telephone as string[]) : [];
+  const emailArray = Array.isArray(b.email) ? (b.email as string[]) : [];
+  const telephone = (b.contact_phone as string | null) ?? telephoneArray[0] ?? null;
+  const email = (b.contact_email as string | null) ?? emailArray[0] ?? null;
+  const web = (b.contact_web as string | null) ?? (b.url as string | null) ?? null;
+  const streetAddress =
+    (b.street_address as string | null) ?? (b.address_street as string | null) ?? null;
+  const postalCode =
+    (b.postal_code as string | null) ?? (b.address_postal as string | null) ?? null;
+
+  const row: ResourceRow = {
+    id: String(b.id),
+    slug: String(b.slug ?? ''),
+    rdfType: (b.rdf_type as string | null) ?? null,
+    estadoEditorial: String(b.estado_editorial ?? 'borrador'),
+    municipioId: (b.municipio_id as string | null) ?? null,
+    municipioName,
+    nameEs,
+    nameGl,
+    descriptionEs,
+    latitude: (b.latitude as number | null) ?? null,
+    longitude: (b.longitude as number | null) ?? null,
+    streetAddress,
+    postalCode,
+    telephone,
+    email,
+    web,
+    pidMissingRequired: Number(pidMissingRes.data ?? 0),
+  };
+
+  return { row };
+}
+
 // ─── Generación de payload por job_type (decisión 2-B) ─────────────────
 
 async function buildPayload(
   resource: ResourceRow,
   jobType: string,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<{ payload: unknown; error?: ClassifiedError }> {
   // Validación previa de contenido obligatorio
-  if (resource.pid_missing_required > 0) {
+  if (resource.pidMissingRequired > 0) {
     return {
       payload: null,
       error: {
         category: 'content',
-        message: `Faltan ${resource.pid_missing_required} campos obligatorios PID sin rellenar`,
-        details: { missing_count: resource.pid_missing_required },
+        message: `Faltan ${resource.pidMissingRequired} campos obligatorios PID sin rellenar`,
+        details: { missing_count: resource.pidMissingRequired },
       },
     };
   }
@@ -98,14 +224,15 @@ async function buildPayload(
     // JSON-LD schema.org (UNE 178503)
     const base: Record<string, unknown> = {
       '@context': 'https://schema.org',
-      '@type': resource.single_type_vocabulary ?? 'TouristAttraction',
-      '@id': `https://osalnes.gal/recurso/${resource.slug}`,
-      name: resource.name_es,
+      '@type': resource.rdfType ?? 'TouristAttraction',
+      '@id': `https://turismo.osalnes.gal/es/recurso/${resource.slug}`,
+      name: resource.nameEs ?? resource.nameGl ?? resource.slug,
     };
-    if (resource.description_es) base.description = resource.description_es;
-    if (resource.street_address) base.streetAddress = resource.street_address;
-    if (resource.postal_code) base.postalCode = resource.postal_code;
-    if (resource.municipality_name) base.addressLocality = resource.municipality_name;
+    if (resource.nameGl && resource.nameGl !== resource.nameEs) base.alternateName = resource.nameGl;
+    if (resource.descriptionEs) base.description = resource.descriptionEs;
+    if (resource.streetAddress) base.streetAddress = resource.streetAddress;
+    if (resource.postalCode) base.postalCode = resource.postalCode;
+    if (resource.municipioName) base.addressLocality = resource.municipioName;
     if (resource.latitude != null && resource.longitude != null) {
       base.geo = {
         '@type': 'GeoCoordinates',
@@ -113,9 +240,9 @@ async function buildPayload(
         longitude: resource.longitude,
       };
     }
-    if (resource.contact_phone) base.telephone = resource.contact_phone;
-    if (resource.contact_email) base.email = resource.contact_email;
-    if (resource.contact_web) base.url = resource.contact_web;
+    if (resource.telephone) base.telephone = resource.telephone;
+    if (resource.email) base.email = resource.email;
+    if (resource.web) base.url = resource.web;
 
     // Añadir relaciones (RPC del paso 8)
     try {
@@ -138,24 +265,24 @@ async function buildPayload(
       payload: {
         id: resource.id,
         slug: resource.slug,
-        nameEs: resource.name_es,
-        nameGl: resource.name_gl,
-        description: resource.description_es,
-        type: resource.single_type_vocabulary,
-        municipalityId: resource.municipality_id,
-        municipalityName: resource.municipality_name,
+        nameEs: resource.nameEs,
+        nameGl: resource.nameGl,
+        description: resource.descriptionEs,
+        type: resource.rdfType,
+        municipalityId: resource.municipioId,
+        municipalityName: resource.municipioName,
         latitude: resource.latitude,
         longitude: resource.longitude,
         address: {
-          street: resource.street_address,
-          postalCode: resource.postal_code,
+          street: resource.streetAddress,
+          postalCode: resource.postalCode,
         },
         contact: {
-          phone: resource.contact_phone,
-          email: resource.contact_email,
-          web: resource.contact_web,
+          phone: resource.telephone,
+          email: resource.email,
+          web: resource.web,
         },
-        publicationStatus: resource.publication_status,
+        publicationStatus: resource.estadoEditorial,
       },
     };
   }
@@ -166,12 +293,12 @@ async function buildPayload(
       payload: {
         id: resource.id,
         slug: resource.slug,
-        name: resource.name_es ?? resource.name_gl ?? '',
-        type: resource.single_type_vocabulary ?? '',
-        municipality: resource.municipality_name ?? '',
+        name: resource.nameEs ?? resource.nameGl ?? '',
+        type: resource.rdfType ?? '',
+        municipality: resource.municipioName ?? '',
         latitude: resource.latitude ?? '',
         longitude: resource.longitude ?? '',
-        status: resource.publication_status,
+        status: resource.estadoEditorial,
       },
     };
   }
@@ -191,7 +318,7 @@ async function buildPayload(
 // esta función por un fetch al endpoint.
 
 async function sendToEndpoint(
-  jobType: string,
+  _jobType: string,
   payload: unknown,
 ): Promise<{ ok: boolean; error?: ClassifiedError; response?: unknown }> {
   // SIMULACIÓN v1: siempre éxito (salvo errores de payload detectados antes)
@@ -242,7 +369,7 @@ async function sendToEndpoint(
 
 async function processJob(
   job: ExportJob,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
 ): Promise<ProcessResult> {
   const startTime = Date.now();
   const result: ProcessResult = { processed: 0, failed: 0, skipped: 0 };
@@ -253,56 +380,29 @@ async function processJob(
     .update({ status: 'running' })
     .eq('id', job.id);
 
-  // Cargar recursos del alcance con datos y cálculo de missing
-  const { data: resources, error: resError } = await supabase.rpc('exports_load_scope_resources', {
-    p_scope_ids: job.scope_ids,
-  });
+  // Hidratar cada recurso del alcance secuencialmente. Es lento si hay
+  // >100 recursos; para fase B se puede crear un RPC `exports_load_scope`
+  // que devuelva todas las filas hidratadas en una sola roundtrip.
+  for (const resourceId of job.scope_ids ?? []) {
+    const { row, error: hydrateErr } = await hydrateResource(resourceId, supabase);
 
-  if (resError) {
-    // Si la RPC no existe aún, fallback a query directa
-    const { data: resourcesFallback, error: fbErr } = await supabase
-      .from('resources')
-      .select(`
-        id, name_es, name_gl, slug, description_es, single_type_vocabulary,
-        latitude, longitude, street_address, postal_code,
-        contact_phone, contact_email, contact_web,
-        municipality_id, publication_status,
-        municipalities:municipality_id ( name )
-      `)
-      .in('id', job.scope_ids);
-
-    if (fbErr) {
-      await markJobFailed(supabase, job.id, startTime, `Error cargando recursos: ${fbErr.message}`);
-      return result;
+    if (!row) {
+      // No se pudo cargar el recurso (fue borrado entre el launch y
+      // el processing, o falló el JOIN). Lo registramos como skipped.
+      await supabase.from('export_job_records').insert({
+        job_id: job.id,
+        resource_id: resourceId,
+        resource_name: null,
+        resource_slug: null,
+        status: 'skipped',
+        error_category: 'schema',
+        error_message: hydrateErr ?? 'No se pudo cargar el recurso',
+      });
+      result.skipped++;
+      continue;
     }
 
-    for (const r of (resourcesFallback ?? []) as Record<string, unknown>[]) {
-      const mun = (r.municipalities as Record<string, unknown> | null);
-      const resource: ResourceRow = {
-        id: String(r.id),
-        name_es: String(r.name_es ?? ''),
-        name_gl: (r.name_gl as string) ?? null,
-        slug: String(r.slug ?? ''),
-        description_es: (r.description_es as string) ?? null,
-        single_type_vocabulary: (r.single_type_vocabulary as string) ?? null,
-        latitude: (r.latitude as number) ?? null,
-        longitude: (r.longitude as number) ?? null,
-        street_address: (r.street_address as string) ?? null,
-        postal_code: (r.postal_code as string) ?? null,
-        contact_phone: (r.contact_phone as string) ?? null,
-        contact_email: (r.contact_email as string) ?? null,
-        contact_web: (r.contact_web as string) ?? null,
-        municipality_id: (r.municipality_id as string) ?? null,
-        publication_status: String(r.publication_status ?? 'draft'),
-        municipality_name: (mun?.name as string) ?? null,
-        pid_missing_required: 0, // se recalculará más abajo con una RPC
-      };
-      await processResource(job, resource, supabase, result);
-    }
-  } else {
-    for (const r of (resources ?? []) as ResourceRow[]) {
-      await processResource(job, r, supabase, result);
-    }
+    await processResource(job, row, supabase, result);
   }
 
   // Finalizar job con estado derivado
@@ -329,9 +429,11 @@ async function processJob(
 async function processResource(
   job: ExportJob,
   resource: ResourceRow,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   result: ProcessResult,
 ): Promise<void> {
+  const resourceName = resource.nameEs ?? resource.nameGl ?? resource.slug;
+
   // 1) Construir payload
   const { payload, error: buildError } = await buildPayload(resource, job.job_type, supabase);
 
@@ -339,7 +441,7 @@ async function processResource(
     await supabase.from('export_job_records').insert({
       job_id: job.id,
       resource_id: resource.id,
-      resource_name: resource.name_es,
+      resource_name: resourceName,
       resource_slug: resource.slug,
       status: 'failed',
       error_category: buildError.category,
@@ -357,7 +459,7 @@ async function processResource(
     await supabase.from('export_job_records').insert({
       job_id: job.id,
       resource_id: resource.id,
-      resource_name: resource.name_es,
+      resource_name: resourceName,
       resource_slug: resource.slug,
       status: 'failed',
       error_category: sendRes.error?.category ?? 'integration',
@@ -373,29 +475,12 @@ async function processResource(
   await supabase.from('export_job_records').insert({
     job_id: job.id,
     resource_id: resource.id,
-    resource_name: resource.name_es,
+    resource_name: resourceName,
     resource_slug: resource.slug,
     status: 'success',
     payload,
   });
   result.processed++;
-}
-
-async function markJobFailed(
-  supabase: ReturnType<typeof createClient>,
-  jobId: string,
-  startTime: number,
-  errorMessage: string,
-): Promise<void> {
-  await supabase
-    .from('export_jobs')
-    .update({
-      status: 'failed',
-      finished_at: new Date().toISOString(),
-      duration_ms: Date.now() - startTime,
-      error_message: errorMessage,
-    })
-    .eq('id', jobId);
 }
 
 // ─── Handler HTTP principal ────────────────────────────────────────────
@@ -451,9 +536,9 @@ serve(async (req: Request) => {
         );
       }
 
-      const result = await processJob(job as ExportJob, supabase);
+      const processResult = await processJob(job as ExportJob, supabase);
       return new Response(
-        JSON.stringify({ ok: true, job_id: body.job_id, result }),
+        JSON.stringify({ ok: true, job_id: body.job_id, result: processResult }),
         { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
       );
     }
