@@ -37,6 +37,13 @@ const navItems: NavItem[] = [
   { path: '/categories', label: 'Categorias', icon: '\u{1F4C1}', roles: ['admin'] },
   { path: '/products', label: 'Productos', icon: '\u{1F3AF}', roles: ['admin', 'editor'] },
   { path: '/zones', label: 'Zonas', icon: '\u{1F4CD}', roles: ['admin', 'editor', 'tecnico'] },
+  // SCR-10 v2 · Taxonomías. Visible para admin/platform/tourist_manager
+  // (editable) y operator (solo lectura). RBAC granular lo aplica
+  // TaxonomiesPage por catálogo: p.ej. tourist_manager NO edita tipologías.
+  // Legacy: admin + editor + tecnico (técnicos sin user_metadata aún).
+  { path: '/taxonomies', label: 'Taxonomías', icon: '\u{1F3F7}️',
+    roles: ['admin', 'editor', 'tecnico'],
+    sharedRoles: ['admin', 'platform', 'tourism_manager', 'operator'] },
   { path: '/pages', label: 'Paginas', icon: '\u{1F4C4}', roles: ['admin', 'editor'] },
   { path: '/navigation', label: 'Navegacion', icon: '\u2630\uFE0F', roles: ['admin'] },
   // SCR-13 · A5 — Exportaciones visible para admin/tecnico (legacy) y
