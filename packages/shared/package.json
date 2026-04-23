@@ -85,6 +85,10 @@
     "./data/exports": {
       "types": "./dist/data/exports.d.ts",
       "default": "./dist/data/exports.js"
+    },
+    "./data/exports-detail": {
+      "types": "./dist/data/exports-detail.d.ts",
+      "default": "./dist/data/exports-detail.js"
     }
   },
   "scripts": {

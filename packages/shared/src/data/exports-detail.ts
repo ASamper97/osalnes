@@ -5,7 +5,7 @@
  * el core y facilitar el despliegue incremental.
  */
 
-import type { ExportErrorCategory, ExportJobStatus, ExportJobType, ExportScopeType } from './exports';
+import type { ExportErrorCategory, ExportJobStatus, ExportJobType, ExportScopeType } from './exports.js';
 
 // ─── Detalle del job ──────────────────────────────────────────────────
 
