@@ -97,6 +97,9 @@ export function App() {
                 <Route path="/navigation/new" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
                 <Route path="/navigation/:id/edit" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
                 <Route path="/exports" element={<ErrorBoundary><ExportsRoute /></ErrorBoundary>} />
+                {/* SCR-13 Fase B · ruta /exports/:id monta el mismo ExportsRoute
+                    que lee useParams() y abre el drawer sobre el listado. */}
+                <Route path="/exports/:id" element={<ErrorBoundary><ExportsRoute /></ErrorBoundary>} />
                 <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
                 <Route path="/audit" element={<ErrorBoundary><AuditLogPage /></ErrorBoundary>} />
               </Route>
