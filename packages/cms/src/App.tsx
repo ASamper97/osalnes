@@ -42,7 +42,11 @@ const PageWizardPage = lazy(() => import('./pages/PageWizardPage').then(m => ({ 
 const NavigationPage = lazy(() => import('./pages/NavigationPage').then(m => ({ default: m.NavigationPage })));
 const NavigationWizardPage = lazy(() => import('./pages/NavigationWizardPage').then(m => ({ default: m.NavigationWizardPage })));
 const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })));
-const ExportsPage = lazy(() => import('./pages/ExportsPage').then(m => ({ default: m.ExportsPage })));
+// SCR-13 · A4 — `ExportsRoute` (orquestador) monta useExports + navigate
+// y pasa el estado a ExportsPage (dumb). El lazy anterior intentaba
+// `m.ExportsPage`, pero ExportsPage.tsx solo tiene export default —
+// devolvía `undefined` y la ruta /exports crasheaba en Suspense.
+const ExportsRoute = lazy(() => import('./pages/ExportsRoute'));
 
 /** Suspense fallback shown while a lazy route chunk downloads. Intentionally
  *  minimal — the network usually beats the eye, so a heavy skeleton would
@@ -92,7 +96,7 @@ export function App() {
                 <Route path="/navigation" element={<ErrorBoundary><NavigationPage /></ErrorBoundary>} />
                 <Route path="/navigation/new" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
                 <Route path="/navigation/:id/edit" element={<ErrorBoundary><NavigationWizardPage /></ErrorBoundary>} />
-                <Route path="/exports" element={<ErrorBoundary><ExportsPage /></ErrorBoundary>} />
+                <Route path="/exports" element={<ErrorBoundary><ExportsRoute /></ErrorBoundary>} />
                 <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
                 <Route path="/audit" element={<ErrorBoundary><AuditLogPage /></ErrorBoundary>} />
               </Route>
