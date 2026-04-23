@@ -47,6 +47,9 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 // `m.ExportsPage`, pero ExportsPage.tsx solo tiene export default —
 // devolvía `undefined` y la ruta /exports crasheaba en Suspense.
 const ExportsRoute = lazy(() => import('./pages/ExportsRoute'));
+// SCR-10 v2 — TaxonomiesRoute instancia useTaxonomies + RBAC del usuario
+// y monta TaxonomiesPage master-detail con los 5 catálogos.
+const TaxonomiesRoute = lazy(() => import('./pages/TaxonomiesRoute'));
 
 /** Suspense fallback shown while a lazy route chunk downloads. Intentionally
  *  minimal — the network usually beats the eye, so a heavy skeleton would
@@ -100,6 +103,10 @@ export function App() {
                 {/* SCR-13 Fase B · ruta /exports/:id monta el mismo ExportsRoute
                     que lee useParams() y abre el drawer sobre el listado. */}
                 <Route path="/exports/:id" element={<ErrorBoundary><ExportsRoute /></ErrorBoundary>} />
+                {/* SCR-10 v2 · Gestor de taxonomías (master-detail con
+                    los 5 catálogos: tipologia, categoria, producto, zona,
+                    municipio). RBAC por catálogo dentro del componente. */}
+                <Route path="/taxonomies" element={<ErrorBoundary><TaxonomiesRoute /></ErrorBoundary>} />
                 <Route path="/users" element={<ErrorBoundary><UsersPage /></ErrorBoundary>} />
                 <Route path="/audit" element={<ErrorBoundary><AuditLogPage /></ErrorBoundary>} />
               </Route>

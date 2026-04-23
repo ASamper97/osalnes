@@ -89,6 +89,10 @@
     "./data/exports-detail": {
       "types": "./dist/data/exports-detail.d.ts",
       "default": "./dist/data/exports-detail.js"
+    },
+    "./data/taxonomies": {
+      "types": "./dist/data/taxonomies.d.ts",
+      "default": "./dist/data/taxonomies.js"
     }
   },
   "scripts": {

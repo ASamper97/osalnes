@@ -1,56 +1,81 @@
 /**
- * TaxonomiesRoute — wrapper /taxonomies
+ * TaxonomiesRoute — wrapper de /taxonomies (SCR-10 v2)
  *
  * Instancia el hook useTaxonomies y resuelve el rol del usuario para
- * pasarlo a TaxonomiesPage, que aplicará el RBAC por catálogo.
+ * pasarlo a TaxonomiesPage, que aplica el RBAC por catálogo.
+ *
+ * Patrón idéntico a ExportsRoute / DashboardRoute:
+ *   · supabase desde @/lib/supabase
+ *   · useAuth desde @/lib/auth-context
+ *   · Cast `as unknown as SupabaseLike` porque supabase-js devuelve
+ *     PostgrestFilterBuilder (thenable) en `.rpc()`.
  */
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import TaxonomiesPage from './TaxonomiesPage';
-import { useTaxonomies } from '../hooks/useTaxonomies';
-
-// Imports específicos del proyecto (se resuelven al integrar)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const supabase: any;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const useAuth: () => {
-  user?: { user_metadata?: { role?: string } };
-  profile?: { role?: string };
-};
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { parseUserRole } from '@osalnes/shared/data/rbac';
+import { useTaxonomies, type SupabaseLike } from '@/hooks/useTaxonomies';
+import TaxonomiesPage from '@/pages/TaxonomiesPage';
+import '@/pages/taxonomies.css';
 
 /**
- * Resuelve el rol del usuario combinando los dos sistemas RBAC
- * coexistentes en el proyecto (profile.role legacy + user_metadata.role shared).
- * Patrón idéntico al usado en Layout.tsx y ExportsRoute.tsx.
+ * Resuelve el rol efectivo combinando los dos sistemas RBAC que
+ * coexisten en el proyecto (decisión 7-C del SCR-10):
+ *   · profile.role (legacy, 5 valores: admin|editor|validador|tecnico|analitica)
+ *   · user_metadata.role (shared, 5 valores del pliego)
+ *
+ * Reducción al set que TaxonomiesPage entiende:
+ *   admin | platform | tourist_manager | operator | unknown.
+ *
+ * Mapeo legacy → shared (explícito):
+ *   · admin (legacy)    → admin
+ *   · tecnico (legacy)  → operator (no es platform: el tecnico de la
+ *                         tabla usuario es rol operativo, no estratégico)
+ *   · analitica         → operator (solo lectura; canEdit=false cae
+ *                         igualmente por RBAC del catálogo)
+ *
+ * Si hay conflicto (p. ej. legacy='admin' y shared='operator'), gana
+ * el más permisivo. No debería ocurrir en prod — cuando llegue SCR-14
+ * se unificarán.
  */
-function resolveUserRole(auth: ReturnType<typeof useAuth>):
-  'admin' | 'platform' | 'tourist_manager' | 'operator' | 'unknown' {
-  const sharedRole = auth.user?.user_metadata?.role;
-  const legacyRole = auth.profile?.role;
+function resolveUserRole(
+  profileRole: string | null | undefined,
+  userMetadata: unknown,
+): 'admin' | 'platform' | 'tourist_manager' | 'operator' | 'unknown' {
+  const sharedRole = parseUserRole(userMetadata);
 
-  if (sharedRole === 'admin' || legacyRole === 'admin') return 'admin';
+  if (sharedRole === 'admin' || profileRole === 'admin') return 'admin';
   if (sharedRole === 'platform') return 'platform';
-  if (sharedRole === 'tourist_manager' || legacyRole === 'gestor_turistico') return 'tourist_manager';
-  if (legacyRole === 'tecnico' || legacyRole === 'operator') return 'operator';
+  if (sharedRole === 'tourism_manager') return 'tourist_manager';
+  if (
+    sharedRole === 'operator' ||
+    profileRole === 'tecnico' ||
+    profileRole === 'editor' ||
+    profileRole === 'validador' ||
+    profileRole === 'analitica'
+  ) return 'operator';
   return 'unknown';
 }
 
 export default function TaxonomiesRoute() {
   const navigate = useNavigate();
-  const auth = useAuth();
-  const userRole = resolveUserRole(auth);
+  const { user, role: legacyRole } = useAuth();
+  const userRole = resolveUserRole(legacyRole, user?.user_metadata);
 
-  const state = useTaxonomies({ supabase });
+  const state = useTaxonomies({
+    supabase: supabase as unknown as SupabaseLike,
+  });
 
   const handleOpenResource = useCallback((resourceId: string) => {
     if (!resourceId) {
-      // caso "ver los X en el listado" (no hay id específico)
+      // caso "ver los X recursos con este término" (sin id específico)
       navigate('/resources');
       return;
     }
-    navigate(`/resources/${resourceId}/edit`);
+    // Ruta del wizard del recurso (idem DashboardRoute / ResourcesRoute)
+    navigate(`/resources/${resourceId}`);
   }, [navigate]);
 
   return (
