@@ -157,18 +157,30 @@ Proceso:
    confirmar con la fuente oficial del recurso."
 
 Reglas de redacción:
-- Entre 120 y 200 palabras.
-- Tono profesional pero cercano, sin ser cursi ni publicitario.
-- Estructura: (1) qué es y qué lo hace especial, (2) detalles sensoriales
-  o contexto histórico/cultural breve si procede, (3) información práctica
-  útil para el visitante.
-- Datos específicos (horarios, teléfonos, precios) SOLO si los has
-  encontrado en fuentes fiables. Si no, genérico.
-- Respeta los topónimos gallegos (Illa de Arousa, Cambados, O Grove,
-  Meaño, Vilagarcía, Sanxenxo, Ribadumia, Vilanova, Meis).
-- Para gallego: usa gallego real (galego real, non castelán galeguizado).
-- Devuelve SOLO el texto del borrador, sin títulos ni comillas ni
-  introducciones tipo "Aquí tienes…".`,
+- Longitud: 150-220 palabras. CIERRA SIEMPRE la última frase — nunca
+  entregues un borrador que termine a mitad de oración.
+- Mínimo 3 párrafos separados por línea en blanco:
+  (1) qué es el recurso y qué lo hace especial,
+  (2) contexto histórico, cultural o sensorial relevante (qué se ve,
+      qué se siente, qué se puede hacer),
+  (3) información práctica útil para el visitante (cómo llegar, cuándo
+      ir, qué llevar, qué esperar).
+- Tono profesional pero cercano, evocador sin caer en cursi ni
+  publicitario. No uses superlativos vacíos ("único", "inigualable",
+  "imprescindible") salvo que lo respalde una fuente.
+- Datos concretos (horarios, teléfonos, precios, estrellas de hotel,
+  bandera azul, distinción DO) SOLO si los has encontrado en fuentes
+  fiables en tu búsqueda. Si no los tienes, omítelos — no los inventes.
+- Cita implícitamente los matices locales gallegos: topónimos exactos
+  (Illa de Arousa, Cambados, O Grove, Meaño, Vilagarcía, Sanxenxo,
+  Ribadumia, Vilanova, Meis, Poio), DO Rías Baixas, Camino Portugués,
+  Ruta do Viño, Fiesta del Marisco, Festa do Albariño, etc.
+- Para gallego: galego real (non castelán galeguizado). No traduzcas
+  topónimos oficiales (p. ej. Cambados no es "Cambadas").
+- Devuelve EXCLUSIVAMENTE el texto del borrador en los párrafos indicados,
+  sin títulos, sin comillas envolventes, sin introducciones tipo "Aquí
+  tienes…", sin nota final "Información por confirmar con…" (eso solo
+  aplica si no encontraste nada, y aun así dentro del párrafo 3).`,
 
   // Acción `suggestTags` (paso 4 · t4). Modalidad "explicado" (decisión
   // 4-A del usuario): cada sugerencia viene con una razón corta que cita
@@ -596,14 +608,27 @@ Genera las sugerencias siguiendo las reglas del system prompt.`;
                   : action === 'suggestImprovements'
                     ? 0.6  // paso 7b · t3 — creatividad acotada, sugerencias variadas
                     : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+        // maxOutputTokens: con grounding, Gemini 2.5 Flash consume tokens
+        // en "thinking" interno antes de redactar. 600 era insuficiente —
+        // el texto se cortaba a mitad de frase. Subimos a 2048 para que
+        // entre razonamiento + 200 palabras reales.
         maxOutputTokens: action === 'validate'
           ? 1024
           : action === 'suggestTags'
             ? 1200
-            : action === 'draft' ? 600 : 512, // +200 tokens para permitir razonamiento sobre búsqueda
+            : action === 'draft' ? 2048 : 512,
         topP: 0.9,
       },
     };
+    // Gemini 2.5 permite acotar el "thinking budget" para evitar que se coma
+    // los tokens del output. En `draft` queremos un poco de razonamiento
+    // (para usar bien la búsqueda web) pero no más del necesario. 1024
+    // tokens de thinking + 1024 de respuesta dentro del cap de 2048.
+    if (action === 'draft') {
+      (geminiBody.generationConfig as Record<string, unknown>).thinkingConfig = {
+        thinkingBudget: 1024,
+      };
+    }
     if (useWebSearch) {
       // Google Search grounding (Gemini 2.5). Requiere que la API key tenga
       // habilitado este tool en Google AI Studio / Vertex. Si no lo tuviera,
