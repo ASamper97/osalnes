@@ -7699,6 +7699,34 @@ textarea:focus-visible {
   gap: 0.55rem;
 }
 
+/* ── AiSourcesList: citaciones de Google Search grounding (paso 2) ── */
+.ai-sources-list {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem 0.9rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #475569;
+}
+.ai-sources-heading {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+  color: #334155;
+}
+.ai-sources-list ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+.ai-sources-list li { margin: 0.15rem 0; }
+.ai-sources-list a {
+  color: #1d4ed8;
+  text-decoration: none;
+  word-break: break-word;
+}
+.ai-sources-list a:hover { text-decoration: underline; }
+
 /* ── TranslationReadyToast ── */
 .translation-ready-toast {
   position: fixed;

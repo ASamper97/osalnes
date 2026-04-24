@@ -25,7 +25,7 @@ import {
   formatGlStatus,
   type GlStatus,
 } from './step2-content.copy';
-import { aiImprove, aiDraft, aiTranslate } from '../lib/ai';
+import { aiImprove, aiDraft, aiTranslate, type AiSource } from '../lib/ai';
 
 export interface ResourceWizardStep2ContentProps {
   descriptionEs: string;
@@ -48,8 +48,33 @@ export interface ResourceWizardStep2ContentProps {
 }
 
 type AiPendingOp =
-  | { target: 'es'; action: 'draft' | 'improve'; suggested: string }
-  | { target: 'gl'; action: 'translate' | 'improve'; suggested: string };
+  | { target: 'es'; action: 'draft' | 'improve'; suggested: string; sources?: AiSource[] }
+  | { target: 'gl'; action: 'translate' | 'improve'; suggested: string; sources?: AiSource[] };
+
+/**
+ * Lista de fuentes web citadas por la IA (Google Search grounding).
+ * Solo se renderiza cuando hay al menos una — si la API key no tiene
+ * grounding habilitado, `sources` vendrá vacío y el bloque se oculta.
+ */
+function AiSourcesList({ sources }: { sources?: AiSource[] }) {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="ai-sources-list" role="note" aria-label="Fuentes consultadas">
+      <p className="ai-sources-heading">
+        <span aria-hidden>🔗</span> Fuentes consultadas por la IA
+      </p>
+      <ul>
+        {sources.map((s) => (
+          <li key={s.url}>
+            <a href={s.url} target="_blank" rel="noopener noreferrer">
+              {s.title || s.url}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function ResourceWizardStep2Content({
   descriptionEs,
@@ -87,13 +112,13 @@ export default function ResourceWizardStep2Content({
     setLoading('draft-es');
     setError(null);
     try {
-      const suggested = await aiDraft({
+      const { text, sources } = await aiDraft({
         name: context.name,
         typeKey: context.mainTypeKey,
         municipio: context.municipio,
         targetLang: 'es',
       });
-      setPending({ target: 'es', action: 'draft', suggested });
+      setPending({ target: 'es', action: 'draft', suggested: text, sources });
     } catch {
       setError(STEP2_COPY.aiErrors.generic);
     } finally {
@@ -235,15 +260,18 @@ export default function ResourceWizardStep2Content({
         />
 
         {pending?.target === 'es' && (
-          <AiPreview
-            heading={STEP2_COPY.aiPreview.heading}
-            disclaimer={STEP2_COPY.aiPreview.disclaimer}
-            text={pending.suggested}
-            applyLabel={STEP2_COPY.aiPreview.applyButton}
-            discardLabel={STEP2_COPY.aiPreview.discardButton}
-            onApply={applyPending}
-            onDiscard={discardPending}
-          />
+          <>
+            <AiPreview
+              heading={STEP2_COPY.aiPreview.heading}
+              disclaimer={STEP2_COPY.aiPreview.disclaimer}
+              text={pending.suggested}
+              applyLabel={STEP2_COPY.aiPreview.applyButton}
+              discardLabel={STEP2_COPY.aiPreview.discardButton}
+              onApply={applyPending}
+              onDiscard={discardPending}
+            />
+            <AiSourcesList sources={pending.sources} />
+          </>
         )}
 
         {!pending && (

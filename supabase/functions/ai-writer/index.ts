@@ -138,15 +138,32 @@ Tarea: redactar un borrador de descripción para una ficha turística a partir
 del nombre, la tipología y el municipio del recurso. El borrador aparecerá
 como propuesta en el CMS; el editor lo revisará antes de publicarlo.
 
-Reglas:
+Proceso:
+1. ANTES de redactar, BUSCA en internet información verídica sobre el recurso:
+   nombre exacto + municipio + "O Salnés" o "Rías Baixas". Prioriza estas
+   fuentes cuando aparezcan en los resultados:
+     - Web oficial del ayuntamiento (sanxenxo.gal, cambados.gal, ogrove.gal,
+       vilagarcia.gal, vilanovadearousa.gal, meano.gal, ribadumia.gal,
+       poio.gal, meis.gal, illadearousa.gal).
+     - turismoriasbaixas.com (Turismo Rías Baixas / Diputación de Pontevedra).
+     - turismo.gal (Turismo de Galicia).
+     - Wikipedia ES/GL del recurso si existe.
+     - Ficha del propio establecimiento si es un negocio (hotel, restaurante,
+       bodega) y tiene web oficial.
+2. Con esa información, redacta el borrador siguiendo las reglas abajo.
+3. Si tras buscar NO encuentras información fiable sobre el recurso concreto
+   (nombre que no devuelve resultados, homónimos de otra región), escríbelo
+   con un tono genérico del tipo y un aviso al final: "Información por
+   confirmar con la fuente oficial del recurso."
+
+Reglas de redacción:
 - Entre 120 y 200 palabras.
 - Tono profesional pero cercano, sin ser cursi ni publicitario.
 - Estructura: (1) qué es y qué lo hace especial, (2) detalles sensoriales
   o contexto histórico/cultural breve si procede, (3) información práctica
   útil para el visitante.
-- Si no dispones de información específica (horarios exactos, precios,
-  teléfonos), NO la inventes: escribe en genérico o sugiere al visitante
-  consultar fuentes oficiales.
+- Datos específicos (horarios, teléfonos, precios) SOLO si los has
+  encontrado en fuentes fiables. Si no, genérico.
 - Respeta los topónimos gallegos (Illa de Arousa, Cambados, O Grove,
   Meaño, Vilagarcía, Sanxenxo, Ribadumia, Vilanova, Meis).
 - Para gallego: usa gallego real (galego real, non castelán galeguizado).
@@ -553,34 +570,51 @@ Genera las sugerencias siguiendo las reglas del system prompt.`;
 
     const start = Date.now();
 
+    // Paso 2 · web search grounding — la acción `draft` activa Google Search
+    // como tool de Gemini 2.5. El modelo busca fuentes oficiales (webs de
+    // ayuntamientos, Turismo Rías Baixas, Turismo Galicia) y redacta sobre
+    // ellas. No se activa en improve/translate/seo/... para no encarecer
+    // llamadas que no lo necesitan. Si queremos extender a `improve` en
+    // el futuro, solo hay que añadirlo a este set.
+    const WEB_SEARCH_ACTIONS = new Set(['draft']);
+    const useWebSearch = WEB_SEARCH_ACTIONS.has(action);
+
+    const geminiBody: Record<string, unknown> = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      generationConfig: {
+        temperature: action === 'translate'
+          ? 0.2
+          : action === 'suggestTags'
+            ? 0.3  // paso 4 · t4 — baja para precisión, no creatividad
+            : action === 'suggestKeywords'
+              ? 0.3  // paso 6 · t3 — extracción literal, no invención
+              : action === 'generateSeo'
+                ? 0.5  // paso 6 · t3 — creatividad controlada para título/desc
+                : action === 'translateResource'
+                  ? 0.4  // paso 6 · t3 — traducción fluida pero fiel
+                  : action === 'suggestImprovements'
+                    ? 0.6  // paso 7b · t3 — creatividad acotada, sugerencias variadas
+                    : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
+        maxOutputTokens: action === 'validate'
+          ? 1024
+          : action === 'suggestTags'
+            ? 1200
+            : action === 'draft' ? 600 : 512, // +200 tokens para permitir razonamiento sobre búsqueda
+        topP: 0.9,
+      },
+    };
+    if (useWebSearch) {
+      // Google Search grounding (Gemini 2.5). Requiere que la API key tenga
+      // habilitado este tool en Google AI Studio / Vertex. Si no lo tuviera,
+      // Gemini devuelve 400; lo tratamos en el catch de abajo como el resto.
+      geminiBody.tools = [{ google_search: {} }];
+    }
+
     const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-        generationConfig: {
-          temperature: action === 'translate'
-            ? 0.2
-            : action === 'suggestTags'
-              ? 0.3  // paso 4 · t4 — baja para precisión, no creatividad
-              : action === 'suggestKeywords'
-                ? 0.3  // paso 6 · t3 — extracción literal, no invención
-                : action === 'generateSeo'
-                  ? 0.5  // paso 6 · t3 — creatividad controlada para título/desc
-                  : action === 'translateResource'
-                    ? 0.4  // paso 6 · t3 — traducción fluida pero fiel
-                    : action === 'suggestImprovements'
-                      ? 0.6  // paso 7b · t3 — creatividad acotada, sugerencias variadas
-                      : (action === 'improve' || action === 'draft') ? 0.7 : 0.4,
-          maxOutputTokens: action === 'validate'
-            ? 1024
-            : action === 'suggestTags'
-              ? 1200
-              : action === 'draft' ? 400 : 512,
-          topP: 0.9,
-        },
-      }),
+      body: JSON.stringify(geminiBody),
     });
 
     if (!res.ok) {
@@ -605,12 +639,32 @@ Genera las sugerencias siguiendo las reglas del system prompt.`;
       }
     }
 
+    // Paso 2 · web search — si la acción usó grounding, extraer las URLs de
+    // `groundingMetadata.groundingChunks[].web` para que el CMS las muestre
+    // como citas bajo el borrador. Deduplicamos por URL.
+    let sources: Array<{ url: string; title: string }> | undefined;
+    if (useWebSearch) {
+      const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+      const seen = new Set<string>();
+      sources = [];
+      for (const c of chunks) {
+        const url = c?.web?.uri;
+        const title = c?.web?.title ?? '';
+        if (url && !seen.has(url)) {
+          seen.add(url);
+          sources.push({ url, title });
+        }
+      }
+    }
+
     return json({
       action,
       result,
+      sources,
       tokens_used: tokensUsed,
       duration_ms: Date.now() - start,
       model: 'gemini-2.5-flash',
+      grounded: useWebSearch,
     }, 200, req);
 
   } catch (err) {

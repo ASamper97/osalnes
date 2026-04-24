@@ -90,6 +90,16 @@ interface AiResponse<T = string> {
   model: string;
   mock?: boolean;
   error?: string;
+  // Paso 2 · web search — poblado solo cuando la acción activó Google
+  // Search grounding en Gemini. Lista deduplicada de URLs citadas.
+  sources?: Array<{ url: string; title: string }>;
+  grounded?: boolean;
+}
+
+/** Fuente web citada por la IA (Google Search grounding). */
+export interface AiSource {
+  url: string;
+  title: string;
 }
 
 /** Build auth headers with bearer + apikey (Supabase Edge Functions need both). */
@@ -172,13 +182,25 @@ export async function aiTranslate(
  * Generar un borrador inicial de descripción partiendo solo de nombre +
  * tipología + municipio (paso 2 · t3). Requiere el action `draft` en la
  * edge function ai-writer (paso 2 · t2).
+ *
+ * La edge function activa Google Search grounding para esta acción, así
+ * que devolvemos también las URLs consultadas (deduplicadas) para que el
+ * CMS las muestre bajo el borrador como citas. Si la API key no tiene
+ * grounding habilitado o no se devolvieron chunks, `sources` vendrá vacío
+ * y la UI puede ocultar el bloque.
  */
+export interface AiDraftResult {
+  text: string;
+  sources: AiSource[];
+  grounded: boolean;
+}
+
 export async function aiDraft(input: {
   name: string;
   typeKey: string | null;
   municipio: string | null;
   targetLang: 'es' | 'gl';
-}): Promise<string> {
+}): Promise<AiDraftResult> {
   const res = await callAi({
     action: 'draft',
     name: input.name,
@@ -186,7 +208,11 @@ export async function aiDraft(input: {
     municipio: input.municipio,
     targetLang: input.targetLang,
   });
-  return typeof res.result === 'string' ? res.result : '';
+  return {
+    text: typeof res.result === 'string' ? res.result : '',
+    sources: Array.isArray(res.sources) ? res.sources : [],
+    grounded: !!res.grounded,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
