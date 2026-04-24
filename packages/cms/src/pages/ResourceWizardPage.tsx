@@ -1931,6 +1931,43 @@ export function ResourceWizardPage() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [currentStep]);
 
+  // Nombre del recurso mostrado en la cabecera del wizard y la pestaña del
+  // navegador. Para recursos nuevos se muestra conforme el usuario teclea
+  // el nombre en el paso 1; mientras esté vacío, fallback al rótulo
+  // genérico. Se trunca el h1 a 60 caracteres para evitar nombres tipo
+  // "Gasolinera - Repsol - Vilagarcía (Bamio)" que parten la cabecera.
+  const displayName = (nameEs || nameGl || slug || '').trim();
+  const truncatedName =
+    displayName.length > 60 ? `${displayName.slice(0, 57).trim()}…` : displayName;
+  const headerTitle = isNew
+    ? truncatedName
+      ? `Nuevo recurso: ${truncatedName}`
+      : 'Nuevo recurso turístico'
+    : truncatedName || 'Editar recurso';
+  const headerSubtitle = isNew
+    ? activeTemplate
+      ? `${activeTemplate.icon} Plantilla: ${activeTemplate.name}`
+      : 'Te guiamos paso a paso para crear un recurso completo'
+    : `Editando · ${displayName || 'recurso sin nombre'}`;
+
+  // document.title dinámico: identifica la pestaña del navegador cuando
+  // hay varios recursos abiertos en paralelo. Restauramos al desmontar
+  // para no contaminar otras páginas del CMS.
+  useEffect(() => {
+    const baseTitle = 'DTI Salnes — CMS Admin';
+    const tab = isNew
+      ? displayName
+        ? `Nuevo: ${displayName} · ${baseTitle}`
+        : `Nuevo recurso · ${baseTitle}`
+      : displayName
+        ? `${displayName} · ${baseTitle}`
+        : baseTitle;
+    document.title = tab;
+    return () => {
+      document.title = baseTitle;
+    };
+  }, [isNew, displayName]);
+
   // ── Render ───────────────────────────────────────────────────
 
   if (loading) return <p>Cargando recurso...</p>;
@@ -1989,16 +2026,10 @@ export function ResourceWizardPage() {
     <div className="wizard-global-header">
       <div className="wizard-global-header-top">
         <div>
-          <h1 className="wizard-global-title">
-            {isNew ? 'Nuevo recurso turístico' : 'Editar recurso'}
+          <h1 className="wizard-global-title" title={displayName || undefined}>
+            {headerTitle}
           </h1>
-          <p className="wizard-global-subtitle">
-            {isNew
-              ? activeTemplate
-                ? `${activeTemplate.icon} Plantilla: ${activeTemplate.name}`
-                : 'Te guiamos paso a paso para crear un recurso completo'
-              : `Editando: ${nameEs || slug}`}
-          </p>
+          <p className="wizard-global-subtitle">{headerSubtitle}</p>
         </div>
         <AutoSaveIndicator
           status={autoSave.status}
@@ -2019,12 +2050,12 @@ export function ResourceWizardPage() {
       onStepChange={handleStepChange}
       onFinish={handleFinish}
       saving={saving}
-      title={isNew ? 'Nuevo recurso turistico' : 'Editar recurso'}
+      title={headerTitle}
       subtitle={isNew
         ? activeTemplate
           ? `${activeTemplate.icon} Plantilla: ${activeTemplate.name} — ${activeTemplate.description}`
           : 'Te guiamos paso a paso para crear un recurso completo y bien documentado'
-        : `Editando: ${nameEs || slug}`
+        : headerSubtitle
       }
       finishLabel={isNew ? 'Crear recurso' : 'Guardar cambios'}
       onCancel={() => navigate('/resources')}
