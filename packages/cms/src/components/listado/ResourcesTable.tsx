@@ -222,6 +222,13 @@ function ResourceRow({
   // Subtítulo: municipio (nombre legible, NO slug — decisión bug #1)
   const subtitle = row.municipalityName ?? '—';
 
+  // Thumbnail de la primera imagen del recurso (migración 033).
+  // Bucket `resource-images` es público, URL construida directamente.
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
+  const thumbUrl = row.primaryImagePath
+    ? `${supabaseUrl}/storage/v1/object/public/resource-images/${row.primaryImagePath}`
+    : null;
+
   return (
     <tr className={`list-row ${selected ? 'is-selected' : ''}`}>
       <td className="list-td-select">
@@ -244,18 +251,30 @@ function ResourceRow({
             onCancel={() => setEditingName(false)}
           />
         ) : (
-          <>
-            <button
-              type="button"
-              className="list-td-name-button"
-              onDoubleClick={() => setEditingName(true)}
-              onClick={() => onOpenEdit(row.id)}
-              title="Clic: editar ficha · Doble clic: renombrar rápido"
+          <div className="list-td-name-wrap">
+            <div
+              className={`list-td-thumb ${thumbUrl ? '' : 'is-empty'}`}
+              aria-hidden="true"
             >
-              {displayName}
-            </button>
-            <div className="list-td-name-sub">{subtitle}</div>
-          </>
+              {thumbUrl ? (
+                <img src={thumbUrl} alt="" loading="lazy" />
+              ) : (
+                <span className="list-td-thumb-placeholder">🏞️</span>
+              )}
+            </div>
+            <div className="list-td-name-text">
+              <button
+                type="button"
+                className="list-td-name-button"
+                onDoubleClick={() => setEditingName(true)}
+                onClick={() => onOpenEdit(row.id)}
+                title="Clic: editar ficha · Doble clic: renombrar rápido"
+              >
+                {displayName}
+              </button>
+              <div className="list-td-name-sub">{subtitle}</div>
+            </div>
+          </div>
         )}
       </td>
 

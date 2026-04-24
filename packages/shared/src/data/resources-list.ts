@@ -46,6 +46,13 @@ export interface ListResourceRow {
   publishedAt: string | null;
   updatedAt: string;
   lastEditorEmail: string | null;
+  /**
+   * storage_path dentro del bucket `resource-images` de la imagen primaria
+   * del recurso (migración 033). La URL pública se construye en el cliente:
+   * `${VITE_SUPABASE_URL}/storage/v1/object/public/resource-images/{path}`.
+   * NULL si el recurso no tiene imágenes.
+   */
+  primaryImagePath: string | null;
 }
 
 // ─── Filtros aplicados ─────────────────────────────────────────────────

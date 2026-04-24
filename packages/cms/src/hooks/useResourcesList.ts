@@ -228,6 +228,7 @@ function mapRpcRow(r: Record<string, unknown>): ListResourceRow {
     publishedAt: (r.published_at as string) ?? null,
     updatedAt: String(r.updated_at ?? new Date().toISOString()),
     lastEditorEmail: (r.last_editor_email as string) ?? null,
+    primaryImagePath: (r.primary_image_path as string) ?? null,
   };
 }
 

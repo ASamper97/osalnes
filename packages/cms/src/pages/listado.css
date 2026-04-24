@@ -474,6 +474,42 @@
 }
 .list-td-select { width: 42px; }
 
+/* Thumbnail + nombre en la primera columna (migración 033) */
+.list-td-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.list-td-thumb {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+}
+.list-td-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.list-td-thumb.is-empty {
+  background: #f8fafc;
+}
+.list-td-thumb-placeholder {
+  font-size: 1.1rem;
+  opacity: 0.45;
+}
+.list-td-name-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .list-td-name-button {
   background: transparent;
   border: 0;
