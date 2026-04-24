@@ -1921,6 +1921,16 @@ export function ResourceWizardPage() {
     setCurrentStep(nextStep);
   }, [currentStep, bgTranslation]);
 
+  // Al cambiar de paso del wizard, devolver el scroll al principio de la
+  // página — así el usuario ve el título del nuevo paso en vez de quedarse
+  // a la altura del botón "Siguiente" pulsado. Cubre también el stepper
+  // lateral y navegaciones programáticas porque depende solo de
+  // currentStep. El primer render (currentStep=0 al cargar) también
+  // ejecuta el scroll, lo cual es correcto para nuevos recursos.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [currentStep]);
+
   // ── Render ───────────────────────────────────────────────────
 
   if (loading) return <p>Cargando recurso...</p>;
